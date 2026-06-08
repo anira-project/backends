@@ -90,6 +90,7 @@ and release upload live in `shared/` + `_build-backend.yml`.
 
 ```
 backends/                          # repo root
+├── VERSION                        # this repo's own semver (e.g. 0.0.1)
 ├── engines/
 │   └── litert/                    # one dir per backend (onnxruntime/, libtorch/ later)
 │       ├── VERSION                # pinned upstream version (single source of truth)
@@ -102,19 +103,22 @@ backends/                          # repo root
     └── _build-backend.yml         # reusable: build → bundle → package → upload
 ```
 
-### Version & tags
+### Versions & tags
 
-`VERSION` is the only source of the version; **tags are triggers/labels, not the version**.
-This keeps anira's URLs stable (`releases/download/litert-v<VERSION>/...`).
+Two version lines, each with a `VERSION` file as its source of truth; **tags only trigger,
+they don't carry the version** (keeps anira's URLs stable at `releases/download/litert-v<ver>/`):
 
-| Tag                | Effect                                        |
-| ------------------ | --------------------------------------------- |
-| `litert-v2.17.0`   | release LiteRT (CI checks tag == `VERSION`)   |
-| `all-v3`           | release every backend at its own `VERSION`    |
+- **per-backend** — `engines/<backend>/VERSION` (the upstream version, e.g. LiteRT `2.17.0`)
+- **repo** — root `./VERSION` (this repo's own semver, e.g. `0.0.1`)
+
+| Tag              | Effect                                                  | Must match     |
+| ---------------- | ------------------------------------------------------- | -------------- |
+| `litert-v2.17.0` | release LiteRT only                                     | `engines/litert/VERSION` |
+| `v0.0.1`         | repo release — rebuild every backend at its own VERSION | `./VERSION`    |
 
 ```bash
 git tag litert-v2.17.0 && git push origin litert-v2.17.0   # one backend
-git tag all-v3          && git push origin all-v3           # everything
+git tag v0.0.1         && git push origin v0.0.1           # repo release (everything)
 ```
 
 ### Triggers
@@ -127,7 +131,7 @@ push/PR = **validate only**; tags **publish** (assets refreshed in place per rel
 | Push `engines/litert/**` (branch/PR)    | LiteRT validate          | —                       |
 | Edit `shared/**` (branch/PR)    | every backend validate   | —                       |
 | Tag `litert-v2.17.0`            | LiteRT release           | `litert-v2.17.0`        |
-| Tag `all-v3`                    | all backends release     | each `<backend>-v<ver>` |
+| Tag `v0.0.1` (repo release)     | all backends release     | each `<backend>-v<ver>` |
 
 ## License
 

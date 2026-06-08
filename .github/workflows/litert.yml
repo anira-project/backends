@@ -5,8 +5,8 @@ name: litert
 #
 # Triggers:
 #   - push/PR touching engines/litert/ or shared CI  -> validate only (no release)
-#   - tag  litert-v<version>                 -> release just LiteRT
-#   - tag  all-v<n>                          -> global release (all backends)
+#   - tag  litert-v<version>   -> release just LiteRT (its own VERSION)
+#   - tag  v<semver>           -> repo release: rebuild every backend at its VERSION
 
 on:
   push:
@@ -18,7 +18,7 @@ on:
       - '.github/workflows/_build-backend.yml'
     tags:
       - 'litert-v*'
-      - 'all-v*'
+      - 'v[0-9]*'
   pull_request:
     paths:
       - 'engines/litert/**'
@@ -49,17 +49,27 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           REF="${GITHUB_REF}"
-          if [[ "$REF" == refs/tags/litert-v* || "$REF" == refs/tags/all-v* ]]; then
+          if [[ "$REF" == refs/tags/litert-v* || "$REF" == refs/tags/v[0-9]* ]]; then
             echo "release=true" >> "$GITHUB_OUTPUT"
           else
             echo "release=false" >> "$GITHUB_OUTPUT"
           fi
 
-          # Per-backend tag must match the VERSION file (catches "forgot to bump").
+          # Per-backend tag must match the backend VERSION (catches "forgot to bump").
           if [[ "$REF" == refs/tags/litert-v* ]]; then
             TAGV="${REF#refs/tags/litert-v}"
             if [[ "$TAGV" != "$VERSION" ]]; then
               echo "::error::tag litert-v$TAGV does not match engines/litert/VERSION ($VERSION)"
+              exit 1
+            fi
+          fi
+
+          # Repo release tag (v<semver>) must match the root VERSION.
+          if [[ "$REF" == refs/tags/v[0-9]* ]]; then
+            REPOV="$(tr -d '[:space:]' < VERSION)"
+            TAGV="${REF#refs/tags/v}"
+            if [[ "$TAGV" != "$REPOV" ]]; then
+              echo "::error::repo tag v$TAGV does not match ./VERSION ($REPOV)"
               exit 1
             fi
           fi
