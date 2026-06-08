@@ -162,5 +162,6 @@ push/PR = **validate only**; tags **publish** (assets refreshed in place per rel
 
 ## License
 
-Repo scripts under the repo `LICENSE`; produced binaries follow their upstream licenses
-(LiteRT/TensorFlow: Apache-2.0).
+This repo's scripts/CI are **Apache-2.0** ([`LICENSE`](./LICENSE)). The published binaries
+follow their upstream licenses (LiteRT/TensorFlow: Apache-2.0; ONNXRuntime: MIT; LibTorch:
+BSD-3) — see [`LICENSE.md`](./LICENSE.md) for per-backend links.

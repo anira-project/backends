@@ -37,17 +37,14 @@ case "$OS" in
   MINGW*|MSYS*|CYGWIN*)
     command -v cl >/dev/null || { echo "ERROR: cl.exe not on PATH (need MSVC env)"; exit 1; }
     INC="$(cygpath -w "$ST/include")"; LIBDIR="$(cygpath -w "$ST/lib")"; SRCW="$(cygpath -w "$SRC")"
-    # Linking the STATIC lib (built /MD, see CMakeLists):
-    #  - TFL_STATIC_LIBRARY_BUILD: header drops __declspec(dllimport) (else __imp_TfLite*)
-    #  - CRT must match: Release /MD (cl default), Debug /MDd
-    #  - the lib pulls UCRT funcs (bsearch/fmaxf/log1p/_mkdir/…) + advapi32 (cpuinfo's
-    #    RegGetValueW) as dllimports that aren't auto-linked here — add them explicitly.
-    #    Consumers linking the static Windows lib need the same system libs.
+    # Linking the STATIC lib (built /MD, see CMakeLists). Consumers need the same:
+    #  - /DTFL_STATIC_LIBRARY_BUILD: header drops __declspec(dllimport) (else __imp_TfLite*)
+    #  - CRT must match the lib: /MD (release) / /MDd (debug). cl's CLI default is /MT,
+    #    so set it explicitly or you get LNK2038 (RuntimeLibrary mismatch).
+    #  - advapi32.lib: cpuinfo's RegGetValueW; ucrt[d].lib: the matching CRT.
     DEFS=""; EXTRA=""; CRT=""
     if [ "$KIND" = "static" ]; then
       DEFS="/DTFL_STATIC_LIBRARY_BUILD"
-      # NB: command-line cl defaults to /MT (static CRT), but the lib is /MD —
-      # set the CRT explicitly or you get LNK2038 RuntimeLibrary mismatch.
       if [ "$CONFIG" = "Debug" ]; then CRT="/MDd"; EXTRA="ucrtd.lib advapi32.lib"
       else CRT="/MD"; EXTRA="ucrt.lib advapi32.lib"; fi
     fi
@@ -65,7 +62,6 @@ case "$OS" in
         find "${VCToolsRedistDir:-/c/nonexistent}" -ipath "*debug_nonredist*/$a/*DebugCRT*/*.dll" -exec cp {} . \; 2>/dev/null || true
         ucrtd="$(find "${WindowsSdkDir:-/c/Program Files (x86)/Windows Kits/10}/bin" -name ucrtbased.dll 2>/dev/null | grep "/$a/" | head -1)"
         [ -n "$ucrtd" ] && cp "$ucrtd" .
-        ls *.dll 2>/dev/null || true
       fi
       ./smoke.exe "$MODEL"
     else
