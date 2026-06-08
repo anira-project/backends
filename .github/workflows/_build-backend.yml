@@ -83,8 +83,8 @@ jobs:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: emsdk-cache-${{ env.EMSDK_VERSION }}
 
-      # Load the MSVC dev environment so lib.exe (needed by the static bundling
-      # step) is on PATH. arch is amd64_arm64 for the Windows-ARM64 cross-build.
+      # Load the MSVC dev environment so cl.exe/lib.exe are on PATH (Ninja build +
+      # static bundling). matrix.msvc_arch is x64 or arm64 (both native).
       - name: setup MSVC env (Windows)
         if: ${{ runner.os == 'Windows' }}
         uses: ilammy/msvc-dev-cmd@v1
@@ -97,7 +97,7 @@ jobs:
       # sccache mirrors what cmake-build does; skipped for the emscripten target.
       # ----------------------------------------------------------------------
       - name: sccache
-        uses: mozilla-actions/sccache-action@v0.0.10
+        uses: mozilla-actions/sccache-action@v0.0.8
 
       - name: launcher flags
         id: cfg
@@ -190,7 +190,6 @@ jobs:
   macos-universal:
     name: macOS-universal-${{ matrix.kind }}
     needs: build
-    if: ${{ inputs.release }}
     runs-on: macos-15
     strategy:
       fail-fast: false
@@ -243,6 +242,7 @@ jobs:
           retention-days: 14
 
       - name: publish to release
+        if: ${{ inputs.release }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
