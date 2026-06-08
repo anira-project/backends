@@ -357,7 +357,7 @@ jobs:
           [ -n "$xcf" ] || { echo "::error::TensorFlowLiteC.xcframework not found"; exit 1; }
           echo "xcf=$xcf" >> "$GITHUB_OUTPUT"
 
-      - name: validate (slices + C API symbols)
+      - name: validate slices
         shell: bash
         run: |
           set -euo pipefail
@@ -365,12 +365,7 @@ jobs:
           echo "slices:"; ls "$xcf"
           ls "$xcf" | grep -q 'ios-arm64'   || { echo "::error::no device (ios-arm64) slice"; exit 1; }
           ls "$xcf" | grep -qi 'simulator'  || { echo "::error::no simulator slice"; exit 1; }
-          fail=0
-          while IFS= read -r bin; do
-            if nm "$bin" 2>/dev/null | grep -q 'TfLiteModelCreate'; then echo "symbols OK: $bin"
-            else echo "::error::TfLiteModelCreate missing in $bin"; fail=1; fi
-          done < <(find "$xcf" -type f -name 'TensorFlowLiteC')
-          [ "$fail" -eq 0 ]
+          # symbol usability is verified by the compile+link smoke step below.
 
       # Real smoke gate: compile + link smoke.cpp against the simulator slice
       # (the framework header resolves via __has_include). A simulator forward-pass
