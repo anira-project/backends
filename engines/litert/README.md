@@ -13,8 +13,11 @@ See the [repo README](../../README.md) for the target matrix and release model, 
 | `CMakeLists.txt`      | Fetch tensorflow, build + install the C API      |
 | `CMakePresets.json`   | One preset per target (platform × shared/static) |
 | `ci-matrix.json`      | Active CI build matrix                           |
-| `ci-matrix.deferred.json` | Parked rows (Android, wasm)                  |
-| `build-ios-bazel.sh`  | iOS build (Bazel — no CMake path). Stub.         |
+| `ci-matrix.deferred.json` | Parked rows (Android shared, wasm)           |
+| `test/smoke.cpp`      | Forward-pass smoke test (add.bin → `{3,9}`)      |
+
+> iOS isn't built here — it repackages Google's prebuilt `TensorFlowLiteC.xcframework`
+> (see the `ios-xcframework` job in `_build-backend.yml`).
 
 ## Local build
 

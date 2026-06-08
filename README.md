@@ -53,12 +53,14 @@ native targets — see [Smoke test](#smoke-test-gate)).
   iOS has one). Headers are framework-style (`<TensorFlowLiteC/c_api.h>`).
 - **Windows-arm64** disables XNNPACK — MSVC can't build XNNPACK's NEON microkernels.
 - **Windows static**: built with the **dynamic CRT (`/MD`)**, shipped in **Release and Debug**
-  variants (`…-static` = `/MD`, `…-static-debug` = `/MDd`). Consumers must (a) compile with
-  `-DTFL_STATIC_LIBRARY_BUILD` (else the C-API header uses `__declspec(dllimport)` and the link
-  fails), and (b) match the CRT — link `-static-debug` from a `/MDd` build, `-static` from `/MD`.
-  For a *fast* engine in a debug app, prefer the **release DLL** (self-contained, no CRT clash)
-  or build your app `RelWithDebInfo`. The **shared** DLL is Release-only (debug consumers use it
-  too — it's self-contained).
+  variants (`…-static` = `/MD`, `…-static-debug` = `/MDd`). To consume it:
+  - **`-DTFL_STATIC_LIBRARY_BUILD`** — else the C-API header uses `__declspec(dllimport)` (link fails).
+  - **match the CRT** — `/MD` for `-static`, `/MDd` for `-static-debug` (command-line `cl` defaults
+    to `/MT`, so set it explicitly or you get `LNK2038`).
+  - link **`advapi32.lib`** (cpuinfo's registry calls); CRT funcs come from the matched `ucrt[d].lib`.
+
+  For a *fast* engine in a debug app, prefer the **release DLL** (self-contained, no CRT clash) or
+  build your app `RelWithDebInfo`. The **shared** DLL is Release-only (debug consumers use it too).
 - **Codesigning** is currently **off** — `shared/sign-macos.sh` is ready (Developer ID for
   Hardened-Runtime/DAW hosts) but unused; Windows Authenticode optional/not done. iOS static
   framework and Android/Linux need no signing.

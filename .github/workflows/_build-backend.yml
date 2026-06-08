@@ -285,6 +285,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p ex/x64 ex/arm
           unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
           unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
 
@@ -350,6 +351,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p ex/arm ex/x64
           unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
           unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
           stage="staging/${{ steps.n.outputs.bundle }}"
