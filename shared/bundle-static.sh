@@ -63,18 +63,17 @@ case "$OS" in
     ;;
 
   Linux)
-    # Extract every object (one dir per archive to avoid cross-archive object
-    # name collisions), then re-archive them all into one indexed library.
-    WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
-    i=0
-    for a in "${ARCHIVES[@]}"; do
-      d="$WORK/$i"; mkdir -p "$d"
-      ( cd "$d" && ar x "$a" )
-      i=$((i + 1))
-    done
-    # xargs may batch; `ar qcs` appends each batch and (re)builds the index.
-    find "$WORK" -name '*.o' -print0 | xargs -0 ar qcs "$OUT"
-    ranlib "$OUT" 2>/dev/null || true
+    # Merge archives wholesale with an `ar` MRI script: `addlib` copies ALL
+    # members of each input archive into OUT (the GNU equivalent of macOS
+    # `libtool -static`). Robust vs extracting objects, which dropped/mis-indexed
+    # members with duplicate basenames (e.g. libcpuinfo).
+    {
+      echo "create $OUT"
+      for a in "${ARCHIVES[@]}"; do echo "addlib $a"; done
+      echo "save"
+      echo "end"
+    } | ar -M
+    ranlib "$OUT"
     ;;
 
   MINGW*|MSYS*|CYGWIN*)

@@ -13,6 +13,10 @@
 - [ ] iOS — Bazel build (`engines/litert/build-ios-bazel.sh`) + xcframework (`shared/make-xcframework.sh`) + CI job
 - [ ] Android — re-add rows from `engines/litert/ci-matrix.deferred.json`
 
+## Consumer notes (document in README)
+- Windows **static**: consumers must compile with `-DTFL_STATIC_LIBRARY_BUILD` or the
+  C API header uses `__declspec(dllimport)` and the link fails (`__imp_TfLite*`).
+
 ## Later
 - [ ] Backends: `onnxruntime/`, `libtorch/`
 - [ ] Linux `armv7l` (Bela) — needs `-DTFLITE_ENABLE_XNNPACK=OFF`

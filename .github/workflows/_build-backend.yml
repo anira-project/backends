@@ -187,8 +187,10 @@ jobs:
             "${{ inputs.backend_dir }}/build/${{ matrix.preset }}/_deps/tensorflow-src/tensorflow/lite/testdata/add.bin" \
             "${{ matrix.kind }}" "${{ matrix.arch }}" "${{ matrix.can_run }}"
 
+      # Per-ABI Android builds are intermediate — combined into one multi-ABI
+      # bundle below — so they don't publish standalone.
       - name: publish to release
-        if: ${{ inputs.release }}
+        if: ${{ inputs.release && matrix.os != 'Android' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -267,6 +269,65 @@ jobs:
             gh release create "$tag" --title "$tag" --notes "Automated ${{ inputs.backend }} ${{ inputs.version }} build"
           gh release upload "$tag" "dist/${{ steps.n.outputs.uni }}.zip" --clobber
 
-  # iOS (Bazel + xcframework), Android, and wasm are deferred to a later round.
-  # Scripts (engines/litert/build-ios-bazel.sh, shared/make-xcframework.sh) and the
-  # deferred matrix rows (engines/litert/ci-matrix.deferred.json) are kept for then.
+  # --------------------------------------------------------------------------
+  # Android: combine the per-ABI static libs into ONE multi-ABI archive with
+  # lib/<abi>/ — the layout Android/NDK tooling expects (like an AAR's jni/<abi>/).
+  # The per-ABI build jobs are intermediate; only this combined archive ships.
+  # --------------------------------------------------------------------------
+  android-bundle:
+    name: Android-bundle
+    needs: build
+    if: ${{ contains(inputs.matrix, 'android') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: compose names
+        id: n
+        shell: bash
+        run: |
+          base="${{ inputs.libname }}-${{ inputs.version }}"
+          {
+            echo "arm=${base}-Android-arm64-v8a-static"
+            echo "x64=${base}-Android-x86_64-static"
+            echo "bundle=${base}-Android-static"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v8
+        with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
+      - uses: actions/download-artifact@v8
+        with: { name: "${{ steps.n.outputs.x64 }}", path: dl/x64 }
+
+      - name: assemble multi-ABI bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
+          unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
+          stage="staging/${{ steps.n.outputs.bundle }}"
+          mkdir -p "$stage/lib/arm64-v8a" "$stage/lib/x86_64"
+          cp -R ex/arm/include "$stage/include"   # headers are ABI-independent
+          cp ex/arm/lib/libtensorflowlite_c.a "$stage/lib/arm64-v8a/"
+          cp ex/x64/lib/libtensorflowlite_c.a "$stage/lib/x86_64/"
+          bash shared/package.sh "$stage" "${{ steps.n.outputs.bundle }}" dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.n.outputs.bundle }}
+          path: dist/${{ steps.n.outputs.bundle }}.zip
+          retention-days: 14
+
+      - name: publish to release
+        if: ${{ inputs.release }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ inputs.backend }}-v${{ inputs.version }}"
+          gh release view "$tag" >/dev/null 2>&1 || \
+            gh release create "$tag" --title "$tag" --notes "Automated ${{ inputs.backend }} ${{ inputs.version }} build"
+          gh release upload "$tag" "dist/${{ steps.n.outputs.bundle }}.zip" --clobber
+
+  # iOS: repackage Google's prebuilt TensorFlowLiteC.xcframework (download, not
+  # build — no static C-API prebuilt exists for Android, but iOS ships one).
+  # Scaffold pending; see TODO.md.

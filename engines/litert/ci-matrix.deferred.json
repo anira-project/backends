@@ -1,7 +1,5 @@
 [
   { "label": "Android-arm64",  "name": "Android-arm64",  "runner": "ubuntu-24.04", "preset": "android-arm64-shared", "os": "Android", "arch": "arm64-v8a", "kind": "shared", "toolchain": "android" },
-  { "label": "Android-arm64",  "name": "Android-arm64",  "runner": "ubuntu-24.04", "preset": "android-arm64-static", "os": "Android", "arch": "arm64-v8a", "kind": "static", "toolchain": "android" },
   { "label": "Android-x86_64", "name": "Android-x86_64", "runner": "ubuntu-24.04", "preset": "android-x64-shared",   "os": "Android", "arch": "x86_64",    "kind": "shared", "toolchain": "android" },
-  { "label": "Android-x86_64", "name": "Android-x86_64", "runner": "ubuntu-24.04", "preset": "android-x64-static",   "os": "Android", "arch": "x86_64",    "kind": "static", "toolchain": "android" },
   { "label": "Wasm",           "name": "Wasm",           "runner": "ubuntu-24.04", "preset": "wasm-static",          "os": "wasm",    "arch": "wasm32",    "kind": "static", "toolchain": "wasm" }
 ]
