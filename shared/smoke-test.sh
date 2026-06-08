@@ -37,16 +37,21 @@ case "$OS" in
   MINGW*|MSYS*|CYGWIN*)
     command -v cl >/dev/null || { echo "ERROR: cl.exe not on PATH (need MSVC env)"; exit 1; }
     INC="$(cygpath -w "$ST/include")"; LIBDIR="$(cygpath -w "$ST/lib")"; SRCW="$(cygpath -w "$SRC")"
-    # Linking the STATIC lib: define TFL_STATIC_LIBRARY_BUILD so the C API header
-    # drops __declspec(dllimport) (otherwise cl looks for __imp_TfLite* stubs).
-    # static lib is built with the dynamic CRT (/MD, see CMakeLists), so smoke's
-    # default /MD matches — no extra CRT libs needed.
-    DEFS=""; [ "$KIND" = "static" ] && DEFS="/DTFL_STATIC_LIBRARY_BUILD"
-    # CRT must match the lib: Release -> /MD (cl default), Debug -> /MDd.
-    CRT=""; [ "$CONFIG" = "Debug" ] && CRT="/MDd"
+    # Linking the STATIC lib (built /MD, see CMakeLists):
+    #  - TFL_STATIC_LIBRARY_BUILD: header drops __declspec(dllimport) (else __imp_TfLite*)
+    #  - CRT must match: Release /MD (cl default), Debug /MDd
+    #  - the lib pulls UCRT funcs (bsearch/fmaxf/log1p/_mkdir/…) + advapi32 (cpuinfo's
+    #    RegGetValueW) as dllimports that aren't auto-linked here — add them explicitly.
+    #    Consumers linking the static Windows lib need the same system libs.
+    DEFS=""; EXTRA=""; CRT=""
+    if [ "$KIND" = "static" ]; then
+      DEFS="/DTFL_STATIC_LIBRARY_BUILD"
+      if [ "$CONFIG" = "Debug" ]; then CRT="/MDd"; EXTRA="ucrtd.lib advapi32.lib"
+      else EXTRA="ucrt.lib advapi32.lib"; fi
+    fi
     # MSYS_NO_PATHCONV stops git-bash mangling the /flags into paths.
     MSYS_NO_PATHCONV=1 cl /nologo /std:c++17 /EHsc $CRT $DEFS /I"$INC" "$SRCW" \
-      /Fe:smoke.exe /link /LIBPATH:"$LIBDIR" tensorflowlite_c.lib
+      /Fe:smoke.exe /link /LIBPATH:"$LIBDIR" tensorflowlite_c.lib $EXTRA
     if [ "$RUN" = "1" ]; then
       # Windows loads a DLL from the exe's own directory first — copy deps next to
       # smoke.exe rather than relying on PATH (unreliable from git-bash).
