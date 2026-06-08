@@ -1,0 +1,78 @@
+name: litert
+
+# Thin per-backend wrapper: derive version + release flag, then hand the matrix
+# to the shared _build-backend.yml pipeline.
+#
+# Triggers:
+#   - push/PR touching litert/ or shared CI  -> validate only (no release)
+#   - tag  litert-v<version>                 -> release just LiteRT
+#   - tag  all-v<n>                          -> global release (all backends)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'litert/**'
+      - 'shared/**'
+      - '.github/workflows/litert.yml'
+      - '.github/workflows/_build-backend.yml'
+    tags:
+      - 'litert-v*'
+      - 'all-v*'
+  pull_request:
+    paths:
+      - 'litert/**'
+      - 'shared/**'
+      - '.github/workflows/litert.yml'
+      - '.github/workflows/_build-backend.yml'
+
+concurrency:
+  group: litert-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      release: ${{ steps.meta.outputs.release }}
+      matrix: ${{ steps.meta.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: derive version, release flag, matrix
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < litert/VERSION)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          REF="${GITHUB_REF}"
+          if [[ "$REF" == refs/tags/litert-v* || "$REF" == refs/tags/all-v* ]]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Per-backend tag must match the VERSION file (catches "forgot to bump").
+          if [[ "$REF" == refs/tags/litert-v* ]]; then
+            TAGV="${REF#refs/tags/litert-v}"
+            if [[ "$TAGV" != "$VERSION" ]]; then
+              echo "::error::tag litert-v$TAGV does not match litert/VERSION ($VERSION)"
+              exit 1
+            fi
+          fi
+
+          echo "matrix=$(jq -c . litert/ci-matrix.json)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    uses: ./.github/workflows/_build-backend.yml
+    with:
+      backend: litert
+      libname: tensorflowlite_c
+      version: ${{ needs.setup.outputs.version }}
+      release: ${{ needs.setup.outputs.release == 'true' }}
+      matrix: ${{ needs.setup.outputs.matrix }}
+    secrets: inherit

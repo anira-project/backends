@@ -1,0 +1,253 @@
+name: _build-backend
+
+# Reusable build pipeline shared by every backend. The per-backend workflow
+# (e.g. litert.yml) computes the matrix + version and calls this.
+#
+# Build step reuses tanh-lab/ci-actions, pinned to a commit SHA (not @main) so an
+# upstream change can't silently break a release build.
+
+on:
+  workflow_call:
+    inputs:
+      backend:
+        description: "Backend id, e.g. litert"
+        required: true
+        type: string
+      libname:
+        description: "Library/archive prefix, e.g. tensorflowlite_c"
+        required: true
+        type: string
+      version:
+        description: "Upstream version from the backend's VERSION file"
+        required: true
+        type: string
+      release:
+        description: "Publish artifacts to a GitHub Release"
+        required: false
+        default: false
+        type: boolean
+      matrix:
+        description: "JSON build matrix (see litert.yml setup job)"
+        required: true
+        type: string
+    secrets:
+      APPLE_SIGN_IDENTITY:
+        required: false
+      APPLE_CERT_P12_BASE64:
+        required: false
+      APPLE_CERT_PASSWORD:
+        required: false
+
+# Pinned ci-actions ref — bump deliberately.
+# tanh-lab/ci-actions @ bbdd199 (main as of 2026-06-08)
+env:
+  CI_ACTIONS_REF: bbdd199c8796cdec6f064827eedc45028cd60ce3
+  NDK_VERSION: r27b
+  EMSDK_VERSION: 4.0.23
+
+jobs:
+  build:
+    name: ${{ matrix.label }}-${{ matrix.kind }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup build tools
+        uses: tanh-lab/ci-actions/setup-cpp-build-tools@bbdd199c8796cdec6f064827eedc45028cd60ce3
+
+      # ci-actions only installs deps for the `Linux-x86_64` name; ensure ninja
+      # exists on the arm64 / android / wasm ubuntu rows too.
+      - name: ensure ninja (Linux fallback)
+        if: ${{ runner.os == 'Linux' }}
+        shell: bash
+        run: command -v ninja >/dev/null || { sudo apt-get update && sudo apt-get install -y ninja-build; }
+
+      - name: setup Android NDK
+        if: ${{ matrix.toolchain == 'android' }}
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+
+      - name: setup emsdk (wasm)
+        if: ${{ matrix.toolchain == 'wasm' }}
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache-${{ env.EMSDK_VERSION }}
+
+      # Load the MSVC dev environment so lib.exe (needed by the static bundling
+      # step) is on PATH. arch is amd64_arm64 for the Windows-ARM64 cross-build.
+      - name: setup MSVC env (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      # ----------------------------------------------------------------------
+      # Configure + build the preset. Presets/CMakeLists live in <backend>/, so
+      # we run from there (ci-actions cmake-build assumes presets at repo root).
+      # sccache mirrors what cmake-build does; skipped for the emscripten target.
+      # ----------------------------------------------------------------------
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.8
+
+      - name: launcher flags
+        id: cfg
+        shell: bash
+        run: |
+          if [ "${{ matrix.toolchain }}" = "wasm" ]; then
+            echo "launchers=" >> "$GITHUB_OUTPUT"
+          else
+            echo "launchers=-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: configure
+        working-directory: ${{ inputs.backend }}
+        shell: bash
+        run: cmake --preset ${{ matrix.preset }} ${{ steps.cfg.outputs.launchers }}
+
+      - name: build
+        working-directory: ${{ inputs.backend }}
+        shell: bash
+        run: cmake --build --preset ${{ matrix.preset }} -j
+
+      # ----------------------------------------------------------------------
+      # Compose the anira archive name and install into a staging prefix.
+      # ----------------------------------------------------------------------
+      - name: compose archive name
+        id: name
+        shell: bash
+        run: |
+          base="${{ inputs.libname }}-${{ inputs.version }}"
+          if [ "${{ matrix.toolchain }}" = "wasm" ]; then
+            # wasm is ABI-tied to the toolchain → key by emsdk version
+            name="${base}-wasm-emsdk-${EMSDK_VERSION}"
+          else
+            name="${base}-${{ matrix.os }}-${{ matrix.arch }}"
+            [ "${{ matrix.kind }}" = "static" ] && name="${name}-static"
+          fi
+          echo "archive=$name" >> "$GITHUB_OUTPUT"
+
+      - name: install
+        shell: bash
+        run: |
+          cmake --install "${{ inputs.backend }}/build/${{ matrix.preset }}" \
+            --config Release \
+            --prefix "staging/${{ steps.name.outputs.archive }}"
+
+      # Static builds: the installed libtensorflowlite_c.a holds only C-API
+      # objects. Merge in all transitive dependency archives so the shipped lib
+      # is a single, self-contained, drop-in archive.
+      - name: bundle static deps
+        if: ${{ matrix.kind == 'static' }}
+        shell: bash
+        run: |
+          libdir="staging/${{ steps.name.outputs.archive }}/lib"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            out="$libdir/tensorflowlite_c.lib"
+          else
+            out="$libdir/libtensorflowlite_c.a"
+          fi
+          bash shared/bundle-static.sh "${{ inputs.backend }}/build/${{ matrix.preset }}" "$out"
+
+      # NOTE: macOS codesigning is intentionally OFF this round (shared/sign-macos.sh
+      # stays in the repo for when Developer ID signing is enabled later).
+
+      - name: package
+        shell: bash
+        run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist
+
+      - name: upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.archive }}
+          path: dist/${{ steps.name.outputs.archive }}.zip
+          retention-days: 14
+
+      - name: publish to release
+        if: ${{ inputs.release }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ inputs.backend }}-v${{ inputs.version }}"
+          gh release view "$tag" >/dev/null 2>&1 || \
+            gh release create "$tag" --title "$tag" --notes "Automated ${{ inputs.backend }} ${{ inputs.version }} build"
+          gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
+
+  # --------------------------------------------------------------------------
+  # macOS universal: lipo the x86_64 + arm64 slices into one fat archive.
+  # Runs after the build matrix; consumes the two macOS artifacts per kind.
+  # --------------------------------------------------------------------------
+  macos-universal:
+    name: macOS-universal-${{ matrix.kind }}
+    needs: build
+    if: ${{ inputs.release }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [shared, static]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: compose names
+        id: n
+        shell: bash
+        run: |
+          base="${{ inputs.libname }}-${{ inputs.version }}"
+          sfx=""; [ "${{ matrix.kind }}" = "static" ] && sfx="-static"
+          {
+            echo "x64=${base}-macOS-x86_64${sfx}"
+            echo "arm=${base}-macOS-arm64${sfx}"
+            echo "uni=${base}-macOS-universal${sfx}"
+            if [ "${{ matrix.kind }}" = "static" ]; then echo "lib=libtensorflowlite_c.a"; else echo "lib=libtensorflowlite_c.dylib"; fi
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with: { name: "${{ steps.n.outputs.x64 }}", path: dl/x64 }
+      - uses: actions/download-artifact@v4
+        with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
+
+      - name: lipo + repackage
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
+          unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
+
+          stage="staging/${{ steps.n.outputs.uni }}"
+          mkdir -p "$stage/lib"
+          # headers are arch-independent — take one copy
+          cp -R ex/x64/include "$stage/include"
+          lipo -create \
+            "ex/x64/lib/${{ steps.n.outputs.lib }}" \
+            "ex/arm/lib/${{ steps.n.outputs.lib }}" \
+            -output "$stage/lib/${{ steps.n.outputs.lib }}"
+          lipo -info "$stage/lib/${{ steps.n.outputs.lib }}"
+
+          bash shared/package.sh "$stage" "${{ steps.n.outputs.uni }}" dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.n.outputs.uni }}
+          path: dist/${{ steps.n.outputs.uni }}.zip
+          retention-days: 14
+
+      - name: publish to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ inputs.backend }}-v${{ inputs.version }}"
+          gh release view "$tag" >/dev/null 2>&1 || \
+            gh release create "$tag" --title "$tag" --notes "Automated ${{ inputs.backend }} ${{ inputs.version }} build"
+          gh release upload "$tag" "dist/${{ steps.n.outputs.uni }}.zip" --clobber
+
+  # iOS (Bazel + xcframework), Android, and wasm are deferred to a later round.
+  # Scripts (litert/build-ios-bazel.sh, shared/make-xcframework.sh) and the
+  # deferred matrix rows (litert/ci-matrix.deferred.json) are kept for then.

@@ -1,0 +1,9 @@
+# build outputs
+**/build/
+dist/
+staging/
+artifacts/
+
+# tooling
+emsdk-cache-*/
+.DS_Store
