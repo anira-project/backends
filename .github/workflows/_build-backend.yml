@@ -367,10 +367,10 @@ jobs:
           ls "$xcf" | grep -qi 'simulator'  || { echo "::error::no simulator slice"; exit 1; }
           # symbol usability is verified by the compile+link smoke step below.
 
-      # Real smoke gate: compile + link smoke.cpp against the simulator slice
-      # (the framework header resolves via __has_include). A simulator forward-pass
-      # run needs a test .app bundle + booted sim — deferred.
-      - name: smoke test (compile + link, iphonesimulator)
+      # Smoke gate: compile + link smoke.cpp against the simulator slice (the
+      # framework header resolves via __has_include), then RUN it on a booted
+      # simulator via `simctl spawn` and check the real forward pass (1->3, 3->9).
+      - name: smoke test (compile + run, iphonesimulator)
         shell: bash
         run: |
           set -euo pipefail
@@ -379,8 +379,12 @@ jobs:
           sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
           clang++ -std=c++17 -arch arm64 -isysroot "$sdk" -mios-simulator-version-min=12.0 \
             -F "$fw_dir" -framework TensorFlowLiteC -framework Foundation \
-            "${{ inputs.backend_dir }}/test/smoke.cpp" -o /tmp/smoke_ios
-          file /tmp/smoke_ios && echo "iOS smoke: compile+link OK"
+            "${{ inputs.backend_dir }}/test/smoke.cpp" -o smoke_ios
+          # add.bin isn't fetched here (no build) — pull it from the tensorflow source at our version
+          curl -fsSL "https://raw.githubusercontent.com/tensorflow/tensorflow/v${{ inputs.version }}/tensorflow/lite/testdata/add.bin" -o add.bin
+          dev="$(xcrun simctl list devices available | grep -m1 -oE '[0-9A-F-]{36}')"
+          xcrun simctl boot "$dev" 2>/dev/null || true
+          xcrun simctl spawn "$dev" "$PWD/smoke_ios" "$PWD/add.bin"   # exits non-zero on wrong output
 
       - name: repackage
         id: pack

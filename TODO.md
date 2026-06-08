@@ -11,7 +11,7 @@
 - [ ] macOS Developer ID codesigning — `shared/sign-macos.sh` ready; CI cert import + secrets TODO
 - [ ] wasm — Emscripten flags (`-matomics -msimd128 -mbulk-memory`) in `CMakeLists.txt`; re-add `wasm` row
 - [x] iOS — repackage Google's prebuilt `TensorFlowLiteC.xcframework` (download, not build) + compile/link smoke
-- [ ] iOS — run smoke as a forward pass on the booted simulator (needs a test .app bundle)
+- [x] iOS — smoke runs a real forward pass on the booted simulator (simctl spawn)
 - [x] Android (static, multi-ABI bundle) — added; Android shared still parked
 
 ## Consumer notes (document in README)

@@ -78,9 +78,9 @@ are new and need companion changes in anira's `cmake/SetupTensorflowLite.cmake` 
 
 After packaging, every job compiles `engines/litert/test/smoke.cpp` against the **packaged**
 artifact (the static link proves the bundled `.a`/`.lib` is symbol-complete) and runs a real
-forward pass on native targets — TFLite's `add.bin` model: input `{1,3}` → output `{3,9}`. A
-broken artifact fails the job before it can be published. Cross-only / non-native targets
-(iOS, Windows-arm64 build host, Android) compile+link without the run.
+forward pass — TFLite's `add.bin` model: input `{1,3}` → output `{3,9}`. A broken artifact
+fails the job before it can be published. **iOS runs too** — the simulator binary is executed
+via `simctl spawn`. Only **Android** is compile+link-only for now (needs an emulator).
 
 ### Hardware acceleration (roadmap)
 
