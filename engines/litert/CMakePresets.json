@@ -24,7 +24,6 @@
     { "name": "linux-x64", "hidden": true, "inherits": "ninja" },
     {
       "name": "linux-arm64", "hidden": true, "inherits": "ninja",
-      "comment": "Native on an arm64 runner. For x86_64-host cross-compile, add a toolchain file.",
       "cacheVariables": { "CMAKE_SYSTEM_NAME": "Linux", "CMAKE_SYSTEM_PROCESSOR": "aarch64" }
     },
     {
@@ -49,7 +48,6 @@
     },
     {
       "name": "wasm", "hidden": true, "inherits": "ninja",
-      "comment": "ABI must match anira-web (emsdk 4.0.23, -matomics -msimd128 -mbulk-memory). static only.",
       "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
     },
 
