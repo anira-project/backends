@@ -117,11 +117,6 @@ jobs:
       - name: build
         working-directory: ${{ inputs.backend_dir }}
         shell: bash
-        env:
-          # cl.exe prepends $CL to every compile — reliably injects /FS (parallel-safe
-          # PDB writes, avoids C1041 in Debug) where add_compile_options can't reach
-          # TFLite's nested FetchContent deps. Ignored by non-MSVC compilers.
-          CL: /FS
         run: cmake --build --preset ${{ matrix.preset }} -j
 
       # ----------------------------------------------------------------------

@@ -63,8 +63,14 @@ set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON CACHE BOOL "" FORCE)
 # cmake_minimum) makes CMAKE_MSVC_RUNTIME_LIBRARY authoritative.
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-    # /FS (parallel-safe PDB writes, avoids C1041 in Debug) is injected via the CL
-    # env var in CI — add_compile_options doesn't reach TFLite's nested FetchContent deps.
+    # Debug: embed debug info in objects (/Z7) instead of a separate .pdb. No .pdb
+    # means no parallel-write contention (C1041), it's sccache-friendly, and the
+    # debug info travels inside the static lib. FORCE cache so it reaches TFLite's
+    # FetchContent deps (a directory property like add_compile_options doesn't).
+    string(APPEND CMAKE_C_FLAGS_DEBUG   " /Z7")
+    string(APPEND CMAKE_CXX_FLAGS_DEBUG " /Z7")
+    set(CMAKE_C_FLAGS_DEBUG   "${CMAKE_C_FLAGS_DEBUG}"   CACHE STRING "" FORCE)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}" CACHE STRING "" FORCE)
 endif()
 
 include(FetchContent)
