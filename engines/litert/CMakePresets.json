@@ -27,11 +27,8 @@
       "name": "linux-arm64", "hidden": true, "inherits": "ninja",
       "cacheVariables": { "CMAKE_SYSTEM_NAME": "Linux", "CMAKE_SYSTEM_PROCESSOR": "aarch64" }
     },
-    { "name": "windows-x64", "hidden": true, "inherits": "ninja" },
-    {
-      "name": "windows-arm64", "hidden": true, "inherits": "ninja",
-      "cacheVariables": { "CMAKE_SYSTEM_NAME": "Windows", "CMAKE_SYSTEM_PROCESSOR": "ARM64" }
-    },
+    { "name": "windows-x64",   "hidden": true, "inherits": "ninja" },
+    { "name": "windows-arm64", "hidden": true, "inherits": "ninja" },
     {
       "name": "android-arm64", "hidden": true, "inherits": "ninja",
       "toolchainFile": "$env{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake",

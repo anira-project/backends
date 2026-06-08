@@ -65,6 +65,27 @@ endif()
 set(TFLITE_SOURCE_DIR "${tensorflow_SOURCE_DIR}/tensorflow/lite")
 add_subdirectory("${TFLITE_SOURCE_DIR}/c" "${CMAKE_BINARY_DIR}/tflite_c")
 
+# TFLite pins its targets to C++17 in its own CMake scope, which overrides the
+# global CMAKE_CXX_STANDARD. MSVC then rejects TFLite's C++20 designated
+# initializers (C7555); clang/gcc accept them as an extension. So on MSVC, bump
+# every target the TFLite subtree produced to C++20 (target property wins).
+function(_litert_force_cxx20 dir)
+    get_property(_subs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach(_s ${_subs})
+        _litert_force_cxx20("${_s}")
+    endforeach()
+    get_property(_tgts DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(_t ${_tgts})
+        get_target_property(_type ${_t} TYPE)
+        if(NOT _type STREQUAL "INTERFACE_LIBRARY" AND NOT _type STREQUAL "UTILITY")
+            set_property(TARGET ${_t} PROPERTY CXX_STANDARD 20)
+        endif()
+    endforeach()
+endfunction()
+if(MSVC)
+    _litert_force_cxx20("${TFLITE_SOURCE_DIR}/c")
+endif()
+
 # Install. Library:
 install(TARGETS tensorflowlite_c
     RUNTIME DESTINATION lib   # .dll
