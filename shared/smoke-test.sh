@@ -39,10 +39,16 @@ case "$OS" in
     INC="$(cygpath -w "$ST/include")"; LIBDIR="$(cygpath -w "$ST/lib")"; SRCW="$(cygpath -w "$SRC")"
     # Linking the STATIC lib: define TFL_STATIC_LIBRARY_BUILD so the C API header
     # drops __declspec(dllimport) (otherwise cl looks for __imp_TfLite* stubs).
-    DEFS=""; [ "$KIND" = "static" ] && DEFS="/DTFL_STATIC_LIBRARY_BUILD"
+    DEFS=""; EXTRA=""
+    if [ "$KIND" = "static" ]; then
+      DEFS="/DTFL_STATIC_LIBRARY_BUILD"
+      # The static lib references UCRT functions (math + POSIX read/write/access)
+      # as dllimports; the UCRT import libs aren't auto-pulled here, so add them.
+      EXTRA="ucrt.lib oldnames.lib"
+    fi
     # MSYS_NO_PATHCONV stops git-bash mangling the /flags into paths.
     MSYS_NO_PATHCONV=1 cl /nologo /std:c++17 /EHsc $DEFS /I"$INC" "$SRCW" \
-      /Fe:smoke.exe /link /LIBPATH:"$LIBDIR" tensorflowlite_c.lib
+      /Fe:smoke.exe /link /LIBPATH:"$LIBDIR" tensorflowlite_c.lib $EXTRA
     if [ "$RUN" = "1" ]; then
       # Windows loads a DLL from the exe's own directory first — copy it next to
       # smoke.exe rather than relying on PATH (which is unreliable from git-bash).
