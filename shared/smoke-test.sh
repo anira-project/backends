@@ -9,7 +9,7 @@
 #   <run>   1 = also execute (native target), 0 = compile+link only
 set -euo pipefail
 
-ST="$1"; SRC="$2"; MODEL="$3"; KIND="$4"; ARCH="$5"; RUN="${6:-1}"
+ST="$1"; SRC="$2"; MODEL="$3"; KIND="$4"; ARCH="$5"; RUN="${6:-1}"; CONFIG="${7:-Release}"
 OS="$(uname -s)"
 
 case "$OS" in
@@ -39,20 +39,27 @@ case "$OS" in
     INC="$(cygpath -w "$ST/include")"; LIBDIR="$(cygpath -w "$ST/lib")"; SRCW="$(cygpath -w "$SRC")"
     # Linking the STATIC lib: define TFL_STATIC_LIBRARY_BUILD so the C API header
     # drops __declspec(dllimport) (otherwise cl looks for __imp_TfLite* stubs).
-    DEFS=""; EXTRA=""
-    if [ "$KIND" = "static" ]; then
-      DEFS="/DTFL_STATIC_LIBRARY_BUILD"
-      # The static lib references UCRT functions (math + POSIX read/write/access)
-      # as dllimports; the UCRT import libs aren't auto-pulled here, so add them.
-      EXTRA="ucrt.lib oldnames.lib"
-    fi
+    # static lib is built with the dynamic CRT (/MD, see CMakeLists), so smoke's
+    # default /MD matches — no extra CRT libs needed.
+    DEFS=""; [ "$KIND" = "static" ] && DEFS="/DTFL_STATIC_LIBRARY_BUILD"
+    # CRT must match the lib: Release -> /MD (cl default), Debug -> /MDd.
+    CRT=""; [ "$CONFIG" = "Debug" ] && CRT="/MDd"
     # MSYS_NO_PATHCONV stops git-bash mangling the /flags into paths.
-    MSYS_NO_PATHCONV=1 cl /nologo /std:c++17 /EHsc $DEFS /I"$INC" "$SRCW" \
-      /Fe:smoke.exe /link /LIBPATH:"$LIBDIR" tensorflowlite_c.lib $EXTRA
+    MSYS_NO_PATHCONV=1 cl /nologo /std:c++17 /EHsc $CRT $DEFS /I"$INC" "$SRCW" \
+      /Fe:smoke.exe /link /LIBPATH:"$LIBDIR" tensorflowlite_c.lib
     if [ "$RUN" = "1" ]; then
-      # Windows loads a DLL from the exe's own directory first — copy it next to
-      # smoke.exe rather than relying on PATH (which is unreliable from git-bash).
+      # Windows loads a DLL from the exe's own directory first — copy deps next to
+      # smoke.exe rather than relying on PATH (unreliable from git-bash).
       [ "$KIND" = "shared" ] && cp "$ST/lib/tensorflowlite_c.dll" .
+      if [ "$CONFIG" = "Debug" ]; then
+        # /MDd needs the non-redistributable debug CRT DLLs, which aren't on PATH.
+        # Copy them from the VC redist + Windows SDK (paths from the MSVC env).
+        a="x64"; [ "$ARCH" = "arm64" ] && a="arm64"
+        find "${VCToolsRedistDir:-/c/nonexistent}" -ipath "*debug_nonredist*/$a/*DebugCRT*/*.dll" -exec cp {} . \; 2>/dev/null || true
+        ucrtd="$(find "${WindowsSdkDir:-/c/Program Files (x86)/Windows Kits/10}/bin" -name ucrtbased.dll 2>/dev/null | grep "/$a/" | head -1)"
+        [ -n "$ucrtd" ] && cp "$ucrtd" .
+        ls *.dll 2>/dev/null || true
+      fi
       ./smoke.exe "$MODEL"
     else
       echo "compiled+linked OK (run skipped)"

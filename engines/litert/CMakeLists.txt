@@ -56,6 +56,15 @@ message(STATUS "LiteRT ${LITERT_VERSION}: ${LITERT_BUILD_STATIC}=static")
 # Windows: export DLL symbols so the .lib import library is usable.
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON CACHE BOOL "" FORCE)
 
+# Force the dynamic CRT (/MD) across all TFLite targets + deps. Some deps default
+# to the static CRT (/MT), which mixes libucrt.lib (static) with ucrt.lib (dynamic)
+# and makes the static lib unlinkable by a normal /MD consumer app (LNK2005/LNK4098).
+# /MD is the standard for a redistributable static lib. CMP0091=NEW (default at our
+# cmake_minimum) makes CMAKE_MSVC_RUNTIME_LIBRARY authoritative.
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
+
 include(FetchContent)
 FetchContent_Declare(
     tensorflow

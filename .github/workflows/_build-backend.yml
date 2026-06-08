@@ -133,6 +133,7 @@ jobs:
           else
             name="${base}-${{ matrix.os }}-${{ matrix.arch }}"
             [ "${{ matrix.kind }}" = "static" ] && name="${name}-static"
+            [ "${{ matrix.config }}" = "Debug" ] && name="${name}-debug"
           fi
           echo "archive=$name" >> "$GITHUB_OUTPUT"
 
@@ -185,7 +186,48 @@ jobs:
             "staging/${{ steps.name.outputs.archive }}" \
             "${{ inputs.backend_dir }}/test/smoke.cpp" \
             "${{ inputs.backend_dir }}/build/${{ matrix.preset }}/_deps/tensorflow-src/tensorflow/lite/testdata/add.bin" \
-            "${{ matrix.kind }}" "${{ matrix.arch }}" "${{ matrix.can_run }}"
+            "${{ matrix.kind }}" "${{ matrix.arch }}" "${{ matrix.can_run }}" "${{ matrix.config }}"
+
+      # Android can't run on the build host — NDK-cross-compile the smoke here,
+      # then run it on an emulator via adb (x86_64 = KVM-accelerated; arm64-v8a =
+      # software-emulated on the x64 host, slower). Same forward pass: 1->3, 3->9.
+      - name: android smoke - build binary + model
+        if: ${{ matrix.toolchain == 'android' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="linux-x86_64"; [ "$(uname -m)" = "aarch64" ] && host="linux-aarch64"
+          tc="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$host/bin"
+          case "${{ matrix.arch }}" in
+            x86_64)    cxx="$tc/x86_64-linux-android24-clang++" ;;
+            arm64-v8a) cxx="$tc/aarch64-linux-android24-clang++" ;;
+            *) echo "::error::unknown android abi ${{ matrix.arch }}"; exit 1 ;;
+          esac
+          st="staging/${{ steps.name.outputs.archive }}"
+          "$cxx" -std=c++17 -I "$st/include" "${{ inputs.backend_dir }}/test/smoke.cpp" \
+            "$st/lib/libtensorflowlite_c.a" -llog -lm -o smoke_android
+          file smoke_android
+          curl -fsSL "https://raw.githubusercontent.com/tensorflow/tensorflow/v${{ inputs.version }}/tensorflow/lite/testdata/add.bin" -o add.bin
+          # KVM accelerates the x86_64 emulator
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - name: android smoke - run on emulator
+        if: ${{ matrix.toolchain == 'android' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: ${{ matrix.arch }}
+          force-avd-creation: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: |
+            adb push smoke_android /data/local/tmp/smoke
+            adb push add.bin /data/local/tmp/add.bin
+            adb shell chmod 755 /data/local/tmp/smoke
+            # adb shell doesn't reliably propagate exit codes, so assert on output
+            adb shell "/data/local/tmp/smoke /data/local/tmp/add.bin" 2>&1 | tee out.txt
+            grep -q PASS out.txt
 
       # Per-ABI Android builds are intermediate — combined into one multi-ABI
       # bundle below — so they don't publish standalone.

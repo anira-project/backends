@@ -12,7 +12,7 @@
 - [ ] wasm — Emscripten flags (`-matomics -msimd128 -mbulk-memory`) in `CMakeLists.txt`; re-add `wasm` row
 - [x] iOS — repackage Google's prebuilt `TensorFlowLiteC.xcframework` (download, not build) + compile/link smoke
 - [x] iOS — smoke runs a real forward pass on the booted simulator (simctl spawn)
-- [x] Android (static, multi-ABI bundle) — added; Android shared still parked
+- [x] Android (static, multi-ABI bundle) — added; smoke runs on emulator (x86_64 + arm64-v8a); shared still parked
 
 ## Consumer notes (document in README)
 - Windows **static**: consumers must compile with `-DTFL_STATIC_LIBRARY_BUILD` or the

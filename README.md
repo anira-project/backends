@@ -52,8 +52,13 @@ native targets — see [Smoke test](#smoke-test-gate)).
   privacy manifest). We don't build it (no static C-API prebuilt exists for Android, but
   iOS has one). Headers are framework-style (`<TensorFlowLiteC/c_api.h>`).
 - **Windows-arm64** disables XNNPACK — MSVC can't build XNNPACK's NEON microkernels.
-- **Windows static**: consumers must compile with `-DTFL_STATIC_LIBRARY_BUILD`, else the
-  C-API header uses `__declspec(dllimport)` and the link fails.
+- **Windows static**: built with the **dynamic CRT (`/MD`)**, shipped in **Release and Debug**
+  variants (`…-static` = `/MD`, `…-static-debug` = `/MDd`). Consumers must (a) compile with
+  `-DTFL_STATIC_LIBRARY_BUILD` (else the C-API header uses `__declspec(dllimport)` and the link
+  fails), and (b) match the CRT — link `-static-debug` from a `/MDd` build, `-static` from `/MD`.
+  For a *fast* engine in a debug app, prefer the **release DLL** (self-contained, no CRT clash)
+  or build your app `RelWithDebInfo`. The **shared** DLL is Release-only (debug consumers use it
+  too — it's self-contained).
 - **Codesigning** is currently **off** — `shared/sign-macos.sh` is ready (Developer ID for
   Hardened-Runtime/DAW hosts) but unused; Windows Authenticode optional/not done. iOS static
   framework and Android/Linux need no signing.
@@ -64,7 +69,7 @@ native targets — see [Smoke test](#smoke-test-gate)).
 ### Archive naming
 
 ```
-desktop:  tensorflowlite_c-<version>-<OS>-<arch>[-<accel>][-static].zip   # OS ∈ {macOS, Windows, Linux}
+desktop:  tensorflowlite_c-<version>-<OS>-<arch>[-<accel>][-static][-debug].zip  # OS ∈ {macOS, Windows, Linux}; -debug = Windows static /MDd
 android:  tensorflowlite_c-<version>-Android-static.zip                   # lib/<abi>/…
 ios:      tensorflowlite_c-<version>-iOS-xcframework.zip                  # TensorFlowLiteC.xcframework
 wasm:     tensorflowlite_c-<version>-wasm-emsdk-<emsdk-version>.zip
@@ -79,8 +84,9 @@ are new and need companion changes in anira's `cmake/SetupTensorflowLite.cmake` 
 After packaging, every job compiles `engines/litert/test/smoke.cpp` against the **packaged**
 artifact (the static link proves the bundled `.a`/`.lib` is symbol-complete) and runs a real
 forward pass — TFLite's `add.bin` model: input `{1,3}` → output `{3,9}`. A broken artifact
-fails the job before it can be published. **iOS runs too** — the simulator binary is executed
-via `simctl spawn`. Only **Android** is compile+link-only for now (needs an emulator).
+fails the job before it can be published. **Every platform runs it**: desktop natively,
+**iOS** on the simulator (`simctl spawn`), **Android** on an emulator via `adb` (x86_64
+KVM-accelerated; arm64-v8a software-emulated on the x64 host).
 
 ### Hardware acceleration (roadmap)
 
