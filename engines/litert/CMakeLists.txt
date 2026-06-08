@@ -63,6 +63,8 @@ set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON CACHE BOOL "" FORCE)
 # cmake_minimum) makes CMAKE_MSVC_RUNTIME_LIBRARY authoritative.
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    # /FS lets parallel cl.exe share one .pdb (Debug builds otherwise hit C1041).
+    add_compile_options(/FS)
 endif()
 
 include(FetchContent)
