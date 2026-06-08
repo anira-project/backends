@@ -328,6 +328,89 @@ jobs:
             gh release create "$tag" --title "$tag" --notes "Automated ${{ inputs.backend }} ${{ inputs.version }} build"
           gh release upload "$tag" "dist/${{ steps.n.outputs.bundle }}.zip" --clobber
 
-  # iOS: repackage Google's prebuilt TensorFlowLiteC.xcframework (download, not
-  # build — no static C-API prebuilt exists for Android, but iOS ships one).
-  # Scaffold pending; see TODO.md.
+  # --------------------------------------------------------------------------
+  # iOS: repackage Google's official prebuilt TensorFlowLiteC.xcframework (CPU,
+  # static, device + simulator). No build — the per-version download URL is read
+  # from the CocoaPods podspec. Independent of the build matrix.
+  # --------------------------------------------------------------------------
+  ios-xcframework:
+    name: iOS-xcframework
+    if: ${{ inputs.backend == 'litert' }}
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: download prebuilt xcframework
+        id: dl
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ inputs.version }}"
+          # CocoaPods Specs shard for "TensorFlowLiteC" = 1/6/0
+          spec="https://raw.githubusercontent.com/CocoaPods/Specs/master/Specs/1/6/0/TensorFlowLiteC/${VER}/TensorFlowLiteC.podspec.json"
+          url="$(curl -fsSL "$spec" | python3 -c 'import json,sys; print(json.load(sys.stdin)["source"]["http"])')"
+          echo "framework url: $url"
+          curl -fsSL "$url" -o tflc.tar.gz
+          mkdir -p ex && tar -xzf tflc.tar.gz -C ex
+          # base CPU framework only (not TensorFlowLiteCMetal/CoreML)
+          xcf="$(find ex -maxdepth 4 -type d -name 'TensorFlowLiteC.xcframework' | head -1)"
+          [ -n "$xcf" ] || { echo "::error::TensorFlowLiteC.xcframework not found"; exit 1; }
+          echo "xcf=$xcf" >> "$GITHUB_OUTPUT"
+
+      - name: validate (slices + C API symbols)
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcf="${{ steps.dl.outputs.xcf }}"
+          echo "slices:"; ls "$xcf"
+          ls "$xcf" | grep -q 'ios-arm64'   || { echo "::error::no device (ios-arm64) slice"; exit 1; }
+          ls "$xcf" | grep -qi 'simulator'  || { echo "::error::no simulator slice"; exit 1; }
+          fail=0
+          while IFS= read -r bin; do
+            if nm "$bin" 2>/dev/null | grep -q 'TfLiteModelCreate'; then echo "symbols OK: $bin"
+            else echo "::error::TfLiteModelCreate missing in $bin"; fail=1; fi
+          done < <(find "$xcf" -type f -name 'TensorFlowLiteC')
+          [ "$fail" -eq 0 ]
+
+      # Real smoke gate: compile + link smoke.cpp against the simulator slice
+      # (the framework header resolves via __has_include). A simulator forward-pass
+      # run needs a test .app bundle + booted sim — deferred.
+      - name: smoke test (compile + link, iphonesimulator)
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcf="${{ steps.dl.outputs.xcf }}"
+          fw_dir="$(find "$xcf" -maxdepth 1 -type d -name '*simulator*' | head -1)"
+          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          clang++ -std=c++17 -arch arm64 -isysroot "$sdk" -mios-simulator-version-min=12.0 \
+            -F "$fw_dir" -framework TensorFlowLiteC -framework Foundation \
+            "${{ inputs.backend_dir }}/test/smoke.cpp" -o /tmp/smoke_ios
+          file /tmp/smoke_ios && echo "iOS smoke: compile+link OK"
+
+      - name: repackage
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${{ inputs.libname }}-${{ inputs.version }}-iOS-xcframework"
+          mkdir -p dist "staging/$archive"
+          cp -R "${{ steps.dl.outputs.xcf }}" "staging/$archive/"
+          ( cd "staging/$archive" && cmake -E tar cf "$GITHUB_WORKSPACE/dist/$archive.zip" --format=zip TensorFlowLiteC.xcframework )
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.pack.outputs.archive }}
+          path: dist/${{ steps.pack.outputs.archive }}.zip
+          retention-days: 14
+
+      - name: publish to release
+        if: ${{ inputs.release }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ inputs.backend }}-v${{ inputs.version }}"
+          gh release view "$tag" >/dev/null 2>&1 || \
+            gh release create "$tag" --title "$tag" --notes "Automated ${{ inputs.backend }} ${{ inputs.version }} build"
+          gh release upload "$tag" "dist/${{ steps.pack.outputs.archive }}.zip" --clobber

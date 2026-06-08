@@ -13,8 +13,13 @@
 #include <cmath>
 #include <cstdio>
 
-// Flattened path that anira uses (TFLiteProcessor.h): #include <tensorflow/lite/c_api.h>
-#include "tensorflow/lite/c_api.h"
+// Desktop/Android packages use anira's flattened path (tensorflow/lite/c_api.h);
+// the iOS prebuilt ships a framework (TensorFlowLiteC/c_api.h). Support both.
+#if __has_include(<TensorFlowLiteC/c_api.h>)
+#  include <TensorFlowLiteC/c_api.h>
+#else
+#  include "tensorflow/lite/c_api.h"
+#endif
 
 static int fail(const char* msg) {
     std::fprintf(stderr, "FAIL: %s\n", msg);
