@@ -162,6 +162,15 @@ push/PR = **validate only**; tags **publish** (assets refreshed in place per rel
 
 ## License
 
-This repo's scripts/CI are **Apache-2.0** ([`LICENSE`](./LICENSE)). The published binaries
-follow their upstream licenses (LiteRT/TensorFlow: Apache-2.0; ONNXRuntime: MIT; LibTorch:
-BSD-3) — see [`LICENSE.md`](./LICENSE.md) for per-backend links.
+This repo's scripts/CI are **Apache-2.0** ([`LICENSE`](./LICENSE)). The **published binaries**
+are built/repackaged from upstream and follow **their** licenses:
+
+| Backend     | Upstream | License | Link |
+| ----------- | -------- | ------- | ---- |
+| LiteRT      | [tensorflow](https://github.com/tensorflow/tensorflow) | Apache-2.0 | [LICENSE](https://github.com/tensorflow/tensorflow/blob/master/LICENSE) |
+| ONNXRuntime | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) | MIT | [LICENSE](https://github.com/microsoft/onnxruntime/blob/main/LICENSE) |
+| LibTorch    | [pytorch/pytorch](https://github.com/pytorch/pytorch) | BSD-3-Clause | [LICENSE](https://github.com/pytorch/pytorch/blob/main/LICENSE) |
+
+A built backend statically bundles further third-party deps (LiteRT: XNNPACK, Abseil, ruy,
+FlatBuffers, FarmHash, FFT2D, cpuinfo, …), each under its own license — see the upstream
+repos' `third_party/`/`LICENSE` for the full set.
