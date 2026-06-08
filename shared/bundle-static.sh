@@ -19,7 +19,10 @@ set -euo pipefail
 
 BUILD_DIR="${1:?build dir}"
 OUT="${2:?output archive}"
-EXCLUDE="${BUNDLE_EXCLUDE_REGEX:-}"
+# Only merge build-OUTPUT archives. Exclude fetched source trees (*-src/) — they
+# hold no libs we need but do contain malformed *.a test fixtures (e.g. TFLite's
+# tensorflow-src/.../ios/testdata/*/input.a) that ar/libtool reject.
+EXCLUDE="${BUNDLE_EXCLUDE_REGEX:-(/testdata/|-src/)}"
 
 OS="$(uname -s)"
 case "$OS" in

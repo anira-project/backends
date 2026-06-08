@@ -13,6 +13,15 @@ project(litert-c LANGUAGES C CXX
 
 option(LITERT_BUILD_STATIC "Build a static archive instead of a shared library" OFF)
 
+# On Apple, CMAKE_SYSTEM_PROCESSOR stays the HOST arch even when targeting a
+# different CMAKE_OSX_ARCHITECTURES (this isn't a "real" crosscompile, so CMake
+# overwrites any cache value with the host). TFLite keys its x86-vs-ARM decisions
+# on CMAKE_SYSTEM_PROCESSOR — e.g. fetching the NEON_2_SSE shim x86_64 needs —
+# so force the normal variable to match the target arch before building TFLite.
+if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+    set(CMAKE_SYSTEM_PROCESSOR "${CMAKE_OSX_ARCHITECTURES}")
+endif()
+
 # NOTE: old TFLite deps (FP16/psimd/…) need CMAKE_POLICY_VERSION_MINIMUM=3.5 under
 # CMake 4+. It's set via the preset `environment` (not a cache var here) so the
 # nested cmake download processes inherit it too.
