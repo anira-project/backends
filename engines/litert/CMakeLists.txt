@@ -13,6 +13,12 @@ project(litert-c LANGUAGES C CXX
 
 option(LITERT_BUILD_STATIC "Build a static archive instead of a shared library" OFF)
 
+# TFLite uses C++20 features (e.g. designated initializers in core/c/operator.cc).
+# clang/gcc accept these as an extension under C++17, but MSVC is strict and errors
+# (C7555) — so require C++20 globally.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # On Apple, CMAKE_SYSTEM_PROCESSOR stays the HOST arch even when targeting a
 # different CMAKE_OSX_ARCHITECTURES (this isn't a "real" crosscompile, so CMake
 # overwrites any cache value with the host). TFLite keys its x86-vs-ARM decisions

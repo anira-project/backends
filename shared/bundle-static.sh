@@ -19,6 +19,12 @@ set -euo pipefail
 
 BUILD_DIR="${1:?build dir}"
 OUT="${2:?output archive}"
+
+# Use absolute paths: the Linux path cd's into temp dirs before `ar x`, and the
+# Windows path feeds lib.exe — relative archive paths break in both.
+BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"
+mkdir -p "$(dirname "$OUT")"
+OUT="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
 # Only merge build-OUTPUT archives. Exclude fetched source trees (*-src/) — they
 # hold no libs we need but do contain malformed *.a test fixtures (e.g. TFLite's
 # tensorflow-src/.../ios/testdata/*/input.a) that ar/libtool reject.

@@ -1,8 +1,11 @@
 # TODO
 
 ## Verify on first CI run (current round: Windows + macOS + Linux, x64/arm64 + macOS universal)
-- [ ] Static bundling produces a complete `libtensorflowlite_c.a` (no missing symbols) — `shared/bundle-static.sh`
-- [ ] Windows static bundling via `lib.exe` works end-to-end
+- [x] macOS x64/arm64 build (NEON_2_SSE fix) + static bundling — validated locally
+- [ ] Windows static bundling via `lib.exe` works end-to-end (Ninja+MSVC)
+- [ ] Windows arm64 cross-compile (CMAKE_SYSTEM_NAME=Windows) configures/builds
+- [ ] Linux x64/aarch64 build + bundle
+- [ ] macos-universal job works with upload-artifact@v7 / download-artifact@v8 (multi-major bump)
 
 ## Deferred (parked, scripts/rows kept)
 - [ ] macOS Developer ID codesigning — `shared/sign-macos.sh` ready; CI cert import + secrets TODO

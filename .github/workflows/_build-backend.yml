@@ -58,7 +58,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(inputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: setup build tools
         uses: tanh-lab/ci-actions/setup-cpp-build-tools@bbdd199c8796cdec6f064827eedc45028cd60ce3
@@ -97,7 +97,7 @@ jobs:
       # sccache mirrors what cmake-build does; skipped for the emscripten target.
       # ----------------------------------------------------------------------
       - name: sccache
-        uses: mozilla-actions/sccache-action@v0.0.8
+        uses: mozilla-actions/sccache-action@v0.0.10
 
       - name: launcher flags
         id: cfg
@@ -166,7 +166,7 @@ jobs:
         run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist
 
       - name: upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.name.outputs.archive }}
           path: dist/${{ steps.name.outputs.archive }}.zip
@@ -197,7 +197,7 @@ jobs:
       matrix:
         kind: [shared, static]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: compose names
         id: n
@@ -212,9 +212,9 @@ jobs:
             if [ "${{ matrix.kind }}" = "static" ]; then echo "lib=libtensorflowlite_c.a"; else echo "lib=libtensorflowlite_c.dylib"; fi
           } >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: "${{ steps.n.outputs.x64 }}", path: dl/x64 }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
 
       - name: lipo + repackage
@@ -236,7 +236,7 @@ jobs:
 
           bash shared/package.sh "$stage" "${{ steps.n.outputs.uni }}" dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.n.outputs.uni }}
           path: dist/${{ steps.n.outputs.uni }}.zip
