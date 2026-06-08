@@ -13,6 +13,10 @@ project(litert-c LANGUAGES C CXX
 
 option(LITERT_BUILD_STATIC "Build a static archive instead of a shared library" OFF)
 
+# NOTE: old TFLite deps (FP16/psimd/…) need CMAKE_POLICY_VERSION_MINIMUM=3.5 under
+# CMake 4+. It's set via the preset `environment` (not a cache var here) so the
+# nested cmake download processes inherit it too.
+
 # CPU-only: XNNPACK (SIMD CPU) on; GPU/NPU delegates off.
 set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "" FORCE)
 set(TFLITE_ENABLE_GPU     OFF CACHE BOOL "" FORCE)
