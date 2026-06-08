@@ -26,7 +26,7 @@ Archive layout (what anira expects):
 
 `libtensorflowlite_c`, CPU only (XNNPACK; no GPU/NPU). Shared + static for every target.
 **Current round builds Windows + macOS + Linux** (see [`TODO.md`](./TODO.md)); iOS/Android/wasm
-are parked in `litert/ci-matrix.deferred.json`.
+are parked in `engines/litert/ci-matrix.deferred.json`.
 
 | Target           | OS      | Arch              | Build tool         | Round   | Notes |
 | ---------------- | ------- | ----------------- | ------------------ | ------- | ----- |
@@ -89,17 +89,17 @@ and release upload live in `shared/` + `_build-backend.yml`.
 ### Layout
 
 ```
-backends/
-├── litert/
-│   ├── VERSION                # pinned upstream version (single source of truth)
-│   ├── CMakeLists.txt         # fetch tensorflow + build/install
-│   ├── CMakePresets.json      # one preset per target
-│   └── ci-matrix*.json        # active / deferred build matrices
-├── onnxruntime/ libtorch/     # (later)
-├── shared/                    # package / sign / bundle-static / xcframework scripts
+backends/                          # repo root
+├── engines/
+│   └── litert/                    # one dir per backend (onnxruntime/, libtorch/ later)
+│       ├── VERSION                # pinned upstream version (single source of truth)
+│       ├── CMakeLists.txt         # fetch tensorflow + build/install
+│       ├── CMakePresets.json      # one preset per target
+│       └── ci-matrix*.json        # active / deferred build matrices
+├── shared/                        # package / sign / bundle-static / xcframework scripts
 └── .github/workflows/
-    ├── litert.yml             # triggers + matrix → reusable workflow
-    └── _build-backend.yml     # reusable: build → bundle → package → upload
+    ├── litert.yml                 # triggers + matrix → reusable workflow
+    └── _build-backend.yml         # reusable: build → bundle → package → upload
 ```
 
 ### Version & tags
@@ -124,7 +124,7 @@ push/PR = **validate only**; tags **publish** (assets refreshed in place per rel
 
 | You do…                         | Runs                     | Publishes               |
 | ------------------------------- | ------------------------ | ----------------------- |
-| Push `litert/**` (branch/PR)    | LiteRT validate          | —                       |
+| Push `engines/litert/**` (branch/PR)    | LiteRT validate          | —                       |
 | Edit `shared/**` (branch/PR)    | every backend validate   | —                       |
 | Tag `litert-v2.17.0`            | LiteRT release           | `litert-v2.17.0`        |
 | Tag `all-v3`                    | all backends release     | each `<backend>-v<ver>` |

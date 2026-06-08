@@ -4,7 +4,7 @@ name: litert
 # to the shared _build-backend.yml pipeline.
 #
 # Triggers:
-#   - push/PR touching litert/ or shared CI  -> validate only (no release)
+#   - push/PR touching engines/litert/ or shared CI  -> validate only (no release)
 #   - tag  litert-v<version>                 -> release just LiteRT
 #   - tag  all-v<n>                          -> global release (all backends)
 
@@ -12,7 +12,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'litert/**'
+      - 'engines/litert/**'
       - 'shared/**'
       - '.github/workflows/litert.yml'
       - '.github/workflows/_build-backend.yml'
@@ -21,7 +21,7 @@ on:
       - 'all-v*'
   pull_request:
     paths:
-      - 'litert/**'
+      - 'engines/litert/**'
       - 'shared/**'
       - '.github/workflows/litert.yml'
       - '.github/workflows/_build-backend.yml'
@@ -45,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(tr -d '[:space:]' < litert/VERSION)"
+          VERSION="$(tr -d '[:space:]' < engines/litert/VERSION)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           REF="${GITHUB_REF}"
@@ -59,18 +59,19 @@ jobs:
           if [[ "$REF" == refs/tags/litert-v* ]]; then
             TAGV="${REF#refs/tags/litert-v}"
             if [[ "$TAGV" != "$VERSION" ]]; then
-              echo "::error::tag litert-v$TAGV does not match litert/VERSION ($VERSION)"
+              echo "::error::tag litert-v$TAGV does not match engines/litert/VERSION ($VERSION)"
               exit 1
             fi
           fi
 
-          echo "matrix=$(jq -c . litert/ci-matrix.json)" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(jq -c . engines/litert/ci-matrix.json)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: setup
     uses: ./.github/workflows/_build-backend.yml
     with:
       backend: litert
+      backend_dir: engines/litert
       libname: tensorflowlite_c
       version: ${{ needs.setup.outputs.version }}
       release: ${{ needs.setup.outputs.release == 'true' }}

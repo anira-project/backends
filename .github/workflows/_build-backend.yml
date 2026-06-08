@@ -10,7 +10,11 @@ on:
   workflow_call:
     inputs:
       backend:
-        description: "Backend id, e.g. litert"
+        description: "Backend id (used for tag/release/artifact names), e.g. litert"
+        required: true
+        type: string
+      backend_dir:
+        description: "Path to the backend's source dir, e.g. engines/litert"
         required: true
         type: string
       libname:
@@ -106,12 +110,12 @@ jobs:
           fi
 
       - name: configure
-        working-directory: ${{ inputs.backend }}
+        working-directory: ${{ inputs.backend_dir }}
         shell: bash
         run: cmake --preset ${{ matrix.preset }} ${{ steps.cfg.outputs.launchers }}
 
       - name: build
-        working-directory: ${{ inputs.backend }}
+        working-directory: ${{ inputs.backend_dir }}
         shell: bash
         run: cmake --build --preset ${{ matrix.preset }} -j
 
@@ -135,7 +139,7 @@ jobs:
       - name: install
         shell: bash
         run: |
-          cmake --install "${{ inputs.backend }}/build/${{ matrix.preset }}" \
+          cmake --install "${{ inputs.backend_dir }}/build/${{ matrix.preset }}" \
             --config Release \
             --prefix "staging/${{ steps.name.outputs.archive }}"
 
@@ -152,7 +156,7 @@ jobs:
           else
             out="$libdir/libtensorflowlite_c.a"
           fi
-          bash shared/bundle-static.sh "${{ inputs.backend }}/build/${{ matrix.preset }}" "$out"
+          bash shared/bundle-static.sh "${{ inputs.backend_dir }}/build/${{ matrix.preset }}" "$out"
 
       # NOTE: macOS codesigning is intentionally OFF this round (shared/sign-macos.sh
       # stays in the repo for when Developer ID signing is enabled later).
@@ -249,5 +253,5 @@ jobs:
           gh release upload "$tag" "dist/${{ steps.n.outputs.uni }}.zip" --clobber
 
   # iOS (Bazel + xcframework), Android, and wasm are deferred to a later round.
-  # Scripts (litert/build-ios-bazel.sh, shared/make-xcframework.sh) and the
-  # deferred matrix rows (litert/ci-matrix.deferred.json) are kept for then.
+  # Scripts (engines/litert/build-ios-bazel.sh, shared/make-xcframework.sh) and the
+  # deferred matrix rows (engines/litert/ci-matrix.deferred.json) are kept for then.

@@ -2,8 +2,8 @@
 
 Builds `libtensorflowlite_c` from upstream `tensorflow/lite/c` at the version in
 [`VERSION`](./VERSION), packaged for [anira](https://github.com/anira-project/anira).
-See the [repo README](../README.md) for the target matrix and release model, and
-[`../TODO.md`](../TODO.md) for open work.
+See the [repo README](../../README.md) for the target matrix and release model, and
+[`TODO.md`](../../TODO.md) for open work.
 
 ## Files
 

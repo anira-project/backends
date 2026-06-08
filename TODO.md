@@ -7,8 +7,8 @@
 ## Deferred (parked, scripts/rows kept)
 - [ ] macOS Developer ID codesigning — `shared/sign-macos.sh` ready; CI cert import + secrets TODO
 - [ ] wasm — Emscripten flags (`-matomics -msimd128 -mbulk-memory`) in `CMakeLists.txt`; re-add `wasm` row
-- [ ] iOS — Bazel build (`litert/build-ios-bazel.sh`) + xcframework (`shared/make-xcframework.sh`) + CI job
-- [ ] Android — re-add rows from `litert/ci-matrix.deferred.json`
+- [ ] iOS — Bazel build (`engines/litert/build-ios-bazel.sh`) + xcframework (`shared/make-xcframework.sh`) + CI job
+- [ ] Android — re-add rows from `engines/litert/ci-matrix.deferred.json`
 
 ## Later
 - [ ] Backends: `onnxruntime/`, `libtorch/`
