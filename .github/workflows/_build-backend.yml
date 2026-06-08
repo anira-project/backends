@@ -103,7 +103,9 @@ jobs:
         id: cfg
         shell: bash
         run: |
-          if [ "${{ matrix.toolchain }}" = "wasm" ]; then
+          # No sccache for wasm, or for MSVC Debug: /Z7 emits no .pdb but CMake still
+          # passes /Fd, so sccache errors trying to cache a pdb that doesn't exist.
+          if [ "${{ matrix.toolchain }}" = "wasm" ] || [ "${{ matrix.config }}" = "Debug" ]; then
             echo "launchers=" >> "$GITHUB_OUTPUT"
           else
             echo "launchers=-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache" >> "$GITHUB_OUTPUT"

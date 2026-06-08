@@ -18,6 +18,8 @@
 - Windows **static**: consumers must compile with `-DTFL_STATIC_LIBRARY_BUILD` or the
   C API header uses `__declspec(dllimport)` and the link fails (`__imp_TfLite*`).
 
+- [x] Android arm64-v8a smoke = compile+link only (by decision: arm64 software-emulation on x64 hangs; official NDK has no linux-aarch64 host for a native arm runner). x86_64 runs the real forward pass.
+
 ## Later
 - [ ] Backends: `onnxruntime/`, `libtorch/`
 - [ ] Linux `armv7l` (Bela) — needs `-DTFLITE_ENABLE_XNNPACK=OFF`

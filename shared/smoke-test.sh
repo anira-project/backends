@@ -46,8 +46,10 @@ case "$OS" in
     DEFS=""; EXTRA=""; CRT=""
     if [ "$KIND" = "static" ]; then
       DEFS="/DTFL_STATIC_LIBRARY_BUILD"
+      # NB: command-line cl defaults to /MT (static CRT), but the lib is /MD —
+      # set the CRT explicitly or you get LNK2038 RuntimeLibrary mismatch.
       if [ "$CONFIG" = "Debug" ]; then CRT="/MDd"; EXTRA="ucrtd.lib advapi32.lib"
-      else EXTRA="ucrt.lib advapi32.lib"; fi
+      else CRT="/MD"; EXTRA="ucrt.lib advapi32.lib"; fi
     fi
     # MSYS_NO_PATHCONV stops git-bash mangling the /flags into paths.
     MSYS_NO_PATHCONV=1 cl /nologo /std:c++17 /EHsc $CRT $DEFS /I"$INC" "$SRCW" \
