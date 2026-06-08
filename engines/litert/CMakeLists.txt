@@ -32,9 +32,16 @@ endif()
 # CMake 4+. It's set via the preset `environment` (not a cache var here) so the
 # nested cmake download processes inherit it too.
 
-# CPU-only: XNNPACK (SIMD CPU) on; GPU/NPU delegates off.
-set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "" FORCE)
-set(TFLITE_ENABLE_GPU     OFF CACHE BOOL "" FORCE)
+# CPU-only: XNNPACK (SIMD CPU) on; GPU/NPU delegates off. Exception: Windows-on-ARM64
+# with MSVC can't build XNNPACK's NEON microkernels (unresolved xnn_*_ukernel__neon*),
+# so disable it there — TFLite falls back to its built-in kernels.
+if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+    set(TFLITE_ENABLE_XNNPACK OFF CACHE BOOL "" FORCE)
+    message(STATUS "LiteRT: XNNPACK disabled on Windows/ARM64 (MSVC NEON microkernels unsupported)")
+else()
+    set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "" FORCE)
+endif()
+set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
 
 # Lib type uses upstream's own TFLITE_C_BUILD_SHARED_LIBS, not BUILD_SHARED_LIBS.
 if(LITERT_BUILD_STATIC)

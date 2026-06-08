@@ -1,11 +1,11 @@
 # TODO
 
-## Verify on first CI run (current round: Windows + macOS + Linux, x64/arm64 + macOS universal)
-- [x] macOS x64/arm64 build (NEON_2_SSE fix) + static bundling — validated locally
-- [ ] Windows static bundling via `lib.exe` works end-to-end (Ninja+MSVC)
-- [ ] Windows arm64 cross-compile (CMAKE_SYSTEM_NAME=Windows) configures/builds
-- [ ] Linux x64/aarch64 build + bundle
-- [ ] macos-universal job works with upload-artifact@v7 / download-artifact@v8 (multi-major bump)
+## Status (current round: Windows + macOS + Linux, x64/arm64 + macOS universal)
+- [x] macOS x64/arm64 + Linux x64/aarch64, shared + static (green in CI)
+- [x] Windows x64 shared/static + Windows arm64 static (green in CI; Ninja+MSVC, native windows-11-arm)
+- [x] Windows arm64: XNNPACK disabled (MSVC can't build NEON microkernels) — fixes arm64-shared DLL link
+- [x] C++ smoke test (compile+link+forward-pass gate) — validated locally
+- [ ] macos-universal green (was skipped while a build job failed) + smoke gate green in CI
 
 ## Deferred (parked, scripts/rows kept)
 - [ ] macOS Developer ID codesigning — `shared/sign-macos.sh` ready; CI cert import + secrets TODO

@@ -172,6 +172,21 @@ jobs:
           path: dist/${{ steps.name.outputs.archive }}.zip
           retention-days: 14
 
+      # Hard gate: compile + link the example against the PACKAGED artifact (the
+      # static link proves the bundled .a is complete) and run a forward pass on
+      # native targets. Runs after upload (so the artifact is kept for debugging)
+      # but before publish, so a broken artifact never reaches a release.
+      # TFLite-specific model path; parameterize when other backends are added.
+      - name: smoke test
+        if: ${{ matrix.toolchain == 'none' }}
+        shell: bash
+        run: |
+          bash shared/smoke-test.sh \
+            "staging/${{ steps.name.outputs.archive }}" \
+            "${{ inputs.backend_dir }}/test/smoke.cpp" \
+            "${{ inputs.backend_dir }}/build/${{ matrix.preset }}/_deps/tensorflow-src/tensorflow/lite/testdata/add.bin" \
+            "${{ matrix.kind }}" "${{ matrix.arch }}" "${{ matrix.can_run }}"
+
       - name: publish to release
         if: ${{ inputs.release }}
         shell: bash

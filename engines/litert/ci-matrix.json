@@ -1,16 +1,16 @@
 [
-  { "label": "macOS-x86_64",   "name": "macOS-x86_64",   "runner": "macos-15",        "preset": "macos-x64-shared",     "os": "macOS",   "arch": "x86_64",  "kind": "shared", "toolchain": "none" },
-  { "label": "macOS-x86_64",   "name": "macOS-x86_64",   "runner": "macos-15",        "preset": "macos-x64-static",     "os": "macOS",   "arch": "x86_64",  "kind": "static", "toolchain": "none" },
-  { "label": "macOS-arm64",    "name": "macOS-arm64",    "runner": "macos-15",        "preset": "macos-arm64-shared",   "os": "macOS",   "arch": "arm64",   "kind": "shared", "toolchain": "none" },
-  { "label": "macOS-arm64",    "name": "macOS-arm64",    "runner": "macos-15",        "preset": "macos-arm64-static",   "os": "macOS",   "arch": "arm64",   "kind": "static", "toolchain": "none" },
+  { "label": "macOS-x86_64",   "name": "macOS-x86_64",   "runner": "macos-15",        "preset": "macos-x64-shared",     "os": "macOS",   "arch": "x86_64",  "kind": "shared", "toolchain": "none", "can_run": "1" },
+  { "label": "macOS-x86_64",   "name": "macOS-x86_64",   "runner": "macos-15",        "preset": "macos-x64-static",     "os": "macOS",   "arch": "x86_64",  "kind": "static", "toolchain": "none", "can_run": "1" },
+  { "label": "macOS-arm64",    "name": "macOS-arm64",    "runner": "macos-15",        "preset": "macos-arm64-shared",   "os": "macOS",   "arch": "arm64",   "kind": "shared", "toolchain": "none", "can_run": "1" },
+  { "label": "macOS-arm64",    "name": "macOS-arm64",    "runner": "macos-15",        "preset": "macos-arm64-static",   "os": "macOS",   "arch": "arm64",   "kind": "static", "toolchain": "none", "can_run": "1" },
 
-  { "label": "Windows-x86_64", "name": "Windows-x86_64", "runner": "windows-2025",    "preset": "windows-x64-shared",   "os": "Windows", "arch": "x86_64",  "kind": "shared", "toolchain": "none", "msvc_arch": "x64" },
-  { "label": "Windows-x86_64", "name": "Windows-x86_64", "runner": "windows-2025",    "preset": "windows-x64-static",   "os": "Windows", "arch": "x86_64",  "kind": "static", "toolchain": "none", "msvc_arch": "x64" },
-  { "label": "Windows-arm64",  "name": "Windows-ARM64",  "runner": "windows-11-arm",  "preset": "windows-arm64-shared", "os": "Windows", "arch": "arm64",   "kind": "shared", "toolchain": "none", "msvc_arch": "arm64" },
-  { "label": "Windows-arm64",  "name": "Windows-ARM64",  "runner": "windows-11-arm",  "preset": "windows-arm64-static", "os": "Windows", "arch": "arm64",   "kind": "static", "toolchain": "none", "msvc_arch": "arm64" },
+  { "label": "Windows-x86_64", "name": "Windows-x86_64", "runner": "windows-2025",    "preset": "windows-x64-shared",   "os": "Windows", "arch": "x86_64",  "kind": "shared", "toolchain": "none", "can_run": "1", "msvc_arch": "x64" },
+  { "label": "Windows-x86_64", "name": "Windows-x86_64", "runner": "windows-2025",    "preset": "windows-x64-static",   "os": "Windows", "arch": "x86_64",  "kind": "static", "toolchain": "none", "can_run": "1", "msvc_arch": "x64" },
+  { "label": "Windows-arm64",  "name": "Windows-ARM64",  "runner": "windows-11-arm",  "preset": "windows-arm64-shared", "os": "Windows", "arch": "arm64",   "kind": "shared", "toolchain": "none", "can_run": "1", "msvc_arch": "arm64" },
+  { "label": "Windows-arm64",  "name": "Windows-ARM64",  "runner": "windows-11-arm",  "preset": "windows-arm64-static", "os": "Windows", "arch": "arm64",   "kind": "static", "toolchain": "none", "can_run": "1", "msvc_arch": "arm64" },
 
-  { "label": "Linux-x86_64",   "name": "Linux-x86_64",   "runner": "ubuntu-24.04",    "preset": "linux-x64-shared",     "os": "Linux",   "arch": "x86_64",  "kind": "shared", "toolchain": "none" },
-  { "label": "Linux-x86_64",   "name": "Linux-x86_64",   "runner": "ubuntu-24.04",    "preset": "linux-x64-static",     "os": "Linux",   "arch": "x86_64",  "kind": "static", "toolchain": "none" },
-  { "label": "Linux-aarch64",  "name": "Linux-aarch64",  "runner": "ubuntu-24.04-arm","preset": "linux-arm64-shared",   "os": "Linux",   "arch": "aarch64", "kind": "shared", "toolchain": "none" },
-  { "label": "Linux-aarch64",  "name": "Linux-aarch64",  "runner": "ubuntu-24.04-arm","preset": "linux-arm64-static",   "os": "Linux",   "arch": "aarch64", "kind": "static", "toolchain": "none" }
+  { "label": "Linux-x86_64",   "name": "Linux-x86_64",   "runner": "ubuntu-24.04",    "preset": "linux-x64-shared",     "os": "Linux",   "arch": "x86_64",  "kind": "shared", "toolchain": "none", "can_run": "1" },
+  { "label": "Linux-x86_64",   "name": "Linux-x86_64",   "runner": "ubuntu-24.04",    "preset": "linux-x64-static",     "os": "Linux",   "arch": "x86_64",  "kind": "static", "toolchain": "none", "can_run": "1" },
+  { "label": "Linux-aarch64",  "name": "Linux-aarch64",  "runner": "ubuntu-24.04-arm","preset": "linux-arm64-shared",   "os": "Linux",   "arch": "aarch64", "kind": "shared", "toolchain": "none", "can_run": "1" },
+  { "label": "Linux-aarch64",  "name": "Linux-aarch64",  "runner": "ubuntu-24.04-arm","preset": "linux-arm64-static",   "os": "Linux",   "arch": "aarch64", "kind": "static", "toolchain": "none", "can_run": "1" }
 ]
