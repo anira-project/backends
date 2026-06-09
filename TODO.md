@@ -75,12 +75,16 @@ Consumed via `find_package(Torch)`, so archives preserve `include/ lib/ share/ [
   - Windows arm64 — 2.12.0 release not published (only a `-debug` build; release tops at 2.11.0).
 - **Universal (macOS)**: `macos-universal` job lipos the two per-arch from-source archives.
 
-### CI status (run 4, commit 4f985e5)
-Green (incl. find_package(Torch) smoke): macOS arm64 (1h3m cold), macOS x86_64 (8m35s cached),
-Linux aarch64 (2m11s cached), Linux x86_64 + Windows x86_64 (prebuilt). Failing: Windows arm64.
-`macOS-universal-shared` was SKIPPED — it `needs: build`, and a win-arm64 failure marks the whole
-build matrix failed. Fixed: `if: !cancelled()` so universal runs off the macOS slices regardless
-of unrelated legs (still unvalidated until next run).
+### CI status (run 5, commit ea81438)
+Green (incl. find_package(Torch) smoke): macOS arm64, macOS x86_64, **macOS universal** (lipo +
+smoke ✅), Linux aarch64, Linux x86_64, Windows x86_64. **7/8 archives green.** Only Windows arm64
+left. The `if: !cancelled()` decoupling worked — universal now validated.
+
+Windows arm64 (run 5): clang-cl arm64 targeting fixed — it compiled cleanly to [433/1448] of
+torch_cpu, then the **windows-11-arm runner was OOM-killed** ("hosted runner lost communication …
+starves it for CPU/Memory"; logs truncated, step stuck in_progress). Emulated x64 clang-cl on big
+ATen TUs at MAX_JOBS=nproc exhausted the 16 GB runner. Fix: `MAX_JOBS=2` on Windows (trade time for
+memory; 6h budget). If it still OOMs, drop to 1 or use native arm64 LLVM (no emulation).
 
 ### Still open (LibTorch)
 - **From-source recipes need CI iteration** (first-pass `build-libtorch.sh`):

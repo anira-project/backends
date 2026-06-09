@@ -102,6 +102,11 @@ case "$PLATFORM" in
     # seeds CMAKE_{C,CXX}_FLAGS from these, so the compiler check + whole build inherit it.
     export CFLAGS="--target=arm64-pc-windows-msvc${CFLAGS:+ $CFLAGS}"
     export CXXFLAGS="--target=arm64-pc-windows-msvc${CXXFLAGS:+ $CXXFLAGS}"
+    # Cap parallelism. At MAX_JOBS=nproc the windows-11-arm runner (4 vCPU / 16 GB) was
+    # killed mid-build ("hosted runner lost communication ... starves it for CPU/Memory")
+    # ~30% into torch_cpu — emulated x64 clang-cl on PyTorch's large ATen TUs is memory
+    # -hungry. Fewer concurrent compiles trades build time (we have 6h) for not OOM-ing.
+    export MAX_JOBS=2
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
