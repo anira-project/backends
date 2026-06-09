@@ -12,7 +12,7 @@ CPU only (XNNPACK; no GPU/NPU). Release model & CI: [docs/RELEASE.md](../../docs
 | 🪟 Windows  | x64                   | ✅              | ✅ `Release` + `Debug`    | CMake (Ninja + MSVC)        |
 | 🪟 Windows  | arm64                 | ✅              | ✅ `Release` + `Debug`    | CMake — no XNNPACK¹         |
 | 🐧 Linux    | x86_64, aarch64       | ✅              | ✅                        | CMake                       |
-| 🤖 Android  | arm64-v8a, x86_64     | 🚧 deferred     | ✅ multi-ABI bundle       | CMake / NDK                 |
+| 🤖 Android  | arm64-v8a, x86_64     | ✅ multi-ABI bundle | ✅ multi-ABI bundle    | CMake / NDK                 |
 | 📱 iOS      | device + simulator    | —               | ✅ xcframework            | **download** Google prebuilt |
 | 🌐 Web      | wasm32                | —               | 🚧 deferred               | CMake / Emscripten          |
 
@@ -32,7 +32,7 @@ CPU only (XNNPACK; no GPU/NPU). Release model & CI: [docs/RELEASE.md](../../docs
 | `CMakeLists.txt`          | Fetch tensorflow, build + install the C API      |
 | `CMakePresets.json`       | One preset per target (platform × shared/static) |
 | `ci-matrix.json`          | Active CI build matrix                           |
-| `ci-matrix.deferred.json` | Parked rows (Android `shared`, wasm)             |
+| `ci-matrix.deferred.json` | Parked rows (wasm)                               |
 | `test/smoke.cpp`          | Forward-pass smoke (`add.bin` → `{3,9}`)         |
 
 > iOS isn't built here — it repackages Google's prebuilt `TensorFlowLiteC.xcframework`

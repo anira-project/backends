@@ -56,7 +56,8 @@
 - wasm — Emscripten flags (`-matomics -msimd128 -mbulk-memory`); re-add `wasm` row (matches anira-web)
 - Android arm64-v8a smoke = compile+link only (software-emulation on x64 hangs; official NDK has no
   linux-aarch64 host for a native arm runner). x86_64 runs the real forward pass.
-- Android shared `.so` (parked in `ci-matrix.deferred.json`)
+- Android shared run-on-emulator smoke (currently compile+link only — the `.so` may
+  need `libc++_shared.so` on-device; static x86_64 runs the full forward pass)
 
 ## Later
 - Backends: `libtorch/` (and researching `executorch/` — static + AOT `.pte` model question)

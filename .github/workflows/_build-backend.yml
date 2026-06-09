@@ -211,10 +211,12 @@ jobs:
             *) echo "::error::unknown android abi ${{ matrix.arch }}"; exit 1 ;;
           esac
           st="staging/${{ steps.name.outputs.archive }}"
+          if [ "${{ matrix.kind }}" = "static" ]; then lib="$st/lib/libtensorflowlite_c.a"
+          else lib="$st/lib/libtensorflowlite_c.so"; fi
           # -static-libstdc++ : link libc++ statically so the device doesn't need
           # libc++_shared.so (not present in /data/local/tmp).
           "$cxx" -std=c++17 -static-libstdc++ -I "$st/include" "${{ inputs.backend_dir }}/test/smoke.cpp" \
-            "$st/lib/libtensorflowlite_c.a" -llog -lm -o smoke_android
+            "$lib" -llog -lm -o smoke_android
           file smoke_android
           curl -fsSL "https://raw.githubusercontent.com/tensorflow/tensorflow/v${{ inputs.version }}/tensorflow/lite/testdata/add.bin" -o add.bin
           # KVM accelerates the x86_64 emulator
@@ -224,7 +226,7 @@ jobs:
       # Only x86_64 runs on an emulator (KVM-accelerated). arm64-v8a would be
       # software-emulated on the x64 host (hangs), so it's compile+link-only above.
       - name: android smoke - run on emulator
-        if: ${{ matrix.toolchain == 'android' && matrix.arch == 'x86_64' }}
+        if: ${{ matrix.toolchain == 'android' && matrix.arch == 'x86_64' && matrix.kind == 'static' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -329,10 +331,14 @@ jobs:
   # The per-ABI build jobs are intermediate; only this combined archive ships.
   # --------------------------------------------------------------------------
   android-bundle:
-    name: Android-bundle
+    name: Android-${{ matrix.kind }}
     needs: build
     if: ${{ contains(inputs.matrix, 'android') }}
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [static, shared]
     steps:
       - uses: actions/checkout@v6
 
@@ -341,10 +347,14 @@ jobs:
         shell: bash
         run: |
           base="${{ inputs.libname }}-${{ inputs.version }}"
+          # static archives carry the -static suffix and a .a; shared are bare with a .so.
+          if [ "${{ matrix.kind }}" = "static" ]; then sfx="-static"; lib="libtensorflowlite_c.a"
+          else sfx=""; lib="libtensorflowlite_c.so"; fi
           {
-            echo "arm=${base}-Android-arm64-v8a-static"
-            echo "x64=${base}-Android-x86_64-static"
-            echo "bundle=${base}-Android-static"
+            echo "arm=${base}-Android-arm64-v8a${sfx}"
+            echo "x64=${base}-Android-x86_64${sfx}"
+            echo "bundle=${base}-Android${sfx}"
+            echo "lib=$lib"
           } >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v8
@@ -362,8 +372,8 @@ jobs:
           stage="staging/${{ steps.n.outputs.bundle }}"
           mkdir -p "$stage/lib/arm64-v8a" "$stage/lib/x86_64"
           cp -R ex/arm/include "$stage/include"   # headers are ABI-independent
-          cp ex/arm/lib/libtensorflowlite_c.a "$stage/lib/arm64-v8a/"
-          cp ex/x64/lib/libtensorflowlite_c.a "$stage/lib/x86_64/"
+          cp "ex/arm/lib/${{ steps.n.outputs.lib }}" "$stage/lib/arm64-v8a/"
+          cp "ex/x64/lib/${{ steps.n.outputs.lib }}" "$stage/lib/x86_64/"
           bash shared/package.sh "$stage" "${{ steps.n.outputs.bundle }}" dist
 
       - uses: actions/upload-artifact@v7
