@@ -397,7 +397,14 @@ jobs:
           cp -R ex/arm/include "$stage/include"
           lipo -create ex/x64/lib/libonnxruntime.dylib ex/arm/lib/libonnxruntime.dylib -output "$stage/lib/libonnxruntime.dylib"
           lipo -info "$stage/lib/libonnxruntime.dylib"
-          bash shared/package.sh "$stage" "${{ steps.n.outputs.uni }}" dist
+      - name: smoke (forward pass, arm64 slice)
+        shell: bash
+        run: |
+          bash engines/onnxruntime/smoke-onnx.sh "staging/${{ steps.n.outputs.uni }}" \
+            engines/onnxruntime/test/smoke.cpp arm64 Release 1 shared
+      - name: package
+        shell: bash
+        run: bash shared/package.sh "staging/${{ steps.n.outputs.uni }}" "${{ steps.n.outputs.uni }}" dist
       - uses: actions/upload-artifact@v7
         with: { name: "${{ steps.n.outputs.uni }}", path: "dist/${{ steps.n.outputs.uni }}.zip", retention-days: 14 }
       - name: publish to release
@@ -412,17 +419,23 @@ jobs:
   shared-repackage:
     needs: setup
     name: shared-${{ matrix.os }}-${{ matrix.arch }}
-    runs-on: ubuntu-24.04
+    # Native runner per target so we can SMOKE the repackaged lib (validates our
+    # repackaging — right files, symlinks, headers — not just Microsoft's prebuilt).
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: Linux,   arch: x86_64,  flavor: linux,   asset: onnxruntime-linux-x64,     ext: tgz }
-          - { os: Linux,   arch: aarch64, flavor: linux,   asset: onnxruntime-linux-aarch64, ext: tgz }
-          - { os: Windows, arch: x86_64,  flavor: windows, asset: onnxruntime-win-x64,       ext: zip }
-          - { os: Windows, arch: arm64,   flavor: windows, asset: onnxruntime-win-arm64,     ext: zip }
+          - { os: Linux,   arch: x86_64,  flavor: linux,   asset: onnxruntime-linux-x64,     ext: tgz, runner: ubuntu-24.04 }
+          - { os: Linux,   arch: aarch64, flavor: linux,   asset: onnxruntime-linux-aarch64, ext: tgz, runner: ubuntu-24.04-arm }
+          - { os: Windows, arch: x86_64,  flavor: windows, asset: onnxruntime-win-x64,       ext: zip, runner: windows-2025,   msvc_arch: x64 }
+          - { os: Windows, arch: arm64,   flavor: windows, asset: onnxruntime-win-arm64,     ext: zip, runner: windows-11-arm, msvc_arch: arm64 }
     steps:
       - uses: actions/checkout@v6
+      - name: setup MSVC env (Windows)
+        if: ${{ matrix.os == 'Windows' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with: { arch: "${{ matrix.msvc_arch }}" }
       - name: repackage upstream prebuilt
         id: name
         shell: bash
@@ -433,6 +446,11 @@ jobs:
           url="https://github.com/microsoft/onnxruntime/releases/download/v$ver/${{ matrix.asset }}-$ver.${{ matrix.ext }}"
           bash engines/onnxruntime/repackage-shared.sh ${{ matrix.flavor }} "$url" "staging/$name"
           echo "archive=$name" >> "$GITHUB_OUTPUT"
+      - name: smoke (forward pass)
+        shell: bash
+        run: |
+          bash engines/onnxruntime/smoke-onnx.sh "staging/${{ steps.name.outputs.archive }}" \
+            engines/onnxruntime/test/smoke.cpp ${{ matrix.arch }} Release 1 shared
       - name: package
         shell: bash
         run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist

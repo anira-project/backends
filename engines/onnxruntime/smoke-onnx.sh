@@ -38,14 +38,19 @@ case "$OS" in
     ;;
   MINGW*|MSYS*|CYGWIN*)
     command -v cl >/dev/null || { echo "ERROR: cl.exe not on PATH (MSVC env)"; exit 1; }
-    # CRT must match the lib (/MD|/MDd, cl's CLI default is /MT). advapi32: cpuinfo's
-    # RegGetValueW; ucrt[d]: the matching CRT. (NB: do not touch the LIB env var — see top.)
-    if [ "$CONFIG" = "Debug" ]; then CRT="/MDd"; EXTRA="ucrtd.lib advapi32.lib"
+    # CRT must match the lib (/MD|/MDd, cl's CLI default is /MT). (NB: don't touch the
+    # LIB env var — see top.) shared: link the import lib (onnxruntime.lib), the prebuilt
+    # DLL is release /MD and self-contained. static: link the bundled lib + advapi32
+    # (cpuinfo's RegGetValueW) + the matching ucrt[d].
+    if [ "$KIND" = "shared" ]; then CRT="/MD"; EXTRA=""
+    elif [ "$CONFIG" = "Debug" ]; then CRT="/MDd"; EXTRA="ucrtd.lib advapi32.lib"
     else CRT="/MD"; EXTRA="ucrt.lib advapi32.lib"; fi
     MSYS_NO_PATHCONV=1 cl /nologo /std:c++17 /EHsc "$CRT" /I"$(cygpath -w "$INC")" "$(cygpath -w "$SRC")" \
       /Fe:smoke.exe /link /LIBPATH:"$(cygpath -w "$LIBDIR")" onnxruntime.lib $EXTRA
     if [ "$RUN" = "1" ]; then
-      if [ "$CONFIG" = "Debug" ]; then
+      if [ "$KIND" = "shared" ]; then
+        cp "$LIBDIR"/onnxruntime.dll .   # Windows loads a DLL from the exe's own dir first
+      elif [ "$CONFIG" = "Debug" ]; then
         # /MDd needs the non-redistributable debug CRT DLLs (ucrtbased/vcruntime140d/
         # msvcp140d), which aren't on PATH. Copy them next to smoke.exe from the VC
         # redist + Windows SDK (paths come from the MSVC env). Else smoke.exe won't start.

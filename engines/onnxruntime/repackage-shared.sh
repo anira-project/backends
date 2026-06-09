@@ -30,7 +30,9 @@ case "$FLAVOR" in
     cp -P "$d"/lib/libonnxruntime.so* "$ST/lib/"
     ;;
   windows)
-    unzip -q "$dl" -d "$tmp"
+    # cmake's tar (libarchive) handles .zip and is on every runner — git-bash on the
+    # Windows runner has no `unzip`.
+    ( cd "$tmp" && cmake -E tar xf "$dl" )
     d="$(find "$tmp" -maxdepth 1 -type d -name 'onnxruntime-win-*' | head -1)"
     cp -R "$d/include/." "$ST/include/"
     # DLL + import lib only — drop the ~400 MB .pdb and the provider-bridge shim.
