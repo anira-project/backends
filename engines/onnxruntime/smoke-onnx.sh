@@ -27,14 +27,14 @@ case "$OS" in
     else LINK=("$LIBDIR/libonnxruntime.a"); RUNENV=(); fi
     # onnxruntime's platform code pulls in CoreFoundation/Foundation (timezone, logging).
     "$CXX" "${F[@]}" "$SRC" "${LINK[@]}" -framework Foundation -framework CoreFoundation -o "$BIN"
-    run_or_note "${RUNENV[@]}" "$BIN" "$MODEL"
+    run_or_note ${RUNENV[@]+"${RUNENV[@]}"} "$BIN" "$MODEL"
     ;;
   Linux)
     BIN="$(mktemp -d)/smoke"; CXX="${CXX:-c++}"
     if [ "$KIND" = "shared" ]; then LINK=(-L"$LIBDIR" -lonnxruntime); RUNENV=(env "LD_LIBRARY_PATH=$LIBDIR")
     else LINK=("$LIBDIR/libonnxruntime.a" -lpthread -ldl -lm -lrt); RUNENV=(); fi
     "$CXX" -std=c++17 -I "$INC" "$SRC" "${LINK[@]}" -o "$BIN"
-    run_or_note "${RUNENV[@]}" "$BIN" "$MODEL"
+    run_or_note ${RUNENV[@]+"${RUNENV[@]}"} "$BIN" "$MODEL"
     ;;
   MINGW*|MSYS*|CYGWIN*)
     command -v cl >/dev/null || { echo "ERROR: cl.exe not on PATH (MSVC env)"; exit 1; }
