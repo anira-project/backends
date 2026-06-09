@@ -6,13 +6,16 @@
 # --include_ops_by_config / --enable_reduced_operator_type_support / --disable_ml_ops),
 # so every operator ships and any model works.
 #
-# Usage: build-ort.sh <platform> <arch> <config> <build-dir>
+# Usage: build-ort.sh <platform> <arch> <config> <build-dir> [kind]
 #   <platform>  macos | linux | windows | android | ios | ios-sim
 #   <arch>      x86_64 | arm64 | aarch64 | arm64-v8a (android ABI)
 #   <config>    Release | Debug      (Windows ships both; others Release)
+#   <kind>      static (default) | shared. shared builds libonnxruntime.dylib/.so directly
+#               (one self-contained lib — no re2 force-build, no bundling). We only build
+#               SHARED for macOS; Linux/Windows/Android shared come from upstream prebuilts.
 set -euo pipefail
 
-PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:-Release}"; OUT="${4:-build}"
+PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:-Release}"; OUT="${4:-build}"; KIND="${5:-static}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 
@@ -46,6 +49,9 @@ ARGS=(
   # forced-LTO block it deletes was removed upstream). Explicit here, not build.py's default.
   --cmake_extra_defines onnxruntime_BUILD_UNIT_TESTS=OFF CMAKE_DISABLE_FIND_PACKAGE_re2=ON onnxruntime_ENABLE_MEMLEAK_CHECKER=OFF onnxruntime_ENABLE_LTO=OFF
 )
+
+# Shared build → one self-contained libonnxruntime.dylib/.so (re2 etc. linked in).
+[ "$KIND" = "shared" ] && ARGS+=(--build_shared_lib)
 
 case "$PLATFORM" in
   macos)
@@ -82,8 +88,13 @@ echo "+ build.py ${ARGS[*]}"
 # re2 is declared EXCLUDE_FROM_ALL and only *include*-attached to onnxruntime
 # (cmake/onnxruntime_providers_cpu.cmake: onnxruntime_add_include_to_target ... re2::re2)
 # on every non-WinML target — so the normal build NEVER compiles it. onnxruntime's
-# shared lib tolerates the resulting undefined re2 symbols, but our STATIC bundle
-# needs the objects, so force-build the target to emit libre2.a for bundling.
+# shared lib links it into the final .dylib/.so itself (the shared link pulls it in,
+# and macOS errors on undefined symbols), so this is ONLY needed for the STATIC bundle,
+# which collects component .a and would otherwise miss libre2.a.
+if [ "$KIND" = "shared" ]; then
+  echo "onnxruntime $VER ($PLATFORM/$ARCH/$CONFIG, shared) built -> $OUT/$CONFIG"
+  exit 0
+fi
 echo "+ force-build re2 (static bundle needs libre2.a / re2.lib)"
 if [ "$PLATFORM" = "windows" ]; then
   # VS generator: `cmake --build --target re2` invokes `msbuild re2.vcxproj` as a
