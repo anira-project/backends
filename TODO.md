@@ -75,17 +75,22 @@ Consumed via `find_package(Torch)`, so archives preserve `include/ lib/ share/ [
   - Windows arm64 — 2.12.0 release not published (only a `-debug` build; release tops at 2.11.0).
 - **Universal (macOS)**: `macos-universal` job lipos the two per-arch from-source archives.
 
-### CI status (run 2, commit 89fd4eb)
-Green: Linux x86_64, Windows x86_64 (prebuilt); macOS x86_64 (2h6m cold), Linux aarch64 — all
-incl. find_package(Torch) smoke. Failing: Windows arm64 (now past pip via requirements-build.txt;
-clang-cl compile untested). macOS arm64 from-source + universal added next round.
+### CI status (run 4, commit 4f985e5)
+Green (incl. find_package(Torch) smoke): macOS arm64 (1h3m cold), macOS x86_64 (8m35s cached),
+Linux aarch64 (2m11s cached), Linux x86_64 + Windows x86_64 (prebuilt). Failing: Windows arm64.
+`macOS-universal-shared` was SKIPPED — it `needs: build`, and a win-arm64 failure marks the whole
+build matrix failed. Fixed: `if: !cancelled()` so universal runs off the macOS slices regardless
+of unrelated legs (still unvalidated until next run).
 
 ### Still open (LibTorch)
 - **From-source recipes need CI iteration** (first-pass `build-libtorch.sh`):
   - Windows arm64 builds with **clang-cl** (`CC/CXX=clang-cl`, MSVC env for headers/libs/
     linker) — matching PyTorch's official win-arm64; MSVC `cl` trips on ARM64 NEON intrinsics.
-    Open: confirm the LLVM install on `windows-11-arm` (choco llvm may be x64-emulated) and
-    that clang-cl picks the arm64 target; clang-cl output stays MSVC-ABI → anira consumes as-is.
+    Gotcha (run 4): the clang-cl on PATH is VS's **x64-host** build, which defaults to an
+    **x64 target** → links arm64 `msvcrtd.lib` and dies "machine type arm64 conflicts with
+    x64". Fix: force `--target=arm64-pc-windows-msvc` via `CFLAGS`/`CXXFLAGS` (clang-cl is a
+    cross-compiler; arm64 SDK/runtime from the MSVC env). Still untested past the compiler
+    check — next failure is likely the actual ATen/sleef arm64 compile. Output stays MSVC-ABI.
   - macOS x86_64: x86_64-mac is PyTorch-deprecated but buildable from source (forum-confirmed at
     2.6; conda-forge still ships it). Runs on `macos-15-intel` — the LAST Intel image, retiring
     ~Fall 2027; after that, cross-compile on Apple-silicon `macos-15` (must solve the codegen

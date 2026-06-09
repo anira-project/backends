@@ -89,13 +89,19 @@ case "$PLATFORM" in
     # arm64), and MSVC cl trips on PyTorch's ARM64 NEON intrinsics (sleef / ATen vec).
     # clang-cl targets the MSVC ABI, so the resulting torch.dll + import lib stay
     # drop-in for an MSVC-built anira consumer. The MSVC dev env (loaded by the
-    # workflow) still supplies headers/libs/linker; CC/CXX only swap the compiler
-    # front-end, and clang-cl defaults to the host (arm64) target.
+    # workflow) still supplies headers/libs/linker; CC/CXX only swap the compiler.
     export USE_MKL=0 USE_MKLDNN=0 USE_FBGEMM=0 USE_QNNPACK=0 USE_PYTORCH_QNNPACK=0
     export USE_DISTRIBUTED=0
     export CMAKE_GENERATOR=Ninja
     export CC=clang-cl CXX=clang-cl
     command -v clang-cl >/dev/null || { echo "ERROR: clang-cl not on PATH (install LLVM)"; exit 1; }
+    # The clang-cl on PATH is VS's x64-host build, which defaults to an x64 TARGET —
+    # it then links the arm64 MSVC runtime and fails: "msvcrtd.lib(...): machine type
+    # arm64 conflicts with x64". clang-cl is a cross-compiler, so force the arm64
+    # triple; the arm64 Windows SDK/runtime from the MSVC env supplies the libs. CMake
+    # seeds CMAKE_{C,CXX}_FLAGS from these, so the compiler check + whole build inherit it.
+    export CFLAGS="--target=arm64-pc-windows-msvc${CFLAGS:+ $CFLAGS}"
+    export CXXFLAGS="--target=arm64-pc-windows-msvc${CXXFLAGS:+ $CXXFLAGS}"
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac

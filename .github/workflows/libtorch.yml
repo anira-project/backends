@@ -179,6 +179,10 @@ jobs:
   # --------------------------------------------------------------------------
   macos-universal:
     needs: [setup, build]
+    # Run once the build matrix finishes, even if an unrelated leg (e.g. Windows arm64)
+    # failed — this job only needs the two macOS slices. Skipped only on cancellation or
+    # if setup failed; if a macOS slice is missing, the download step fails it (accurate).
+    if: ${{ !cancelled() && needs.setup.result == 'success' }}
     name: macOS-universal-shared
     runs-on: macos-15
     steps:
