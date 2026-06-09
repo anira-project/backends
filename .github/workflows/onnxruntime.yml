@@ -304,3 +304,171 @@ jobs:
           tag="${{ needs.setup.outputs.release_tag }}"; a="onnxruntime-${{ needs.setup.outputs.version }}-iOS-xcframework"
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
           gh release upload "$tag" "dist/$a.zip" --clobber
+
+  # ==========================================================================
+  # SHARED libs (same release as static). macOS is BUILT from source (no upstream
+  # x86_64 prebuilt; the universal needs matched slices). Linux/Windows/Android are
+  # REPACKAGED from Microsoft's prebuilts — download + restage, no build.
+  # ==========================================================================
+  shared-macos:
+    needs: setup
+    name: shared-macOS-${{ matrix.arch }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, arm64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: python build deps
+        shell: bash
+        run: python -m pip install --upgrade pip setuptools wheel packaging numpy
+      - name: cache onnxruntime source
+        uses: actions/cache@v4
+        with:
+          path: engines/onnxruntime/onnxruntime-src
+          key: ort-src-${{ needs.setup.outputs.version }}
+      - name: build shared
+        working-directory: engines/onnxruntime
+        shell: bash
+        run: bash build-ort.sh macos ${{ matrix.arch }} Release build shared
+      - name: install
+        id: name
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="onnxruntime-${{ needs.setup.outputs.version }}-macOS-${{ matrix.arch }}-shared"
+          st="staging/$name"; mkdir -p "$st/include" "$st/lib"
+          cp engines/onnxruntime/include/*.h "$st/include/"
+          dy="$(find engines/onnxruntime/build/Release -maxdepth 1 -type f -name 'libonnxruntime*.dylib' | head -1)"
+          [ -n "$dy" ] || { echo "ERROR: no shared dylib built"; exit 1; }
+          cp "$dy" "$st/lib/libonnxruntime.dylib"
+          install_name_tool -id @rpath/libonnxruntime.dylib "$st/lib/libonnxruntime.dylib"
+          echo "archive=$name" >> "$GITHUB_OUTPUT"
+      - name: smoke (forward pass)
+        shell: bash
+        run: |
+          bash engines/onnxruntime/smoke-onnx.sh "staging/${{ steps.name.outputs.archive }}" \
+            engines/onnxruntime/test/smoke.cpp ${{ matrix.arch }} Release 1 shared
+      - name: package
+        shell: bash
+        run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist
+      - uses: actions/upload-artifact@v7
+        with: { name: "${{ steps.name.outputs.archive }}", path: "dist/${{ steps.name.outputs.archive }}.zip", retention-days: 14 }
+      - name: publish to release
+        if: ${{ needs.setup.outputs.release == 'true' }}
+        shell: bash
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          tag="${{ needs.setup.outputs.release_tag }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
+          gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
+
+  shared-macos-universal:
+    needs: [setup, shared-macos]
+    name: shared-macOS-universal
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: names
+        id: n
+        shell: bash
+        run: |
+          base="onnxruntime-${{ needs.setup.outputs.version }}"
+          { echo "x64=${base}-macOS-x86_64-shared"; echo "arm=${base}-macOS-arm64-shared"; echo "uni=${base}-macOS-universal-shared"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v8
+        with: { name: "${{ steps.n.outputs.x64 }}", path: dl/x64 }
+      - uses: actions/download-artifact@v8
+        with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
+      - name: lipo + repackage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ex/x64 ex/arm
+          unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
+          unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
+          stage="staging/${{ steps.n.outputs.uni }}"; mkdir -p "$stage/lib"
+          cp -R ex/arm/include "$stage/include"
+          lipo -create ex/x64/lib/libonnxruntime.dylib ex/arm/lib/libonnxruntime.dylib -output "$stage/lib/libonnxruntime.dylib"
+          lipo -info "$stage/lib/libonnxruntime.dylib"
+          bash shared/package.sh "$stage" "${{ steps.n.outputs.uni }}" dist
+      - uses: actions/upload-artifact@v7
+        with: { name: "${{ steps.n.outputs.uni }}", path: "dist/${{ steps.n.outputs.uni }}.zip", retention-days: 14 }
+      - name: publish to release
+        if: ${{ needs.setup.outputs.release == 'true' }}
+        shell: bash
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          tag="${{ needs.setup.outputs.release_tag }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
+          gh release upload "$tag" "dist/${{ steps.n.outputs.uni }}.zip" --clobber
+
+  shared-repackage:
+    needs: setup
+    name: shared-${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: Linux,   arch: x86_64,  flavor: linux,   asset: onnxruntime-linux-x64,     ext: tgz }
+          - { os: Linux,   arch: aarch64, flavor: linux,   asset: onnxruntime-linux-aarch64, ext: tgz }
+          - { os: Windows, arch: x86_64,  flavor: windows, asset: onnxruntime-win-x64,       ext: zip }
+          - { os: Windows, arch: arm64,   flavor: windows, asset: onnxruntime-win-arm64,     ext: zip }
+    steps:
+      - uses: actions/checkout@v6
+      - name: repackage upstream prebuilt
+        id: name
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver="${{ needs.setup.outputs.version }}"
+          name="onnxruntime-$ver-${{ matrix.os }}-${{ matrix.arch }}-shared"
+          url="https://github.com/microsoft/onnxruntime/releases/download/v$ver/${{ matrix.asset }}-$ver.${{ matrix.ext }}"
+          bash engines/onnxruntime/repackage-shared.sh ${{ matrix.flavor }} "$url" "staging/$name"
+          echo "archive=$name" >> "$GITHUB_OUTPUT"
+      - name: package
+        shell: bash
+        run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist
+      - uses: actions/upload-artifact@v7
+        with: { name: "${{ steps.name.outputs.archive }}", path: "dist/${{ steps.name.outputs.archive }}.zip", retention-days: 14 }
+      - name: publish to release
+        if: ${{ needs.setup.outputs.release == 'true' }}
+        shell: bash
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          tag="${{ needs.setup.outputs.release_tag }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
+          gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
+
+  shared-android:
+    needs: setup
+    name: shared-Android
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: repackage AAR (multi-ABI)
+        id: name
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver="${{ needs.setup.outputs.version }}"
+          name="onnxruntime-$ver-Android-shared"
+          url="https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/$ver/onnxruntime-android-$ver.aar"
+          bash engines/onnxruntime/repackage-shared.sh android-aar "$url" "staging/$name" "arm64-v8a x86_64"
+          echo "archive=$name" >> "$GITHUB_OUTPUT"
+      - name: package
+        shell: bash
+        run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist
+      - uses: actions/upload-artifact@v7
+        with: { name: "${{ steps.name.outputs.archive }}", path: "dist/${{ steps.name.outputs.archive }}.zip", retention-days: 14 }
+      - name: publish to release
+        if: ${{ needs.setup.outputs.release == 'true' }}
+        shell: bash
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          tag="${{ needs.setup.outputs.release_tag }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
+          gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
