@@ -123,9 +123,13 @@ jobs:
           mkdir -p "$st/include" "$st/lib"
           cp engines/onnxruntime/include/*.h "$st/include/"
           if [ "${{ runner.os }}" = "Windows" ]; then out="$st/lib/onnxruntime.lib"; else out="$st/lib/libonnxruntime.a"; fi
-          # onnxruntime builds some deps (re2) in-source, so only drop test fixtures —
-          # NOT the broad "-src/" exclude, which would lose re2's libre2.a.
-          BUNDLE_EXCLUDE_REGEX='/testdata/' bash shared/bundle-static.sh "engines/onnxruntime/build/${{ matrix.config }}" "$out"
+          # Exclude:
+          #  - /testdata/  (only; NOT the broad "-src/", which would lose re2's in-source libre2.a)
+          #  - full libprotobuf + libprotoc — the protobuf descriptor/reflection/compiler, used
+          #    only at build time (onnxruntime runs on protobuf-LITE). merge-all swept them in,
+          #    bloating the .lib; the keep-lite regex matches libprotobuf-lite. (smoke verifies.)
+          BUNDLE_EXCLUDE_REGEX='/testdata/|libprotoc|libprotobuf[d]?\.(lib|a)' \
+            bash shared/bundle-static.sh "engines/onnxruntime/build/${{ matrix.config }}" "$out"
 
       # Smoke: compile+link the example against the packaged lib (proves it's symbol-complete),
       # run on native desktop targets. Android cross-compiles -> compile+link only (no run).

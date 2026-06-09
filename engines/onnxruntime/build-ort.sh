@@ -66,7 +66,13 @@ case "$PLATFORM" in
            "CMAKE_IGNORE_PATH=$IGNORE" "CMAKE_IGNORE_PREFIX_PATH=$IGNORE")
     ;;
   linux) ;;     # native arch
-  windows) ;;   # arch from the MSVC env / host
+  windows)
+    # build.py forces CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase (/Zi)
+    # GLOBALLY — even for Release, which embeds CodeView in every .obj and bloats the
+    # shipped static .lib ~5x (854 MB!). The Release lib we ship needs no debug info,
+    # so override to none. (Debug keeps it — that's the point of the -debug variant.)
+    [ "$CONFIG" = "Release" ] && ARGS+=(--cmake_extra_defines "CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=")
+    ;;
   android)
     # https://onnxruntime.ai/docs/build/android.html — arch is the ABI (arm64-v8a / x86_64)
     : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME not set}"
