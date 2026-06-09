@@ -211,7 +211,7 @@ jobs:
   # --------------------------------------------------------------------------
   android-bundle:
     needs: [setup, build]
-    name: Android-bundle
+    name: Android-static
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -259,7 +259,7 @@ jobs:
   # --------------------------------------------------------------------------
   ios-xcframework:
     needs: setup
-    name: iOS-xcframework
+    name: iOS-static
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
@@ -316,7 +316,7 @@ jobs:
   # ==========================================================================
   shared-macos:
     needs: setup
-    name: shared-macOS-${{ matrix.arch }}
+    name: macOS-${{ matrix.arch }}-shared
     runs-on: macos-15
     strategy:
       fail-fast: false
@@ -372,7 +372,7 @@ jobs:
 
   shared-macos-universal:
     needs: [setup, shared-macos]
-    name: shared-macOS-universal
+    name: macOS-universal-shared
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
@@ -418,7 +418,7 @@ jobs:
 
   shared-repackage:
     needs: setup
-    name: shared-${{ matrix.os }}-${{ matrix.arch }}
+    name: ${{ matrix.os }}-${{ matrix.arch }}-shared
     # Native runner per target so we can SMOKE the repackaged lib (validates our
     # repackaging — right files, symlinks, headers — not just Microsoft's prebuilt).
     runs-on: ${{ matrix.runner }}
@@ -467,7 +467,7 @@ jobs:
 
   shared-android:
     needs: setup
-    name: shared-Android
+    name: Android-shared
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
