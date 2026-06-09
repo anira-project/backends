@@ -37,7 +37,11 @@ if [ ! -d "$SRC/.git" ]; then
 fi
 
 python -m pip install --upgrade pip
-python -m pip install -r "$SRC/requirements.txt"
+# Install PyTorch's BUILD requirements only (requirements-build.txt) — NOT the full
+# requirements.txt, which drags in dev tools like lintrunner (a Rust/maturin package
+# with no win-arm64 wheel; building it from source fails to link via cargo/link.exe).
+# None of that is needed to build libtorch.
+[ -f "$SRC/requirements-build.txt" ] && python -m pip install -r "$SRC/requirements-build.txt"
 python -m pip install pyyaml typing_extensions setuptools numpy
 
 # --- CPU-only base config (shared lib, no python, no tests/CUDA/distributed) ----

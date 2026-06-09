@@ -111,11 +111,16 @@ jobs:
           key: pytorch-src-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}
 
       # ---- compose the archive name --------------------------------------------
+      # slice_only rows are intermediate inputs to the macOS universal lipo job, not
+      # published archives — name them distinctly so they don't collide with the
+      # per-arch arm64 archive (which is the official prebuilt).
       - name: compose archive name
         id: name
         shell: bash
         run: |
-          echo "archive=libtorch-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
+          name="libtorch-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
+          [ "${{ matrix.slice_only }}" = "1" ] && name="${name}-universal-slice"
+          echo "archive=$name" >> "$GITHUB_OUTPUT"
 
       # ---- stage: repackage upstream prebuilt, OR build from source ------------
       - name: repackage upstream prebuilt
@@ -163,10 +168,95 @@ jobs:
           retention-days: 14
 
       - name: publish to release
-        if: ${{ needs.setup.outputs.release == 'true' }}
+        if: ${{ needs.setup.outputs.release == 'true' && matrix.slice_only != '1' }}
         shell: bash
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           tag="${{ needs.setup.outputs.release_tag }}"
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
           gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
+
+  # --------------------------------------------------------------------------
+  # macOS universal: lipo the from-source x86_64 + arm64 slices into one fat tree.
+  # BOTH slices are from-source (build-libtorch.sh, identical config) so their dylib
+  # sets/install-names match — the prerequisite for a clean lipo (mixing the official
+  # prebuilt arm64 with our from-source x86_64 would risk mismatched dylib sets).
+  # The per-arch arm64 archive stays the official prebuilt; this consumes a separate
+  # from-source arm64 "universal slice".
+  # --------------------------------------------------------------------------
+  macos-universal:
+    needs: [setup, build]
+    name: macOS-universal-shared
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: names
+        id: n
+        shell: bash
+        run: |
+          base="libtorch-${{ needs.setup.outputs.version }}"
+          {
+            echo "x64=${base}-macOS-x86_64"
+            echo "arm=${base}-macOS-arm64-universal-slice"
+            echo "uni=${base}-macOS-universal"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v8
+        with: { name: "${{ steps.n.outputs.x64 }}", path: dl/x64 }
+      - uses: actions/download-artifact@v8
+        with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
+
+      - name: lipo + assemble universal tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ex/x64 ex/arm
+          unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
+          unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
+          stage="staging/${{ steps.n.outputs.uni }}"
+          mkdir -p "$stage/lib"
+          # include/ + the Torch CMake package are arch-independent — take one copy.
+          cp -R ex/arm/include "$stage/include"
+          cp -R ex/arm/share   "$stage/share"
+          [ -d ex/arm/bin ] && cp -R ex/arm/bin "$stage/bin"
+          # lipo every Mach-O dylib present in BOTH slices; copy-through anything else
+          # (symlinks, non-fat-able files). Both slices share a build config, so the
+          # filenames line up one-to-one.
+          for f in ex/arm/lib/*; do
+            base="$(basename "$f")"
+            if [ -f "ex/x64/lib/$base" ] && file -b "$f" | grep -q 'Mach-O'; then
+              lipo -create "ex/arm/lib/$base" "ex/x64/lib/$base" -output "$stage/lib/$base" \
+                || cp -R "$f" "$stage/lib/$base"
+            else
+              cp -R "$f" "$stage/lib/$base"
+            fi
+          done
+          echo "universal libtorch_cpu slices:"; lipo -info "$stage/lib/libtorch_cpu.dylib" || true
+
+      - name: smoke (find_package(Torch), arm64 slice)
+        shell: bash
+        run: bash engines/libtorch/smoke-torch.sh "staging/${{ steps.n.outputs.uni }}" engines/libtorch/test 1
+
+      - name: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          st="staging/${{ steps.n.outputs.uni }}"
+          dirs="include lib"
+          [ -d "$st/share" ] && dirs="$dirs share"
+          [ -d "$st/bin" ]   && dirs="$dirs bin"
+          PACKAGE_DIRS="$dirs" bash shared/package.sh "$st" "${{ steps.n.outputs.uni }}" dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.n.outputs.uni }}
+          path: dist/${{ steps.n.outputs.uni }}.zip
+          retention-days: 14
+
+      - name: publish to release
+        if: ${{ needs.setup.outputs.release == 'true' }}
+        shell: bash
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          tag="${{ needs.setup.outputs.release_tag }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
+          gh release upload "$tag" "dist/${{ steps.n.outputs.uni }}.zip" --clobber
