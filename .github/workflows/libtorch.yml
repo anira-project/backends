@@ -111,16 +111,11 @@ jobs:
           key: pytorch-src-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}
 
       # ---- compose the archive name --------------------------------------------
-      # slice_only rows are intermediate inputs to the macOS universal lipo job, not
-      # published archives — name them distinctly so they don't collide with the
-      # per-arch arm64 archive (which is the official prebuilt).
       - name: compose archive name
         id: name
         shell: bash
         run: |
-          name="libtorch-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
-          [ "${{ matrix.slice_only }}" = "1" ] && name="${name}-universal-slice"
-          echo "archive=$name" >> "$GITHUB_OUTPUT"
+          echo "archive=libtorch-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
 
       # ---- stage: repackage upstream prebuilt, OR build from source ------------
       - name: repackage upstream prebuilt
@@ -168,7 +163,7 @@ jobs:
           retention-days: 14
 
       - name: publish to release
-        if: ${{ needs.setup.outputs.release == 'true' && matrix.slice_only != '1' }}
+        if: ${{ needs.setup.outputs.release == 'true' }}
         shell: bash
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
@@ -177,12 +172,10 @@ jobs:
           gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
 
   # --------------------------------------------------------------------------
-  # macOS universal: lipo the from-source x86_64 + arm64 slices into one fat tree.
-  # BOTH slices are from-source (build-libtorch.sh, identical config) so their dylib
-  # sets/install-names match — the prerequisite for a clean lipo (mixing the official
-  # prebuilt arm64 with our from-source x86_64 would risk mismatched dylib sets).
-  # The per-arch arm64 archive stays the official prebuilt; this consumes a separate
-  # from-source arm64 "universal slice".
+  # macOS universal: lipo the two per-arch from-source archives into one fat tree.
+  # Both are from-source (build-libtorch.sh, identical config) so their dylib sets /
+  # install-names match — the prerequisite for a clean lipo. Mirrors LiteRT/ONNXRuntime,
+  # which build both macOS arches and lipo the per-arch archives directly.
   # --------------------------------------------------------------------------
   macos-universal:
     needs: [setup, build]
@@ -197,7 +190,7 @@ jobs:
           base="libtorch-${{ needs.setup.outputs.version }}"
           {
             echo "x64=${base}-macOS-x86_64"
-            echo "arm=${base}-macOS-arm64-universal-slice"
+            echo "arm=${base}-macOS-arm64"
             echo "uni=${base}-macOS-universal"
           } >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8

@@ -66,11 +66,19 @@ Consumed via `find_package(Torch)`, so archives preserve `include/ lib/ share/ [
 (`shared/package.sh` gained a backward-compatible `PACKAGE_DIRS` env for this).
 
 ### Source per target (what's missing at 2.12.0)
-- **Prebuilt (download + restage)**: macOS arm64, Linux x86_64, Windows x86_64.
-- **Build from source (no 2.12.0 CPU prebuilt)**:
+- **Prebuilt (download + restage)**: Linux x86_64, Windows x86_64.
+- **Build from source**:
   - macOS x86_64 — PyTorch dropped Intel-mac libtorch after 2.2.2 (build on `macos-15-intel`).
+  - macOS arm64 — a prebuilt exists, but we build it from source anyway so the universal lipo
+    has matched slices (mirrors LiteRT/ONNXRuntime; official prebuilt arm64 not used).
   - Linux aarch64 — none in the `download.pytorch.org/cpu/` index (build on `ubuntu-24.04-arm`, OpenBLAS).
   - Windows arm64 — 2.12.0 release not published (only a `-debug` build; release tops at 2.11.0).
+- **Universal (macOS)**: `macos-universal` job lipos the two per-arch from-source archives.
+
+### CI status (run 2, commit 89fd4eb)
+Green: Linux x86_64, Windows x86_64 (prebuilt); macOS x86_64 (2h6m cold), Linux aarch64 — all
+incl. find_package(Torch) smoke. Failing: Windows arm64 (now past pip via requirements-build.txt;
+clang-cl compile untested). macOS arm64 from-source + universal added next round.
 
 ### Still open (LibTorch)
 - **From-source recipes need CI iteration** (first-pass `build-libtorch.sh`):
@@ -93,10 +101,10 @@ Consumed via `find_package(Torch)`, so archives preserve `include/ lib/ share/ [
   Linux-x86_64 only) → would be from-source on every platform, and static libtorch needs
   whole-archive/-force_load for op registration and is poorly maintained upstream. Shared only.
   See `engines/libtorch/README.md` "Static builds — not supported".
-- macOS universal: wired — lipo of two from-source slices (x86_64 + a from-source arm64
-  "universal slice"); per-arch arm64 stays the official prebuilt. Matched slices required
-  for a clean lipo (mirrors ONNXRuntime's "universal needs matched slices"). anira keys
-  libtorch per-arch today, so universal is for shipping universal plugin binaries.
+- macOS universal: wired — lipo of the two per-arch from-source archives (both macOS arches
+  build from source so the dylib sets match; mirrors LiteRT/ONNXRuntime "universal needs
+  matched slices"). anira keys libtorch per-arch today, so universal is for shipping
+  universal plugin binaries.
 - Later: iOS/Android; static (decided out — see above).
 
 ## Later

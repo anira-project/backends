@@ -1,7 +1,6 @@
 [
-  { "label": "macOS-arm64",    "name": "macOS-arm64",    "runner": "macos-15",         "os": "macOS",   "arch": "arm64",   "kind": "shared", "source": "prebuilt", "asset": "libtorch-macos-arm64",            "can_run": "1" },
+  { "label": "macOS-arm64",    "name": "macOS-arm64",    "runner": "macos-15",         "os": "macOS",   "arch": "arm64",   "kind": "shared", "source": "build",                                                "can_run": "1" },
   { "label": "macOS-x86_64",   "name": "macOS-x86_64",   "runner": "macos-15-intel",   "os": "macOS",   "arch": "x86_64",  "kind": "shared", "source": "build",                                                "can_run": "1" },
-  { "label": "macOS-arm64-uslice", "name": "macOS-arm64 (universal slice)", "runner": "macos-15", "os": "macOS", "arch": "arm64", "kind": "shared", "source": "build", "slice_only": "1", "can_run": "1" },
 
   { "label": "Linux-x86_64",   "name": "Linux-x86_64",   "runner": "ubuntu-24.04",     "os": "Linux",   "arch": "x86_64",  "kind": "shared", "source": "prebuilt", "asset": "libtorch-shared-with-deps",       "cpu_suffix": "%2Bcpu", "can_run": "1" },
   { "label": "Linux-aarch64",  "name": "Linux-aarch64",  "runner": "ubuntu-24.04-arm", "os": "Linux",   "arch": "aarch64", "kind": "shared", "source": "build",                                                "can_run": "1" },

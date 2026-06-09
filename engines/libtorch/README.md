@@ -10,20 +10,21 @@ CPU-only **shared** libtorch at the version in [`VERSION`](./VERSION), packaged 
 
 | Platform   | Arch    | Source        | Upstream archive / how                                   |
 | ---------- | ------- | ------------- | -------------------------------------------------------- |
-| 🍎 macOS   | arm64   | **prebuilt**  | `libtorch-macos-arm64-<v>.zip`                           |
+| 🍎 macOS   | arm64   | **build**     | from source — matches x86_64 so the universal lipo has matched slices |
 | 🍎 macOS   | x86_64  | **build**     | no prebuilt since 2.2.2 (Intel-mac dropped) → from source |
 | 🐧 Linux   | x86_64  | **prebuilt**  | `libtorch-shared-with-deps-<v>+cpu.zip`                  |
 | 🐧 Linux   | aarch64 | **build**     | no aarch64 in the `cpu/` index → from source             |
 | 🪟 Windows | x86_64  | **prebuilt**  | `libtorch-win-shared-with-deps-<v>+cpu.zip`              |
 | 🪟 Windows | arm64   | **build**     | 2.12.0 release not published (debug-only) → from source  |
-| 🍎 macOS   | universal | **build (lipo)** | from-source x86_64 + a from-source arm64 "universal slice", lipo'd |
+| 🍎 macOS   | universal | **build (lipo)** | lipo of the two per-arch from-source archives          |
 
-The macOS **universal** archive is `lipo`'d from two *from-source* slices (identical
-build config → matched dylib sets — the prerequisite for a clean lipo). The per-arch
-arm64 archive stays the official prebuilt; the universal consumes a separate
-from-source arm64 slice (`…-macOS-arm64-universal-slice`, an intermediate, not published).
+The macOS **universal** archive is `lipo`'d from the two per-arch *from-source* macOS
+archives (identical build config → matched dylib sets — the prerequisite for a clean
+lipo). Both macOS arches build from source for this reason, mirroring LiteRT/ONNXRuntime;
+the official prebuilt arm64 isn't used (lipo'ing it against our from-source x86_64 would
+risk mismatched dylib sets).
 
-> The three from-source targets are first-pass recipes (see `build-libtorch.sh`);
+> The from-source targets are first-pass recipes (see `build-libtorch.sh`);
 > like the ONNXRuntime/LiteRT builders they are expected to need a few CI rounds to
 > converge per platform. Key fixes get recorded in [`../../TODO.md`](../../TODO.md).
 
