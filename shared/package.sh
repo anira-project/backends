@@ -15,9 +15,14 @@ OUT="${3:-dist}"
 mkdir -p "$OUT"
 OUT_ABS="$(cd "$OUT" && pwd)/${NAME}.zip"
 
-[ -d "$STAGING/include" ] || { echo "ERROR: $STAGING/include missing"; exit 1; }
-[ -d "$STAGING/lib" ]     || { echo "ERROR: $STAGING/lib missing"; exit 1; }
+# Dirs to archive. Defaults to include + lib (LiteRT/ONNXRuntime layout). libtorch
+# overrides with PACKAGE_DIRS="include lib share [bin]" — it ships a full CMake
+# package tree consumed via find_package(Torch), so share/ must be preserved.
+DIRS="${PACKAGE_DIRS:-include lib}"
+for d in $DIRS; do
+  [ -d "$STAGING/$d" ] || { echo "ERROR: $STAGING/$d missing"; exit 1; }
+done
 
-( cd "$STAGING" && cmake -E tar cf "$OUT_ABS" --format=zip include lib )
+( cd "$STAGING" && cmake -E tar cf "$OUT_ABS" --format=zip $DIRS )
 echo "Packaged $OUT_ABS"
 cmake -E tar tf "$OUT_ABS" | sed 's/^/  /'

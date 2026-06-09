@@ -10,7 +10,7 @@ published as GitHub release archives that anira's CMake downloads at configure t
 | ----------- | ----------------- | --------------------------------------------------------------------------------------- | ------------------ |
 | LiteRT      | Active            | [google-ai-edge/LiteRT](https://github.com/google-ai-edge/LiteRT)   | `tensorflowlite_c` |
 | ONNXRuntime | Active            | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime)                       | `onnxruntime`      |
-| LibTorch    | Planned           | [pytorch/pytorch](https://github.com/pytorch/pytorch)                                    | `torch`            |
+| LibTorch    | In progress (shared) | [pytorch/pytorch](https://github.com/pytorch/pytorch)                                 | `torch`            |
 
 ## Releases & CI
 

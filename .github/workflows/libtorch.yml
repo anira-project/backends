@@ -1,0 +1,172 @@
+name: libtorch
+
+# CPU SHARED libtorch, keyed to engines/libtorch/VERSION. Per target we either
+# REPACKAGE an upstream download.pytorch.org prebuilt (macOS arm64, Linux x86_64,
+# Windows x86_64) or BUILD from source where PyTorch ships no 2.12.0 CPU prebuilt
+# (macOS x86_64, Linux aarch64, Windows arm64). Every target is smoke-gated via
+# find_package(Torch) — the same path anira consumes. Mirrors onnxruntime.yml.
+#
+# Triggers (release model: ../../docs/RELEASE.md):
+#   - push/PR touching engines/libtorch/ or shared CI -> validate only (no release)
+#   - tag v<anira-version> (e.g. v2.0.3) -> build at VERSION, publish to that release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'engines/libtorch/**'
+      - 'shared/**'
+      - '.github/workflows/libtorch.yml'
+    tags:
+      - 'v[0-9]*'
+  pull_request:
+    paths:
+      - 'engines/libtorch/**'
+      - 'shared/**'
+      - '.github/workflows/libtorch.yml'
+
+concurrency:
+  group: libtorch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      release: ${{ steps.meta.outputs.release }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      matrix: ${{ steps.meta.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "version=$(tr -d '[:space:]' < engines/libtorch/VERSION)" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v[0-9]* ]]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "matrix=$(jq -c . engines/libtorch/ci-matrix.json)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    name: ${{ matrix.label }}-${{ matrix.source }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: setup build tools
+        uses: tanh-lab/ci-actions/setup-cpp-build-tools@bbdd199c8796cdec6f064827eedc45028cd60ce3
+      - name: ensure ninja (Linux fallback)
+        if: ${{ runner.os == 'Linux' }}
+        shell: bash
+        run: command -v ninja >/dev/null || { sudo apt-get update && sudo apt-get install -y ninja-build; }
+
+      # Load MSVC env so cl.exe/lib.exe + (for arm64) the build toolchain are on PATH.
+      - name: setup MSVC env (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      # Windows arm64 builds with clang-cl (matching PyTorch's official win-arm64),
+      # not MSVC cl — see build-libtorch.sh. clang-cl uses the MSVC env above for
+      # headers/libs/linker. Install LLVM if the runner image lacks it.
+      - name: ensure clang-cl (Windows from source)
+        if: ${{ matrix.source == 'build' && runner.os == 'Windows' }}
+        shell: bash
+        run: |
+          if command -v clang-cl >/dev/null; then
+            clang-cl --version
+          else
+            choco install llvm -y --no-progress
+            echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
+          fi
+
+      # ---- from-source prerequisites (only for matrix.source == build) ----------
+      - uses: actions/setup-python@v5
+        if: ${{ matrix.source == 'build' }}
+        with:
+          python-version: '3.12'
+      - name: linux build deps (OpenBLAS for aarch64)
+        if: ${{ matrix.source == 'build' && runner.os == 'Linux' }}
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y libopenblas-dev build-essential
+      - name: sccache
+        if: ${{ matrix.source == 'build' }}
+        uses: mozilla-actions/sccache-action@v0.0.8
+      - name: cache pytorch source
+        if: ${{ matrix.source == 'build' }}
+        uses: actions/cache@v4
+        with:
+          path: engines/libtorch/pytorch-src
+          key: pytorch-src-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}
+
+      # ---- compose the archive name --------------------------------------------
+      - name: compose archive name
+        id: name
+        shell: bash
+        run: |
+          echo "archive=libtorch-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
+
+      # ---- stage: repackage upstream prebuilt, OR build from source ------------
+      - name: repackage upstream prebuilt
+        if: ${{ matrix.source == 'prebuilt' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver="${{ needs.setup.outputs.version }}"
+          url="https://download.pytorch.org/libtorch/cpu/${{ matrix.asset }}-${ver}${{ matrix.cpu_suffix }}.zip"
+          echo "downloading $url"
+          bash engines/libtorch/repackage.sh "$url" "staging/${{ steps.name.outputs.archive }}"
+
+      - name: build from source
+        if: ${{ matrix.source == 'build' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          plat="$(echo '${{ matrix.os }}' | tr '[:upper:]' '[:lower:]')"   # macOS->macos, Linux->linux, Windows->windows
+          bash engines/libtorch/build-libtorch.sh "$plat" "${{ matrix.arch }}" "staging/${{ steps.name.outputs.archive }}"
+
+      # ---- smoke (find_package(Torch) build; run on native targets) ------------
+      - name: smoke test
+        shell: bash
+        run: |
+          bash engines/libtorch/smoke-torch.sh \
+            "staging/${{ steps.name.outputs.archive }}" \
+            engines/libtorch/test \
+            "${{ matrix.can_run }}"
+
+      # ---- package (preserve include/ lib/ share/ [bin/]) ----------------------
+      - name: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          st="staging/${{ steps.name.outputs.archive }}"
+          dirs="include lib"
+          [ -d "$st/share" ] && dirs="$dirs share"
+          [ -d "$st/bin" ]   && dirs="$dirs bin"
+          PACKAGE_DIRS="$dirs" bash shared/package.sh "$st" "${{ steps.name.outputs.archive }}" dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.name.outputs.archive }}
+          path: dist/${{ steps.name.outputs.archive }}.zip
+          retention-days: 14
+
+      - name: publish to release
+        if: ${{ needs.setup.outputs.release == 'true' }}
+        shell: bash
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          tag="${{ needs.setup.outputs.release_tag }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
+          gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber

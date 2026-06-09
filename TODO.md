@@ -59,8 +59,40 @@
 - Android shared run-on-emulator smoke (currently compile+link only — the `.so` may
   need `libc++_shared.so` on-device; static x86_64 runs the full forward pass)
 
+## In progress — LibTorch (CPU, shared), 2.12.0
+Engine scaffolded at `engines/libtorch/` (VERSION, ci-matrix.json, repackage.sh,
+build-libtorch.sh, smoke-torch.sh + test/, README) and `.github/workflows/libtorch.yml`.
+Consumed via `find_package(Torch)`, so archives preserve `include/ lib/ share/ [bin/]`
+(`shared/package.sh` gained a backward-compatible `PACKAGE_DIRS` env for this).
+
+### Source per target (what's missing at 2.12.0)
+- **Prebuilt (download + restage)**: macOS arm64, Linux x86_64, Windows x86_64.
+- **Build from source (no 2.12.0 CPU prebuilt)**:
+  - macOS x86_64 — PyTorch dropped Intel-mac libtorch after 2.2.2 (build on `macos-15-intel`).
+  - Linux aarch64 — none in the `download.pytorch.org/cpu/` index (build on `ubuntu-24.04-arm`, OpenBLAS).
+  - Windows arm64 — 2.12.0 release not published (only a `-debug` build; release tops at 2.11.0).
+
+### Still open (LibTorch)
+- **From-source recipes need CI iteration** (first-pass `build-libtorch.sh`):
+  - Windows arm64 builds with **clang-cl** (`CC/CXX=clang-cl`, MSVC env for headers/libs/
+    linker) — matching PyTorch's official win-arm64; MSVC `cl` trips on ARM64 NEON intrinsics.
+    Open: confirm the LLVM install on `windows-11-arm` (choco llvm may be x64-emulated) and
+    that clang-cl picks the arm64 target; clang-cl output stays MSVC-ABI → anira consumes as-is.
+  - macOS x86_64: x86_64-mac is PyTorch-deprecated but buildable from source (forum-confirmed at
+    2.6; conda-forge still ships it). Runs on `macos-15-intel` — the LAST Intel image, retiring
+    ~Fall 2027; after that, cross-compile on Apple-silicon `macos-15` (must solve the codegen
+    host-tool problem) or self-host. `USE_NATIVE_ARCH=0`/`USE_MPS=0` set to dodge the Apple-Clang
+    `-mavx512fp16` failure; if 2.12 still trips it, point CC/CXX at a brew LLVM clang.
+  - Linux aarch64: `USE_MKLDNN=0`/OpenBLAS for a self-contained first pass; revisit for perf.
+- **Verify repackaged tree loads**: smoke builds via `find_package(Torch)` and runs a forward pass —
+  confirm against the real (huge) upstream zips, not just the synthetic test.
+- **anira-side**: update `cmake/SetupLibTorch.cmake` to consume these archives from anira-backends
+  releases (currently pulls `faressc/libtorch-cpp-lib` + raw pytorch.org; align the Windows
+  `-release` token and the `CMAKE_SYSTEM_PROCESSOR` arch tokens to `os-arch` naming).
+- Later: static libtorch; iOS/Android; universal macOS (anira keys libtorch per-arch today).
+
 ## Later
-- Backends: `libtorch/` (and researching `executorch/` — static + AOT `.pte` model question)
+- Backends: researching `executorch/` — static + AOT `.pte` model question
 - Linux `armv7l` (Bela) — needs `-DTFLITE_ENABLE_XNNPACK=OFF`
 - anira-side: `cmake/SetupTensorflowLite.cmake` to consume the new mobile/static archives
 - Contribute a `SOURCE_DIR` input to `tanh-lab/ci-actions/cmake-build` (drop our workaround)
