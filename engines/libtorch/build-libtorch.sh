@@ -84,34 +84,23 @@ case "$PLATFORM" in
     export USE_FBGEMM=0          # FBGEMM is x86-only
     ;;
   windows)
-    # arm64 native on windows-11-arm. Build with clang-cl, NOT MSVC cl: PyTorch's
-    # official win-arm64 binaries are built with LLVM/clang-cl (.ci/pytorch/windows/
-    # arm64), and MSVC cl trips on PyTorch's ARM64 NEON intrinsics (sleef / ATen vec).
-    # clang-cl targets the MSVC ABI, so the resulting torch.dll + import lib stay
-    # drop-in for an MSVC-built anira consumer. The MSVC dev env (loaded by the
-    # workflow) still supplies headers/libs/linker; CC/CXX only swap the compiler.
+    # arm64 native on windows-11-arm with native ARM64 MSVC (cl.exe) — mirroring PyTorch's
+    # own win-arm64 CI (.ci/pytorch/windows/arm64/build_libtorch.bat: `vcvarsall.bat arm64`
+    # + cl, NOT clang-cl). The arm64 MSVC env is loaded by the workflow (msvc-dev-cmd
+    # arch=arm64); we deliberately do NOT set CC/CXX so CMake uses the native arm64 cl.
+    # Our earlier clang-cl attempt picked VS's x64-host clang-cl: needed --target hacks,
+    # OOM'd under emulation, and selected the aarch64 NEON vec path that breaks on MSVC
+    # (the `uint` typedef). Native cl is PyTorch's actual toolchain and avoids all three.
     export USE_MKL=0 USE_MKLDNN=0 USE_FBGEMM=0 USE_QNNPACK=0 USE_PYTORCH_QNNPACK=0
     export USE_DISTRIBUTED=0
     export CMAKE_GENERATOR=Ninja
-    export CC=clang-cl CXX=clang-cl
-    command -v clang-cl >/dev/null || { echo "ERROR: clang-cl not on PATH (install LLVM)"; exit 1; }
-    # The clang-cl on PATH is VS's x64-host build, which defaults to an x64 TARGET —
-    # it then links the arm64 MSVC runtime and fails: "msvcrtd.lib(...): machine type
-    # arm64 conflicts with x64". clang-cl is a cross-compiler, so force the arm64
-    # triple; the arm64 Windows SDK/runtime from the MSVC env supplies the libs. CMake
-    # seeds CMAKE_{C,CXX}_FLAGS from these, so the compiler check + whole build inherit it.
-    export CFLAGS="--target=arm64-pc-windows-msvc${CFLAGS:+ $CFLAGS}"
-    export CXXFLAGS="--target=arm64-pc-windows-msvc${CXXFLAGS:+ $CXXFLAGS}"
-    # Cap parallelism. At MAX_JOBS=nproc the windows-11-arm runner (4 vCPU / 16 GB) was
-    # killed mid-build ("hosted runner lost communication ... starves it for CPU/Memory")
-    # ~30% into torch_cpu — emulated x64 clang-cl on PyTorch's large ATen TUs is memory
-    # -hungry. Fewer concurrent compiles trades build time (we have 6h) for not OOM-ing.
+    export BLAS=Eigen          # self-contained (PyTorch CI uses APL/OpenBLAS for perf)
+    # Cap parallelism on the 16 GB runner (native cl is lighter than the emulated clang-cl
+    # that OOM'd, but PyTorch's ATen TUs are still big). The 6h budget absorbs it.
     export MAX_JOBS=2
-    # PyTorch's aarch64 NEON vec headers use the BSD integer typedefs (uint/ushort/ulong/
-    # uchar) that <sys/types.h> provides on Linux/macOS but MSVC/Windows does NOT ->
-    # "unknown type name 'uint'" in vec128_uint_aarch64.h. win-arm64 is a new, under-tested
-    # PyTorch target. Inject the typedefs into the ATen vec headers that use them
-    # (idempotent via the marker, so it survives the cached source tree).
+    # Insurance (harmless if native cl selects a different vec path): PyTorch's aarch64 NEON
+    # vec headers use the BSD typedefs (uint/ushort/ulong/uchar) absent on MSVC. Inject them
+    # into the ATen vec headers that use them (idempotent marker; survives the source cache).
     while IFS= read -r h; do
       grep -q '__win_uint_fix__' "$h" 2>/dev/null && continue
       printf '// __win_uint_fix__\ntypedef unsigned int uint;\ntypedef unsigned short ushort;\ntypedef unsigned long ulong;\ntypedef unsigned char uchar;\n' \

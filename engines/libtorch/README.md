@@ -15,13 +15,13 @@ CPU-only **shared** libtorch at the version in [`VERSION`](./VERSION), packaged 
 | 🐧 Linux   | x86_64  | **prebuilt**  | `libtorch-shared-with-deps-<v>+cpu.zip`                  |
 | 🐧 Linux   | aarch64 | **build**     | no aarch64 in the `cpu/` index → from source             |
 | 🪟 Windows | x86_64  | **prebuilt**  | `libtorch-win-shared-with-deps-<v>+cpu.zip`              |
-| 🪟 Windows | arm64   | **prebuilt (2.11.0)** | no 2.12.0 release prebuilt → pinned to `libtorch-win-arm64-shared-with-deps-2.11.0+cpu.zip` |
+| 🪟 Windows | arm64   | **build**     | no 2.12.0 release prebuilt → from source with **native ARM64 MSVC `cl`** |
 
-> **Windows arm64 is pinned to 2.11.0** (the latest version PyTorch ships a release
-> win-arm64 prebuilt for) while every other target is 2.12.0 — a one-platform, one-minor
-> skew. The from-source 2.12.0 recipe is retained in `build-libtorch.sh` (dormant, behind
-> the `source: build` path) for a future attempt; it built ~65% of `torch_cpu` before we
-> pinned. The archive carries its true version: `libtorch-2.11.0-Windows-arm64.zip`.
+> **Windows arm64** builds from source with the **native ARM64 MSVC `cl`** toolchain
+> (`vcvarsall.bat arm64`), mirroring PyTorch's own win-arm64 CI
+> (`.ci/pytorch/windows/arm64/build_libtorch.bat`) — **not** clang-cl. An earlier clang-cl
+> attempt hit an x64-target mismatch, an OOM under emulation, and the `uint` NEON-vec error;
+> native `cl` is PyTorch's actual toolchain and sidesteps all three.
 | 🍎 macOS   | universal | **build (lipo)** | lipo of the two per-arch from-source archives          |
 
 The macOS **universal** archive is `lipo`'d from the two per-arch *from-source* macOS

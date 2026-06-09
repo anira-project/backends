@@ -6,5 +6,5 @@
   { "label": "Linux-aarch64",  "name": "Linux-aarch64",  "runner": "ubuntu-24.04-arm", "os": "Linux",   "arch": "aarch64", "kind": "shared", "source": "build",                                                "can_run": "1" },
 
   { "label": "Windows-x86_64", "name": "Windows-x86_64", "runner": "windows-2025",     "os": "Windows", "arch": "x86_64",  "kind": "shared", "source": "prebuilt", "asset": "libtorch-win-shared-with-deps",   "cpu_suffix": "%2Bcpu", "can_run": "1", "msvc_arch": "x64" },
-  { "label": "Windows-arm64",  "name": "Windows-ARM64",  "runner": "windows-11-arm",   "os": "Windows", "arch": "arm64",   "kind": "shared", "source": "prebuilt", "asset": "libtorch-win-arm64-shared-with-deps", "cpu_suffix": "%2Bcpu", "version": "2.11.0", "can_run": "1", "msvc_arch": "arm64" }
+  { "label": "Windows-arm64",  "name": "Windows-ARM64",  "runner": "windows-11-arm",   "os": "Windows", "arch": "arm64",   "kind": "shared", "source": "build",                                                "can_run": "1", "msvc_arch": "arm64" }
 ]

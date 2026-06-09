@@ -77,20 +77,6 @@ jobs:
         with:
           arch: ${{ matrix.msvc_arch }}
 
-      # Windows arm64 builds with clang-cl (matching PyTorch's official win-arm64),
-      # not MSVC cl — see build-libtorch.sh. clang-cl uses the MSVC env above for
-      # headers/libs/linker. Install LLVM if the runner image lacks it.
-      - name: ensure clang-cl (Windows from source)
-        if: ${{ matrix.source == 'build' && runner.os == 'Windows' }}
-        shell: bash
-        run: |
-          if command -v clang-cl >/dev/null; then
-            clang-cl --version
-          else
-            choco install llvm -y --no-progress
-            echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
-          fi
-
       # ---- from-source prerequisites (only for matrix.source == build) ----------
       - uses: actions/setup-python@v5
         if: ${{ matrix.source == 'build' }}
