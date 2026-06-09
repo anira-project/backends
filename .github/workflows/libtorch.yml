@@ -111,11 +111,16 @@ jobs:
           key: pytorch-src-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}
 
       # ---- compose the archive name --------------------------------------------
+      # matrix.version overrides the engine VERSION per-row (e.g. Windows arm64 has no
+      # 2.12.0 release prebuilt, so it's pinned to the 2.11.0 one). The archive carries
+      # its TRUE version so there's no naming/version mismatch.
       - name: compose archive name
         id: name
         shell: bash
         run: |
-          echo "archive=libtorch-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
+          ver="${{ matrix.version }}"; [ -z "$ver" ] && ver="${{ needs.setup.outputs.version }}"
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          echo "archive=libtorch-${ver}-${{ matrix.os }}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
 
       # ---- stage: repackage upstream prebuilt, OR build from source ------------
       - name: repackage upstream prebuilt
@@ -123,7 +128,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ver="${{ needs.setup.outputs.version }}"
+          ver="${{ steps.name.outputs.ver }}"
           url="https://download.pytorch.org/libtorch/cpu/${{ matrix.asset }}-${ver}${{ matrix.cpu_suffix }}.zip"
           echo "downloading $url"
           bash engines/libtorch/repackage.sh "$url" "staging/${{ steps.name.outputs.archive }}"

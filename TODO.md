@@ -66,13 +66,13 @@ Consumed via `find_package(Torch)`, so archives preserve `include/ lib/ share/ [
 (`shared/package.sh` gained a backward-compatible `PACKAGE_DIRS` env for this).
 
 ### Source per target (what's missing at 2.12.0)
-- **Prebuilt (download + restage)**: Linux x86_64, Windows x86_64.
+- **Prebuilt (download + restage)**: Linux x86_64, Windows x86_64 (both 2.12.0); Windows arm64
+  (pinned 2.11.0 — see below).
 - **Build from source**:
   - macOS x86_64 — PyTorch dropped Intel-mac libtorch after 2.2.2 (build on `macos-15-intel`).
   - macOS arm64 — a prebuilt exists, but we build it from source anyway so the universal lipo
     has matched slices (mirrors LiteRT/ONNXRuntime; official prebuilt arm64 not used).
   - Linux aarch64 — none in the `download.pytorch.org/cpu/` index (build on `ubuntu-24.04-arm`, OpenBLAS).
-  - Windows arm64 — 2.12.0 release not published (only a `-debug` build; release tops at 2.11.0).
 - **Universal (macOS)**: `macos-universal` job lipos the two per-arch from-source archives.
 
 ### CI status (run 5, commit ea81438)
@@ -80,12 +80,19 @@ Green (incl. find_package(Torch) smoke): macOS arm64, macOS x86_64, **macOS univ
 smoke ✅), Linux aarch64, Linux x86_64, Windows x86_64. **7/8 archives green.** Only Windows arm64
 left. The `if: !cancelled()` decoupling worked — universal now validated.
 
-Windows arm64 progress (each round clears a layer): clone (longpaths) → pip (requirements-build) →
-clang-cl x64→arm64 target → OOM (MAX_JOBS=2) → run 6 reached [563/1448] then a real compile error:
-`vec128_uint_aarch64.h: unknown type name 'uint'`. PyTorch's aarch64 NEON vec headers use the BSD
-`uint`/`ushort`/`ulong`/`uchar` typedefs (from `<sys/types.h>` on Linux/macOS; absent on MSVC) —
-win-arm64 is under-tested upstream. Fix: inject those typedefs into the ATen vec headers that use
-them (idempotent, survives the source cache). If more non-vec TUs hit it, widen the patch scope.
+**Windows arm64: PINNED to the 2.11.0 prebuilt** (decided) — no 2.12.0 release prebuilt exists
+(release tops at 2.11.0; only a -debug 2.12.0). The 2.12.0 from-source build kept hitting walls
+and grinding (~3h/round at MAX_JOBS=2), so we pinned to ship. Matrix row is now `source: prebuilt,
+version: 2.11.0, asset: libtorch-win-arm64-shared-with-deps`; archive is `libtorch-2.11.0-Windows
+-arm64.zip` (true version). One-platform, one-minor skew vs the 2.12.0 others — anira-side
+SetupLibTorch must use 2.11.0 for win-arm64. Mixed-version risk is low for typical audio models.
+
+The from-source 2.12.0 recipe is RETAINED in build-libtorch.sh (dormant) for a future attempt. It
+cleared, in order: clone MAX_PATH (longpaths) → pip lintrunner (requirements-build.txt) → clang-cl
+x64→arm64 target → runner OOM (MAX_JOBS=2) → `uint`/BSD typedefs in ATen aarch64 vec headers
+(injected). Last seen ~[945/1448] of torch_cpu, cancelled before the link. Next likely walls: the
+torch_cpu link, more portability gaps. Cleaner future path: native arm64 LLVM (no emulation → less
+memory, full speed, PyTorch's real win-arm64 toolchain) instead of the VS x64 clang-cl.
 
 ### Still open (LibTorch)
 - **From-source recipes need CI iteration** (first-pass `build-libtorch.sh`):
