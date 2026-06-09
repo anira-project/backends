@@ -24,6 +24,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 
 # --- Source (recursive: PyTorch vendors its deps as submodules) ----------------
+# Windows: PyTorch's repo ships test/ files with names long enough to exceed the
+# 260-char MAX_PATH limit, so checkout fails ("Filename too long" -> "unable to
+# checkout working tree", exit 128). Enable git's extended-length path support.
+# No-op on macOS/Linux.
+[ "$PLATFORM" = "windows" ] && git config --global core.longpaths true
+
 SRC="$HERE/pytorch-src"
 if [ ! -d "$SRC/.git" ]; then
   git clone --depth 1 --recurse-submodules --shallow-submodules \
@@ -35,6 +41,12 @@ python -m pip install -r "$SRC/requirements.txt"
 python -m pip install pyyaml typing_extensions setuptools numpy
 
 # --- CPU-only base config (shared lib, no python, no tests/CUDA/distributed) ----
+# PyTorch vendors an old third_party/protobuf whose CMakeLists has
+# cmake_minimum_required(VERSION <3.5); CMake 4.x (pulled in by pip) removed that
+# compatibility and errors when building the host protoc ("Could not compile
+# universal protoc"). Same class of issue as LiteRT's old deps — set the policy
+# floor in the env so every nested cmake invocation inherits it.
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
 export USE_CUDA=0 USE_ROCM=0 USE_CUDNN=0 USE_NCCL=0
 export USE_DISTRIBUTED=0 USE_TENSORPIPE=0 USE_GLOO=0 USE_MPI=0
 export BUILD_TEST=0 BUILD_PYTHON=0

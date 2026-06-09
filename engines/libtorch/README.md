@@ -21,6 +21,23 @@ CPU-only **shared** libtorch at the version in [`VERSION`](./VERSION), packaged 
 > like the ONNXRuntime/LiteRT builders they are expected to need a few CI rounds to
 > converge per platform. Key fixes get recorded in [`../../TODO.md`](../../TODO.md).
 
+## Static builds — not supported
+
+Unlike LiteRT and ONNXRuntime, LibTorch ships **shared only**. Static is intentionally
+out of scope:
+
+- **No static prebuilts exist for 2.12.0.** Upstream static archives
+  (`libtorch-*-static-with-deps-*`) stopped at **2.1.2** and were Linux-x86_64 only —
+  Windows/macOS static were never published. Static at 2.12.0 would mean building from
+  source on every platform.
+- **Static libtorch is fragile.** PyTorch's operator/dispatcher registration depends on
+  global static initializers the linker strips from an archive unless the consumer
+  force-loads (`-Wl,--whole-archive` / `-force_load`). It's poorly maintained upstream,
+  breaks far more often than the shared build, and the archives are very large.
+
+If a static requirement ever comes up, it's a from-source-only effort to revisit
+deliberately — not a quick `BUILD_SHARED_LIBS=0` flip.
+
 ## Files
 
 | File                  | Purpose                                                        |

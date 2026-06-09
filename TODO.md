@@ -89,7 +89,11 @@ Consumed via `find_package(Torch)`, so archives preserve `include/ lib/ share/ [
 - **anira-side**: update `cmake/SetupLibTorch.cmake` to consume these archives from anira-backends
   releases (currently pulls `faressc/libtorch-cpp-lib` + raw pytorch.org; align the Windows
   `-release` token and the `CMAKE_SYSTEM_PROCESSOR` arch tokens to `os-arch` naming).
-- Later: static libtorch; iOS/Android; universal macOS (anira keys libtorch per-arch today).
+- **Static: not supported (decided).** No 2.12.0 static prebuilts (upstream stopped at 2.1.2,
+  Linux-x86_64 only) → would be from-source on every platform, and static libtorch needs
+  whole-archive/-force_load for op registration and is poorly maintained upstream. Shared only.
+  See `engines/libtorch/README.md` "Static builds — not supported".
+- Later: iOS/Android; universal macOS (anira keys libtorch per-arch today).
 
 ## Later
 - Backends: researching `executorch/` — static + AOT `.pte` model question
