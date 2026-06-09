@@ -30,6 +30,11 @@ on:
         required: false
         default: false
         type: boolean
+      release_tag:
+        description: "Release tag to publish to (the anira version, e.g. v2.0.3)"
+        required: false
+        default: ""
+        type: string
       matrix:
         description: "JSON build matrix (see litert.yml setup job)"
         required: true
@@ -243,9 +248,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${{ inputs.backend }}-v${{ inputs.version }}"
+          tag="${{ inputs.release_tag }}"
           gh release view "$tag" >/dev/null 2>&1 || \
-            gh release create "$tag" --title "$tag" --notes "Automated ${{ inputs.backend }} ${{ inputs.version }} build"
+            gh release create "$tag" --title "$tag" --notes "anira backends $tag"
           gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
 
   # --------------------------------------------------------------------------
@@ -313,9 +318,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${{ inputs.backend }}-v${{ inputs.version }}"
+          tag="${{ inputs.release_tag }}"
           gh release view "$tag" >/dev/null 2>&1 || \
-            gh release create "$tag" --title "$tag" --notes "Automated ${{ inputs.backend }} ${{ inputs.version }} build"
+            gh release create "$tag" --title "$tag" --notes "anira backends $tag"
           gh release upload "$tag" "dist/${{ steps.n.outputs.uni }}.zip" --clobber
 
   # --------------------------------------------------------------------------
@@ -373,9 +378,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${{ inputs.backend }}-v${{ inputs.version }}"
+          tag="${{ inputs.release_tag }}"
           gh release view "$tag" >/dev/null 2>&1 || \
-            gh release create "$tag" --title "$tag" --notes "Automated ${{ inputs.backend }} ${{ inputs.version }} build"
+            gh release create "$tag" --title "$tag" --notes "anira backends $tag"
           gh release upload "$tag" "dist/${{ steps.n.outputs.bundle }}.zip" --clobber
 
   # --------------------------------------------------------------------------
@@ -459,7 +464,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${{ inputs.backend }}-v${{ inputs.version }}"
+          tag="${{ inputs.release_tag }}"
           gh release view "$tag" >/dev/null 2>&1 || \
-            gh release create "$tag" --title "$tag" --notes "Automated ${{ inputs.backend }} ${{ inputs.version }} build"
+            gh release create "$tag" --title "$tag" --notes "anira backends $tag"
           gh release upload "$tag" "dist/${{ steps.pack.outputs.archive }}.zip" --clobber

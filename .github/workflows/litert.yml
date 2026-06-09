@@ -3,10 +3,9 @@ name: litert
 # Thin per-backend wrapper: derive version + release flag, then hand the matrix
 # to the shared _build-backend.yml pipeline.
 #
-# Triggers:
-#   - push/PR touching engines/litert/ or shared CI  -> validate only (no release)
-#   - tag  litert-v<version>   -> release just LiteRT (its own VERSION)
-#   - tag  v<semver>           -> repo release: rebuild every backend at its VERSION
+# Triggers (release model: ../../docs/RELEASE.md):
+#   - push/PR touching engines/litert/ or shared CI -> validate only (no release)
+#   - tag v<anira-version> (e.g. v2.0.3) -> build LiteRT at its VERSION, publish to that release
 
 on:
   push:
@@ -17,7 +16,6 @@ on:
       - '.github/workflows/litert.yml'
       - '.github/workflows/_build-backend.yml'
     tags:
-      - 'litert-v*'
       - 'v[0-9]*'
   pull_request:
     paths:
@@ -36,6 +34,7 @@ jobs:
     outputs:
       version: ${{ steps.meta.outputs.version }}
       release: ${{ steps.meta.outputs.release }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
       matrix: ${{ steps.meta.outputs.matrix }}
     steps:
       - uses: actions/checkout@v6
@@ -45,35 +44,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="$(tr -d '[:space:]' < engines/litert/VERSION)"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-          REF="${GITHUB_REF}"
-          if [[ "$REF" == refs/tags/litert-v* || "$REF" == refs/tags/v[0-9]* ]]; then
+          # Engine version (pins what's built, appears in archive names).
+          echo "version=$(tr -d '[:space:]' < engines/litert/VERSION)" >> "$GITHUB_OUTPUT"
+          # Release is keyed to the anira version: a v<x.y.z> tag publishes to that release.
+          if [[ "$GITHUB_REF" == refs/tags/v[0-9]* ]]; then
             echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           else
             echo "release=false" >> "$GITHUB_OUTPUT"
           fi
-
-          # Per-backend tag must match the backend VERSION (catches "forgot to bump").
-          if [[ "$REF" == refs/tags/litert-v* ]]; then
-            TAGV="${REF#refs/tags/litert-v}"
-            if [[ "$TAGV" != "$VERSION" ]]; then
-              echo "::error::tag litert-v$TAGV does not match engines/litert/VERSION ($VERSION)"
-              exit 1
-            fi
-          fi
-
-          # Repo release tag (v<semver>) must match the root VERSION.
-          if [[ "$REF" == refs/tags/v[0-9]* ]]; then
-            REPOV="$(tr -d '[:space:]' < VERSION)"
-            TAGV="${REF#refs/tags/v}"
-            if [[ "$TAGV" != "$REPOV" ]]; then
-              echo "::error::repo tag v$TAGV does not match ./VERSION ($REPOV)"
-              exit 1
-            fi
-          fi
-
           echo "matrix=$(jq -c . engines/litert/ci-matrix.json)" >> "$GITHUB_OUTPUT"
 
   build:
@@ -86,5 +65,6 @@ jobs:
       libname: tensorflowlite_c
       version: ${{ needs.setup.outputs.version }}
       release: ${{ needs.setup.outputs.release == 'true' }}
+      release_tag: ${{ needs.setup.outputs.release_tag }}
       matrix: ${{ needs.setup.outputs.matrix }}
     secrets: inherit
