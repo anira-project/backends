@@ -107,6 +107,16 @@ case "$PLATFORM" in
     # ~30% into torch_cpu — emulated x64 clang-cl on PyTorch's large ATen TUs is memory
     # -hungry. Fewer concurrent compiles trades build time (we have 6h) for not OOM-ing.
     export MAX_JOBS=2
+    # PyTorch's aarch64 NEON vec headers use the BSD integer typedefs (uint/ushort/ulong/
+    # uchar) that <sys/types.h> provides on Linux/macOS but MSVC/Windows does NOT ->
+    # "unknown type name 'uint'" in vec128_uint_aarch64.h. win-arm64 is a new, under-tested
+    # PyTorch target. Inject the typedefs into the ATen vec headers that use them
+    # (idempotent via the marker, so it survives the cached source tree).
+    while IFS= read -r h; do
+      grep -q '__win_uint_fix__' "$h" 2>/dev/null && continue
+      printf '// __win_uint_fix__\ntypedef unsigned int uint;\ntypedef unsigned short ushort;\ntypedef unsigned long ulong;\ntypedef unsigned char uchar;\n' \
+        | cat - "$h" > "$h.__t" && mv "$h.__t" "$h"
+    done < <(grep -rlwE 'uint|ushort|ulong|uchar' "$SRC/aten/src/ATen/cpu/vec" 2>/dev/null || true)
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac

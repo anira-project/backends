@@ -80,11 +80,12 @@ Green (incl. find_package(Torch) smoke): macOS arm64, macOS x86_64, **macOS univ
 smoke ✅), Linux aarch64, Linux x86_64, Windows x86_64. **7/8 archives green.** Only Windows arm64
 left. The `if: !cancelled()` decoupling worked — universal now validated.
 
-Windows arm64 (run 5): clang-cl arm64 targeting fixed — it compiled cleanly to [433/1448] of
-torch_cpu, then the **windows-11-arm runner was OOM-killed** ("hosted runner lost communication …
-starves it for CPU/Memory"; logs truncated, step stuck in_progress). Emulated x64 clang-cl on big
-ATen TUs at MAX_JOBS=nproc exhausted the 16 GB runner. Fix: `MAX_JOBS=2` on Windows (trade time for
-memory; 6h budget). If it still OOMs, drop to 1 or use native arm64 LLVM (no emulation).
+Windows arm64 progress (each round clears a layer): clone (longpaths) → pip (requirements-build) →
+clang-cl x64→arm64 target → OOM (MAX_JOBS=2) → run 6 reached [563/1448] then a real compile error:
+`vec128_uint_aarch64.h: unknown type name 'uint'`. PyTorch's aarch64 NEON vec headers use the BSD
+`uint`/`ushort`/`ulong`/`uchar` typedefs (from `<sys/types.h>` on Linux/macOS; absent on MSVC) —
+win-arm64 is under-tested upstream. Fix: inject those typedefs into the ATen vec headers that use
+them (idempotent, survives the source cache). If more non-vec TUs hit it, widen the patch scope.
 
 ### Still open (LibTorch)
 - **From-source recipes need CI iteration** (first-pass `build-libtorch.sh`):
