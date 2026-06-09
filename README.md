@@ -16,8 +16,8 @@ Archive layout (what anira expects):
 
 | Backend     | Status      | Upstream                                                          | lib name           |
 | ----------- | ----------- | ---------------------------------------------------------------- | ------------------ |
-| LiteRT      | In progress | [google-ai-edge/LiteRT](https://github.com/google-ai-edge/LiteRT) (ex-TensorFlow Lite) | `tensorflowlite_c` |
-| ONNXRuntime | Planned     | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) | `onnxruntime`      |
+| LiteRT      | Active      | [google-ai-edge/LiteRT](https://github.com/google-ai-edge/LiteRT) (ex-TensorFlow Lite) | `tensorflowlite_c` |
+| ONNXRuntime | Active (static) | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) | `onnxruntime`  |
 | LibTorch    | Planned     | [pytorch/pytorch](https://github.com/pytorch/pytorch)            | `torch`            |
 
 ---
@@ -106,6 +106,39 @@ Windows / Linux / wasm stay CPU-only (no usable delegate via the C API).
 
 ---
 
+## ONNXRuntime — target matrix
+
+`onnxruntime` C API, **static**, **full op set** (any model works), CPU provider only. ONNX
+Runtime publishes only *shared* libs, so every target is **built from source** via
+`tools/ci_build/build.py`, then `bundle-static.sh` merges the component `.a`/`.lib` into one.
+Smoke-gated (compile + link + `OrtEnv` init; see [`engines/onnxruntime/`](./engines/onnxruntime/)).
+
+| Target           | OS      | Arch              | How                | Static | Status |
+| ---------------- | ------- | ----------------- | ------------------ | ------ | ------ |
+| macOS x64 / arm64 / universal | macOS | x86_64, arm64 | build.py (+ `lipo`) | static | active |
+| Windows x64 / arm64 | Windows | x64, arm64    | build.py (VS/MSVC)  | static | active (Release **and** Debug) |
+| Linux x64 / aarch64 | Linux  | x86_64, aarch64 | build.py (Ninja)  | static | active |
+| Android          | Android | arm64-v8a, x86_64 | build.py (NDK)    | static | active (one multi-ABI archive) |
+| iOS              | iOS     | device + simulator| build.py → `xcframework` | static | active (**built**, not downloaded) |
+
+### Notes
+
+- **re2 is force-built.** onnxruntime include-attaches re2 (`EXCLUDE_FROM_ALL`) without linking it
+  on desktop, so a normal build never compiles it and the static bundle would miss `re2::RE2`.
+  We force the `re2` target and `CMAKE_DISABLE_FIND_PACKAGE_re2=ON` (else the Windows runners'
+  prebuilt re2 is used and no source target exists). See `engines/onnxruntime/README.md`.
+- **Windows size / LTCG**: we pass `onnxruntime_ENABLE_LTO=OFF`, so MSVC `/GL` + `/LTCG` are not
+  added — no need for ort-builder's `ltcg_patch_for_windows.patch`. (Full-op static libs are still
+  large by nature, Debug especially.)
+- **Windows static** ships Release **and** Debug (CRT-match `/MD` vs `/MDd`); link `advapi32.lib`
+  + the matching `ucrt[d].lib`. Debug disables `onnxruntime_ENABLE_MEMLEAK_CHECKER` (else it
+  aborts at clean exit over onnxruntime's never-freed singletons).
+- **iOS** is built here (device + simulator slices → `.xcframework`) — ONNX has no prebuilt static
+  framework. **Android** ships one multi-ABI archive (`lib/<abi>/…`).
+- Releases publish under the `onnxruntime-v<version>` tag.
+
+---
+
 ## Releases & CI
 
 Each backend builds and releases **independently** (one workflow each, since their builds
@@ -119,15 +152,17 @@ and release upload live in `shared/` + `_build-backend.yml`.
 backends/                          # repo root
 ├── VERSION                        # this repo's own semver (e.g. 0.0.1)
 ├── engines/
-│   └── litert/                    # one dir per backend (onnxruntime/, libtorch/ later)
-│       ├── VERSION                # pinned upstream version (single source of truth)
-│       ├── CMakeLists.txt         # fetch tensorflow + build/install
-│       ├── CMakePresets.json      # one preset per target
-│       └── ci-matrix*.json        # active / deferred build matrices
-├── shared/                        # package / sign / bundle-static / xcframework scripts
+│   ├── litert/                    # one dir per backend
+│   │   ├── VERSION                # pinned upstream version (single source of truth)
+│   │   ├── CMakeLists.txt         # fetch tensorflow + build/install
+│   │   ├── CMakePresets.json      # one preset per target
+│   │   └── ci-matrix*.json        # active / deferred build matrices
+│   └── onnxruntime/               # build-ort.sh (build.py wrapper) + smoke-onnx.sh + ci-matrix.json
+├── shared/                        # package / sign / bundle-static scripts (cross-backend)
 └── .github/workflows/
-    ├── litert.yml                 # triggers + matrix → reusable workflow
-    └── _build-backend.yml         # reusable: build → bundle → package → upload
+    ├── litert.yml                 # triggers + matrix → reusable _build-backend.yml
+    ├── _build-backend.yml         # reusable: build → bundle → package → upload (LiteRT)
+    └── onnxruntime.yml            # self-contained: build → bundle → smoke → publish + combine/iOS
 ```
 
 ### Versions & tags
@@ -138,14 +173,16 @@ they don't carry the version** (keeps anira's URLs stable at `releases/download/
 - **per-backend** — `engines/<backend>/VERSION` (the upstream version, e.g. LiteRT `2.17.0`)
 - **repo** — root `./VERSION` (this repo's own semver, e.g. `0.0.1`)
 
-| Tag              | Effect                                                  | Must match     |
-| ---------------- | ------------------------------------------------------- | -------------- |
-| `litert-v2.17.0` | release LiteRT only                                     | `engines/litert/VERSION` |
-| `v0.0.1`         | repo release — rebuild every backend at its own VERSION | `./VERSION`    |
+| Tag                 | Effect                                                  | Must match     |
+| ------------------- | ------------------------------------------------------- | -------------- |
+| `litert-v2.17.0`    | release LiteRT only                                     | `engines/litert/VERSION` |
+| `onnxruntime-v1.26.0` | release ONNXRuntime only                              | `engines/onnxruntime/VERSION` |
+| `v0.0.1`            | repo release — rebuild every backend at its own VERSION | `./VERSION`    |
 
 ```bash
-git tag litert-v2.17.0 && git push origin litert-v2.17.0   # one backend
-git tag v0.0.1         && git push origin v0.0.1           # repo release (everything)
+git tag litert-v2.17.0      && git push origin litert-v2.17.0        # one backend
+git tag onnxruntime-v1.26.0 && git push origin onnxruntime-v1.26.0   # one backend
+git tag v0.0.1              && git push origin v0.0.1                # repo release (everything)
 ```
 
 ### Triggers
@@ -153,12 +190,14 @@ git tag v0.0.1         && git push origin v0.0.1           # repo release (every
 Path filters mean only the touched backend builds (`shared/**` rebuilds all). Plain
 push/PR = **validate only**; tags **publish** (assets refreshed in place per release).
 
-| You do…                         | Runs                     | Publishes               |
-| ------------------------------- | ------------------------ | ----------------------- |
-| Push `engines/litert/**` (branch/PR)    | LiteRT validate          | —                       |
-| Edit `shared/**` (branch/PR)    | every backend validate   | —                       |
-| Tag `litert-v2.17.0`            | LiteRT release           | `litert-v2.17.0`        |
-| Tag `v0.0.1` (repo release)     | all backends release     | each `<backend>-v<ver>` |
+| You do…                              | Runs                     | Publishes               |
+| ------------------------------------ | ------------------------ | ----------------------- |
+| Push `engines/litert/**` (branch/PR) | LiteRT validate          | —                       |
+| Push `engines/onnxruntime/**` (branch/PR) | ONNXRuntime validate | —                       |
+| Edit `shared/**` (branch/PR)         | every backend validate   | —                       |
+| Tag `litert-v2.17.0`                 | LiteRT release           | `litert-v2.17.0`        |
+| Tag `onnxruntime-v1.26.0`            | ONNXRuntime release      | `onnxruntime-v1.26.0`   |
+| Tag `v0.0.1` (repo release)          | all backends release     | each `<backend>-v<ver>` |
 
 ## License
 

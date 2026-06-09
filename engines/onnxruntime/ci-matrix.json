@@ -1,0 +1,15 @@
+[
+  { "label": "macOS-x86_64",   "name": "macOS-x86_64",   "runner": "macos-15",        "platform": "macos",   "arch": "x86_64",  "config": "Release", "kind": "static", "os": "macOS",   "can_run": "1" },
+  { "label": "macOS-arm64",    "name": "macOS-arm64",    "runner": "macos-15",        "platform": "macos",   "arch": "arm64",   "config": "Release", "kind": "static", "os": "macOS",   "can_run": "1" },
+
+  { "label": "Windows-x86_64", "name": "Windows-x86_64", "runner": "windows-2025",    "platform": "windows", "arch": "x86_64",  "config": "Release", "kind": "static", "os": "Windows", "can_run": "1", "msvc_arch": "x64" },
+  { "label": "Windows-x86_64", "name": "Windows-x86_64", "runner": "windows-2025",    "platform": "windows", "arch": "x86_64",  "config": "Debug",   "kind": "static", "os": "Windows", "can_run": "1", "msvc_arch": "x64" },
+  { "label": "Windows-arm64",  "name": "Windows-ARM64",  "runner": "windows-11-arm",  "platform": "windows", "arch": "arm64",   "config": "Release", "kind": "static", "os": "Windows", "can_run": "1", "msvc_arch": "arm64" },
+  { "label": "Windows-arm64",  "name": "Windows-ARM64",  "runner": "windows-11-arm",  "platform": "windows", "arch": "arm64",   "config": "Debug",   "kind": "static", "os": "Windows", "can_run": "1", "msvc_arch": "arm64" },
+
+  { "label": "Linux-x86_64",   "name": "Linux-x86_64",   "runner": "ubuntu-24.04",    "platform": "linux",   "arch": "x86_64",  "config": "Release", "kind": "static", "os": "Linux",   "can_run": "1" },
+  { "label": "Linux-aarch64",  "name": "Linux-aarch64",  "runner": "ubuntu-24.04-arm","platform": "linux",   "arch": "aarch64", "config": "Release", "kind": "static", "os": "Linux",   "can_run": "1" },
+
+  { "label": "Android-arm64",  "name": "Android-arm64",  "runner": "ubuntu-24.04",    "platform": "android", "arch": "arm64-v8a","config": "Release", "kind": "static", "os": "Android", "can_run": "0" },
+  { "label": "Android-x86_64", "name": "Android-x86_64", "runner": "ubuntu-24.04",    "platform": "android", "arch": "x86_64",  "config": "Release", "kind": "static", "os": "Android", "can_run": "0" }
+]

@@ -7,3 +7,6 @@ artifacts/
 # tooling
 emsdk-cache-*/
 .DS_Store
+
+# onnxruntime build
+engines/onnxruntime/onnxruntime-src/
