@@ -72,6 +72,11 @@ case "$PLATFORM" in
     # hardcoded VS-2022 generator fails with "could not find any instance of Visual Studio".
     # Ninja+cl is generator/VS-version agnostic (and is what every other leg already uses).
     ARGS+=(--cmake_generator Ninja)
+    # win-arm64: KleidiAI/SVE ship .S microkernels that CMake assembles with armasm64.exe,
+    # which rejects the /arch:armv8.2 flag emitted for them (error A2029). They're optional
+    # ARM CPU-matmul accelerators; disable on win-arm64 for a working CPU build. The other
+    # arm64 targets (linux/macOS/android) assemble these with clang and keep them.
+    [ "$ARCH" = "arm64" ] && ARGS+=(--cmake_extra_defines onnxruntime_USE_KLEIDIAI=OFF onnxruntime_USE_SVE=OFF)
     # build.py forces CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase (/Zi)
     # GLOBALLY — even for Release, which embeds CodeView in every .obj and bloats the
     # shipped static .lib ~5x (854 MB!). The Release lib we ship needs no debug info,
