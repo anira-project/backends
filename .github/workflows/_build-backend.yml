@@ -1,62 +1,38 @@
 name: _build-backend
 
-# Reusable build pipeline shared by every backend. The per-backend workflow
-# (e.g. litert.yml) computes the matrix + version and calls this.
+# Engine-agnostic build pipeline shared by every backend. A per-backend wrapper
+# (litert.yml / onnxruntime.yml / libtorch.yml) derives version + release flag + the
+# matrix (engine-meta, straight from CMakePresets vendor.anira) and calls this.
 #
-# Build step reuses tanh-lab/ci-actions, pinned to a commit SHA (not @main) so an
-# upstream change can't silently break a release build.
+# Every build leg goes through the root CMake orchestrator (stage-build action):
+#   cmake --preset -> cmake --build -> cmake --install  into staging/<archive>.
+# Then: package (zip) -> upload -> smoke gate -> publish. Aggregation jobs (macOS
+# universal, Android multi-ABI bundle, iOS xcframework) follow.
+#
+# Setup is one composite verb (setup-toolchain); build tooling reuses tanh-lab/ci-actions,
+# pinned to a SHA so an upstream change can't silently break a release build.
 
 on:
   workflow_call:
     inputs:
-      backend:
-        description: "Backend id (used for tag/release/artifact names), e.g. litert"
-        required: true
-        type: string
-      backend_dir:
-        description: "Path to the backend's source dir, e.g. engines/litert"
-        required: true
-        type: string
-      libname:
-        description: "Library/archive prefix, e.g. tensorflowlite_c"
-        required: true
-        type: string
-      version:
-        description: "Upstream version from the backend's VERSION file"
-        required: true
-        type: string
-      release:
-        description: "Publish artifacts to a GitHub Release"
-        required: false
-        default: false
-        type: boolean
-      release_tag:
-        description: "Release tag to publish to (the anira version, e.g. v2.0.3)"
-        required: false
-        default: ""
-        type: string
-      matrix:
-        description: "JSON build matrix (see litert.yml setup job)"
-        required: true
-        type: string
+      engine:      { description: "Backend id: litert | onnxruntime | libtorch", required: true, type: string }
+      libname:     { description: "Archive/lib prefix: tensorflowlite_c | onnxruntime | libtorch", required: true, type: string }
+      version:     { description: "Upstream version (engine VERSION)", required: true, type: string }
+      release:     { description: "Publish artifacts to a GitHub release", required: false, type: boolean, default: false }
+      release_tag: { description: "Release tag (the anira version, e.g. v2.0.3)", required: false, type: string, default: "" }
+      matrix:      { description: "JSON build matrix from engine-meta", required: true, type: string }
+      package_dirs:          { description: "Dirs to package (libtorch needs share/bin)", required: false, type: string, default: "include lib" }
+      macos_universal_kinds: { description: "JSON array of kinds to lipo into a macOS universal archive", required: false, type: string, default: "[]" }
+      android_bundle_kinds:  { description: "JSON array of kinds to combine into a multi-ABI Android archive", required: false, type: string, default: "[]" }
+      has_ios:     { description: "Run the iOS xcframework job (engines/<engine>/ios.sh)", required: false, type: boolean, default: false }
     secrets:
-      APPLE_SIGN_IDENTITY:
-        required: false
-      APPLE_CERT_P12_BASE64:
-        required: false
-      APPLE_CERT_PASSWORD:
-        required: false
-
-# Pinned ci-actions ref — bump deliberately.
-# tanh-lab/ci-actions @ bbdd199 (main as of 2026-06-08)
-env:
-  CI_ACTIONS_REF: bbdd199c8796cdec6f064827eedc45028cd60ce3
-  NDK_VERSION: r27b
-  EMSDK_VERSION: 4.0.23
+      APPLE_SIGN_IDENTITY:   { required: false }
+      APPLE_CERT_P12_BASE64: { required: false }
+      APPLE_CERT_PASSWORD:   { required: false }
 
 jobs:
   build:
-    name: ${{ matrix.label }}-${{ matrix.kind }}${{ matrix.config == 'Debug' && '-debug' || '' }}
+    name: ${{ matrix.preset }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -65,141 +41,60 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # tanh-lab/ci-actions @ bbdd199 (main as of 2026-06-08) — bump deliberately.
       - name: setup build tools
         uses: tanh-lab/ci-actions/setup-cpp-build-tools@bbdd199c8796cdec6f064827eedc45028cd60ce3
-
-      # ci-actions only installs deps for the `Linux-x86_64` name; ensure ninja
-      # exists on the arm64 / android / wasm ubuntu rows too.
-      - name: ensure ninja (Linux fallback)
-        if: ${{ runner.os == 'Linux' }}
-        shell: bash
-        run: command -v ninja >/dev/null || { sudo apt-get update && sudo apt-get install -y ninja-build; }
-
-      - name: setup Android NDK
-        if: ${{ matrix.toolchain == 'android' }}
-        uses: nttld/setup-ndk@v1
+      - name: setup toolchain
+        uses: ./.github/actions/setup-toolchain
         with:
-          ndk-version: ${{ env.NDK_VERSION }}
+          toolchain:    ${{ matrix.toolchain }}
+          msvc_arch:    ${{ matrix.msvcArch }}
+          engine:       ${{ inputs.engine }}
+          source:       ${{ matrix.source }}
+          version:      ${{ inputs.version }}
+          cache_suffix: ${{ matrix.name }}
 
-      - name: setup emsdk (wasm)
-        if: ${{ matrix.toolchain == 'wasm' }}
-        uses: mymindstorm/setup-emsdk@v14
+      # Build / repackage + install + (litert static) bundle -> staging/<archive>.
+      - name: stage build
+        id: b
+        uses: ./.github/actions/stage-build
         with:
-          version: ${{ env.EMSDK_VERSION }}
-          actions-cache-folder: emsdk-cache-${{ env.EMSDK_VERSION }}
-
-      # Load the MSVC dev environment so cl.exe/lib.exe are on PATH (Ninja build +
-      # static bundling). matrix.msvc_arch is x64 or arm64 (both native).
-      - name: setup MSVC env (Windows)
-        if: ${{ runner.os == 'Windows' }}
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: ${{ matrix.msvc_arch }}
-
-      # ----------------------------------------------------------------------
-      # Configure + build the preset. Presets/CMakeLists live in <backend>/, so
-      # we run from there (ci-actions cmake-build assumes presets at repo root).
-      # sccache mirrors what cmake-build does; skipped for the emscripten target.
-      # ----------------------------------------------------------------------
-      - name: sccache
-        uses: mozilla-actions/sccache-action@v0.0.8
-
-      - name: launcher flags
-        id: cfg
-        shell: bash
-        run: |
-          # No sccache for wasm, or for MSVC Debug: /Z7 emits no .pdb but CMake still
-          # passes /Fd, so sccache errors trying to cache a pdb that doesn't exist.
-          if [ "${{ matrix.toolchain }}" = "wasm" ] || [ "${{ matrix.config }}" = "Debug" ]; then
-            echo "launchers=" >> "$GITHUB_OUTPUT"
-          else
-            echo "launchers=-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: configure
-        working-directory: ${{ inputs.backend_dir }}
-        shell: bash
-        run: cmake --preset ${{ matrix.preset }} ${{ steps.cfg.outputs.launchers }}
-
-      - name: build
-        working-directory: ${{ inputs.backend_dir }}
-        shell: bash
-        run: cmake --build --preset ${{ matrix.preset }} -j
-
-      # ----------------------------------------------------------------------
-      # Compose the anira archive name and install into a staging prefix.
-      # ----------------------------------------------------------------------
-      - name: compose archive name
-        id: name
-        shell: bash
-        run: |
-          base="${{ inputs.libname }}-${{ inputs.version }}"
-          if [ "${{ matrix.toolchain }}" = "wasm" ]; then
-            # wasm is ABI-tied to the toolchain → key by emsdk version
-            name="${base}-wasm-emsdk-${EMSDK_VERSION}"
-          else
-            name="${base}-${{ matrix.os }}-${{ matrix.arch }}"
-            [ "${{ matrix.kind }}" = "static" ] && name="${name}-static"
-            [ "${{ matrix.config }}" = "Debug" ] && name="${name}-debug"
-          fi
-          echo "archive=$name" >> "$GITHUB_OUTPUT"
-
-      - name: install
-        shell: bash
-        run: |
-          cmake --install "${{ inputs.backend_dir }}/build/${{ matrix.preset }}" \
-            --config Release \
-            --prefix "staging/${{ steps.name.outputs.archive }}"
-
-      # Static builds: the installed libtensorflowlite_c.a holds only C-API
-      # objects. Merge in all transitive dependency archives so the shipped lib
-      # is a single, self-contained, drop-in archive.
-      - name: bundle static deps
-        if: ${{ matrix.kind == 'static' }}
-        shell: bash
-        run: |
-          libdir="staging/${{ steps.name.outputs.archive }}/lib"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            out="$libdir/tensorflowlite_c.lib"
-          else
-            out="$libdir/libtensorflowlite_c.a"
-          fi
-          bash shared/bundle-static.sh "${{ inputs.backend_dir }}/build/${{ matrix.preset }}" "$out"
-
-      # NOTE: macOS codesigning is intentionally OFF this round (shared/sign-macos.sh
-      # stays in the repo for when Developer ID signing is enabled later).
+          preset:  ${{ matrix.preset }}
+          name:    ${{ matrix.name }}
+          kind:    ${{ matrix.kind }}
+          config:  ${{ matrix.config }}
+          engine:  ${{ inputs.engine }}
+          libname: ${{ inputs.libname }}
+          version: ${{ inputs.version }}
+          source:  ${{ matrix.source }}
+          asset:      ${{ matrix.asset }}
+          ext:        ${{ matrix.ext }}
+          cpu_suffix: ${{ matrix.cpuSuffix }}
+          flavor:     ${{ matrix.flavor }}
 
       - name: package
         shell: bash
-        run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist
+        run: PACKAGE_DIRS="${{ inputs.package_dirs }}" bash shared/package.sh "${{ steps.b.outputs.staging }}" "${{ steps.b.outputs.archive }}" dist
 
-      - name: upload build artifact
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.name.outputs.archive }}
-          path: dist/${{ steps.name.outputs.archive }}.zip
+          name: ${{ steps.b.outputs.archive }}
+          path: dist/${{ steps.b.outputs.archive }}.zip
           retention-days: 14
 
-      # Hard gate: compile + link the example against the PACKAGED artifact (the
-      # static link proves the bundled .a is complete) and run a forward pass on
-      # native targets. Runs after upload (so the artifact is kept for debugging)
-      # but before publish, so a broken artifact never reaches a release.
-      # TFLite-specific model path; parameterize when other backends are added.
-      - name: smoke test
-        if: ${{ matrix.toolchain == 'none' }}
+      # Desktop smoke gate (native run) against the staged archive. canRun==1 marks the
+      # runnable desktop legs; the multi-ABI Android AAR leg (toolchain none, canRun 0)
+      # is not host-smokeable and is skipped here.
+      - name: smoke (desktop)
+        if: ${{ matrix.toolchain == 'none' && matrix.canRun == '1' }}
         shell: bash
-        run: |
-          bash shared/smoke-test.sh \
-            "staging/${{ steps.name.outputs.archive }}" \
-            "${{ inputs.backend_dir }}/test/smoke.cpp" \
-            "${{ inputs.backend_dir }}/build/${{ matrix.preset }}/_deps/tensorflow-src/tensorflow/lite/testdata/add.bin" \
-            "${{ matrix.kind }}" "${{ matrix.arch }}" "${{ matrix.can_run }}" "${{ matrix.config }}"
+        run: bash engines/${{ inputs.engine }}/smoke.sh "${{ steps.b.outputs.staging }}" "${{ matrix.kind }}" "${{ matrix.arch }}" "${{ matrix.config }}" "${{ matrix.canRun }}"
 
-      # Android can't run on the build host — NDK-cross-compile the smoke here,
-      # then run it on an emulator via adb (x86_64 = KVM-accelerated; arm64-v8a =
-      # software-emulated on the x64 host, slower). Same forward pass: 1->3, 3->9.
-      - name: android smoke - build binary + model
-        if: ${{ matrix.toolchain == 'android' }}
+      # Android: NDK-cross-compile the smoke, run on a KVM-accelerated x86_64 emulator
+      # (arm64-v8a software emulation hangs -> compile+link only). litert only — the model
+      # + lib are TFLite-specific; onnx Android stays build-only as before.
+      - name: smoke (android, build binary)
+        if: ${{ matrix.toolchain == 'android' && inputs.engine == 'litert' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -210,23 +105,15 @@ jobs:
             arm64-v8a) cxx="$tc/aarch64-linux-android24-clang++" ;;
             *) echo "::error::unknown android abi ${{ matrix.arch }}"; exit 1 ;;
           esac
-          st="staging/${{ steps.name.outputs.archive }}"
-          if [ "${{ matrix.kind }}" = "static" ]; then lib="$st/lib/libtensorflowlite_c.a"
-          else lib="$st/lib/libtensorflowlite_c.so"; fi
-          # -static-libstdc++ : link libc++ statically so the device doesn't need
-          # libc++_shared.so (not present in /data/local/tmp).
-          "$cxx" -std=c++17 -static-libstdc++ -I "$st/include" "${{ inputs.backend_dir }}/test/smoke.cpp" \
-            "$lib" -llog -lm -o smoke_android
+          st="${{ steps.b.outputs.staging }}"
+          if [ "${{ matrix.kind }}" = "static" ]; then lib="$st/lib/lib${{ inputs.libname }}.a"; else lib="$st/lib/lib${{ inputs.libname }}.so"; fi
+          "$cxx" -std=c++17 -static-libstdc++ -I "$st/include" engines/${{ inputs.engine }}/test/smoke.cpp "$lib" -llog -lm -o smoke_android
           file smoke_android
           curl -fsSL "https://raw.githubusercontent.com/tensorflow/tensorflow/v${{ inputs.version }}/tensorflow/lite/testdata/add.bin" -o add.bin
-          # KVM accelerates the x86_64 emulator
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
-
-      # Only x86_64 runs on an emulator (KVM-accelerated). arm64-v8a would be
-      # software-emulated on the x64 host (hangs), so it's compile+link-only above.
-      - name: android smoke - run on emulator
-        if: ${{ matrix.toolchain == 'android' && matrix.arch == 'x86_64' && matrix.kind == 'static' }}
+      - name: smoke (android, run on emulator)
+        if: ${{ matrix.toolchain == 'android' && inputs.engine == 'litert' && matrix.arch == 'x86_64' && matrix.kind == 'static' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -238,130 +125,120 @@ jobs:
             adb push smoke_android /data/local/tmp/smoke
             adb push add.bin /data/local/tmp/add.bin
             adb shell chmod 755 /data/local/tmp/smoke
-            # adb shell doesn't reliably propagate exit codes, so assert on output
             adb shell "/data/local/tmp/smoke /data/local/tmp/add.bin" 2>&1 | tee out.txt
             grep -q PASS out.txt
 
-      # Per-ABI Android builds are intermediate — combined into one multi-ABI
-      # bundle below — so they don't publish standalone.
-      - name: publish to release
-        if: ${{ inputs.release && matrix.os != 'Android' }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="${{ inputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || \
-            gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
+      # Publish standalone, except intermediate per-ABI Android legs (toolchain==android),
+      # which are combined into one multi-ABI archive below. The multi-ABI AAR leg
+      # (toolchain==none, arch==multi) publishes here directly.
+      - name: publish
+        if: ${{ inputs.release && matrix.toolchain != 'android' }}
+        uses: ./.github/actions/publish-release
+        with:
+          tag: ${{ inputs.release_tag }}
+          file: dist/${{ steps.b.outputs.archive }}.zip
+          token: ${{ github.token }}
 
   # --------------------------------------------------------------------------
-  # macOS universal: lipo the x86_64 + arm64 slices into one fat archive.
-  # Runs after the build matrix; consumes the two macOS artifacts per kind.
+  # macOS universal: lipo the x86_64 + arm64 per-arch archives into one fat tree.
   # --------------------------------------------------------------------------
   macos-universal:
-    name: macOS-universal-${{ matrix.kind }}
     needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && inputs.macos_universal_kinds != '[]' }}
+    name: macOS-universal-${{ matrix.kind }}
     runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
-        kind: [shared, static]
+        kind: ${{ fromJSON(inputs.macos_universal_kinds) }}
     steps:
       - uses: actions/checkout@v6
-
-      - name: compose names
+      - name: names
         id: n
         shell: bash
         run: |
           base="${{ inputs.libname }}-${{ inputs.version }}"
-          sfx=""; [ "${{ matrix.kind }}" = "static" ] && sfx="-static"
           {
-            echo "x64=${base}-macOS-x86_64${sfx}"
-            echo "arm=${base}-macOS-arm64${sfx}"
-            echo "uni=${base}-macOS-universal${sfx}"
-            if [ "${{ matrix.kind }}" = "static" ]; then echo "lib=libtensorflowlite_c.a"; else echo "lib=libtensorflowlite_c.dylib"; fi
+            echo "x64=${base}-macOS-x86_64-${{ matrix.kind }}"
+            echo "arm=${base}-macOS-arm64-${{ matrix.kind }}"
+            echo "uni=${base}-macOS-universal-${{ matrix.kind }}"
           } >> "$GITHUB_OUTPUT"
-
       - uses: actions/download-artifact@v8
         with: { name: "${{ steps.n.outputs.x64 }}", path: dl/x64 }
       - uses: actions/download-artifact@v8
         with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
 
-      - name: lipo + repackage
+      - name: lipo + assemble universal tree
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p ex/x64 ex/arm
           unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
           unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
+          stage="staging/${{ steps.n.outputs.uni }}"; mkdir -p "$stage/lib"
+          cp -R ex/arm/include "$stage/include"
+          if [ "${{ inputs.engine }}" = "libtorch" ]; then
+            # full package tree: arch-independent parts once, lipo every Mach-O dylib present
+            # in both slices, copy-through everything else (symlinks, non-fat files).
+            cp -R ex/arm/share "$stage/share"
+            [ -d ex/arm/bin ] && cp -R ex/arm/bin "$stage/bin"
+            for f in ex/arm/lib/*; do
+              b="$(basename "$f")"
+              if [ -f "ex/x64/lib/$b" ] && file -b "$f" | grep -q 'Mach-O'; then
+                lipo -create "ex/arm/lib/$b" "ex/x64/lib/$b" -output "$stage/lib/$b" || cp -R "$f" "$stage/lib/$b"
+              else
+                cp -R "$f" "$stage/lib/$b"
+              fi
+            done
+          else
+            # single lib (litert / onnx)
+            if [ "${{ matrix.kind }}" = "static" ]; then libf="lib${{ inputs.libname }}.a"; else libf="lib${{ inputs.libname }}.dylib"; fi
+            lipo -create "ex/x64/lib/$libf" "ex/arm/lib/$libf" -output "$stage/lib/$libf"
+            lipo -info "$stage/lib/$libf"
+          fi
+          PACKAGE_DIRS="${{ inputs.package_dirs }}" bash shared/package.sh "$stage" "${{ steps.n.outputs.uni }}" dist
 
-          stage="staging/${{ steps.n.outputs.uni }}"
-          mkdir -p "$stage/lib"
-          # headers are arch-independent — take one copy
-          cp -R ex/x64/include "$stage/include"
-          lipo -create \
-            "ex/x64/lib/${{ steps.n.outputs.lib }}" \
-            "ex/arm/lib/${{ steps.n.outputs.lib }}" \
-            -output "$stage/lib/${{ steps.n.outputs.lib }}"
-          lipo -info "$stage/lib/${{ steps.n.outputs.lib }}"
-
-          bash shared/package.sh "$stage" "${{ steps.n.outputs.uni }}" dist
+      - name: smoke (universal, arm64 slice)
+        shell: bash
+        run: bash engines/${{ inputs.engine }}/smoke.sh "staging/${{ steps.n.outputs.uni }}" "${{ matrix.kind }}" arm64 Release 1
 
       - uses: actions/upload-artifact@v7
-        with:
-          name: ${{ steps.n.outputs.uni }}
-          path: dist/${{ steps.n.outputs.uni }}.zip
-          retention-days: 14
-
-      - name: publish to release
+        with: { name: "${{ steps.n.outputs.uni }}", path: "dist/${{ steps.n.outputs.uni }}.zip", retention-days: 14 }
+      - name: publish
         if: ${{ inputs.release }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="${{ inputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || \
-            gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.n.outputs.uni }}.zip" --clobber
+        uses: ./.github/actions/publish-release
+        with: { tag: "${{ inputs.release_tag }}", file: "dist/${{ steps.n.outputs.uni }}.zip", token: "${{ github.token }}" }
 
   # --------------------------------------------------------------------------
-  # Android: combine the per-ABI static libs into ONE multi-ABI archive with
-  # lib/<abi>/ — the layout Android/NDK tooling expects (like an AAR's jni/<abi>/).
-  # The per-ABI build jobs are intermediate; only this combined archive ships.
+  # Android: combine per-ABI archives into one multi-ABI archive (lib/<abi>/…).
   # --------------------------------------------------------------------------
   android-bundle:
-    name: Android-${{ matrix.kind }}
     needs: build
-    if: ${{ contains(inputs.matrix, 'android') }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && inputs.android_bundle_kinds != '[]' }}
+    name: Android-${{ matrix.kind }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        kind: [static, shared]
+        kind: ${{ fromJSON(inputs.android_bundle_kinds) }}
     steps:
       - uses: actions/checkout@v6
-
-      - name: compose names
+      - name: names
         id: n
         shell: bash
         run: |
           base="${{ inputs.libname }}-${{ inputs.version }}"
-          # static archives carry the -static suffix and a .a; shared are bare with a .so.
-          if [ "${{ matrix.kind }}" = "static" ]; then sfx="-static"; lib="libtensorflowlite_c.a"
-          else sfx=""; lib="libtensorflowlite_c.so"; fi
+          if [ "${{ matrix.kind }}" = "static" ]; then libf="lib${{ inputs.libname }}.a"; else libf="lib${{ inputs.libname }}.so"; fi
           {
-            echo "arm=${base}-Android-arm64-v8a${sfx}"
-            echo "x64=${base}-Android-x86_64${sfx}"
-            echo "bundle=${base}-Android${sfx}"
-            echo "lib=$lib"
+            echo "arm=${base}-Android-arm64-v8a-${{ matrix.kind }}"
+            echo "x64=${base}-Android-x86_64-${{ matrix.kind }}"
+            echo "bundle=${base}-Android-${{ matrix.kind }}"
+            echo "libf=$libf"
           } >> "$GITHUB_OUTPUT"
-
       - uses: actions/download-artifact@v8
         with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
       - uses: actions/download-artifact@v8
         with: { name: "${{ steps.n.outputs.x64 }}", path: dl/x64 }
-
       - name: assemble multi-ABI bundle
         shell: bash
         run: |
@@ -371,110 +248,45 @@ jobs:
           unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
           stage="staging/${{ steps.n.outputs.bundle }}"
           mkdir -p "$stage/lib/arm64-v8a" "$stage/lib/x86_64"
-          cp -R ex/arm/include "$stage/include"   # headers are ABI-independent
-          cp "ex/arm/lib/${{ steps.n.outputs.lib }}" "$stage/lib/arm64-v8a/"
-          cp "ex/x64/lib/${{ steps.n.outputs.lib }}" "$stage/lib/x86_64/"
+          cp -R ex/arm/include "$stage/include"
+          cp "ex/arm/lib/${{ steps.n.outputs.libf }}" "$stage/lib/arm64-v8a/"
+          cp "ex/x64/lib/${{ steps.n.outputs.libf }}" "$stage/lib/x86_64/"
           bash shared/package.sh "$stage" "${{ steps.n.outputs.bundle }}" dist
-
       - uses: actions/upload-artifact@v7
-        with:
-          name: ${{ steps.n.outputs.bundle }}
-          path: dist/${{ steps.n.outputs.bundle }}.zip
-          retention-days: 14
-
-      - name: publish to release
+        with: { name: "${{ steps.n.outputs.bundle }}", path: "dist/${{ steps.n.outputs.bundle }}.zip", retention-days: 14 }
+      - name: publish
         if: ${{ inputs.release }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="${{ inputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || \
-            gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.n.outputs.bundle }}.zip" --clobber
+        uses: ./.github/actions/publish-release
+        with: { tag: "${{ inputs.release_tag }}", file: "dist/${{ steps.n.outputs.bundle }}.zip", token: "${{ github.token }}" }
 
   # --------------------------------------------------------------------------
-  # iOS: repackage Google's official prebuilt TensorFlowLiteC.xcframework (CPU,
-  # static, device + simulator). No build — the per-version download URL is read
-  # from the CocoaPods podspec. Independent of the build matrix.
+  # iOS xcframework: engines/<engine>/ios.sh repackages (litert) or builds (onnx) it,
+  # smoke-gates on the simulator, and produces dist/<archive>.zip.
   # --------------------------------------------------------------------------
-  ios-xcframework:
+  ios:
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && inputs.has_ios }}
     name: iOS-xcframework
-    if: ${{ inputs.backend == 'litert' }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
-
-      - name: download prebuilt xcframework
-        id: dl
-        shell: bash
-        run: |
-          set -euo pipefail
-          VER="${{ inputs.version }}"
-          # CocoaPods Specs shard for "TensorFlowLiteC" = 1/6/0
-          spec="https://raw.githubusercontent.com/CocoaPods/Specs/master/Specs/1/6/0/TensorFlowLiteC/${VER}/TensorFlowLiteC.podspec.json"
-          url="$(curl -fsSL "$spec" | python3 -c 'import json,sys; print(json.load(sys.stdin)["source"]["http"])')"
-          echo "framework url: $url"
-          curl -fsSL "$url" -o tflc.tar.gz
-          mkdir -p ex && tar -xzf tflc.tar.gz -C ex
-          # base CPU framework only (not TensorFlowLiteCMetal/CoreML)
-          xcf="$(find ex -maxdepth 4 -type d -name 'TensorFlowLiteC.xcframework' | head -1)"
-          [ -n "$xcf" ] || { echo "::error::TensorFlowLiteC.xcframework not found"; exit 1; }
-          echo "xcf=$xcf" >> "$GITHUB_OUTPUT"
-
-      - name: validate slices
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcf="${{ steps.dl.outputs.xcf }}"
-          echo "slices:"; ls "$xcf"
-          ls "$xcf" | grep -q 'ios-arm64'   || { echo "::error::no device (ios-arm64) slice"; exit 1; }
-          ls "$xcf" | grep -qi 'simulator'  || { echo "::error::no simulator slice"; exit 1; }
-          # symbol usability is verified by the compile+link smoke step below.
-
-      # Smoke gate: compile + link smoke.cpp against the simulator slice (the
-      # framework header resolves via __has_include), then RUN it on a booted
-      # simulator via `simctl spawn` and check the real forward pass (1->3, 3->9).
-      - name: smoke test (compile + run, iphonesimulator)
-        shell: bash
-        run: |
-          set -euo pipefail
-          xcf="${{ steps.dl.outputs.xcf }}"
-          fw_dir="$(find "$xcf" -maxdepth 1 -type d -name '*simulator*' | head -1)"
-          sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-          clang++ -std=c++17 -arch arm64 -isysroot "$sdk" -mios-simulator-version-min=12.0 \
-            -F "$fw_dir" -framework TensorFlowLiteC -framework Foundation \
-            "${{ inputs.backend_dir }}/test/smoke.cpp" -o smoke_ios
-          # add.bin isn't fetched here (no build) — pull it from the tensorflow source at our version
-          curl -fsSL "https://raw.githubusercontent.com/tensorflow/tensorflow/v${{ inputs.version }}/tensorflow/lite/testdata/add.bin" -o add.bin
-          dev="$(xcrun simctl list devices available | grep -m1 -oE '[0-9A-F-]{36}')"
-          xcrun simctl boot "$dev" 2>/dev/null || true
-          xcrun simctl spawn "$dev" "$PWD/smoke_ios" "$PWD/add.bin"   # exits non-zero on wrong output
-
-      - name: repackage
-        id: pack
+      - name: setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          engine:  ${{ inputs.engine }}
+          source:  build
+          version: ${{ inputs.version }}
+      - name: build/repackage xcframework
+        id: x
         shell: bash
         run: |
           set -euo pipefail
           archive="${{ inputs.libname }}-${{ inputs.version }}-iOS-xcframework"
-          mkdir -p dist "staging/$archive"
-          cp -R "${{ steps.dl.outputs.xcf }}" "staging/$archive/"
-          ( cd "staging/$archive" && cmake -E tar cf "$GITHUB_WORKSPACE/dist/$archive.zip" --format=zip TensorFlowLiteC.xcframework )
+          bash engines/${{ inputs.engine }}/ios.sh "$archive"
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
-
       - uses: actions/upload-artifact@v7
-        with:
-          name: ${{ steps.pack.outputs.archive }}
-          path: dist/${{ steps.pack.outputs.archive }}.zip
-          retention-days: 14
-
-      - name: publish to release
+        with: { name: "${{ steps.x.outputs.archive }}", path: "dist/${{ steps.x.outputs.archive }}.zip", retention-days: 14 }
+      - name: publish
         if: ${{ inputs.release }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag="${{ inputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || \
-            gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.pack.outputs.archive }}.zip" --clobber
+        uses: ./.github/actions/publish-release
+        with: { tag: "${{ inputs.release_tag }}", file: "dist/${{ steps.x.outputs.archive }}.zip", token: "${{ github.token }}" }

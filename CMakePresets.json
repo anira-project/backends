@@ -1,0 +1,231 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+
+  "vendor": {
+    "anira": {
+      "doc": "SINGLE SOURCE OF TRUTH. Each visible <engine>-<platform>-<arch>-<kind>[-debug] preset drives the build (cacheVariables) AND carries its CI + naming metadata in vendor.anira, which engine-meta jq-parses into the CI matrix. There is no ci-matrix.json. Canonical artifact/job name = vendor.anira.name; the ARM token is aarch64 on Linux, arm64 elsewhere, arm64-v8a for Android ABIs."
+    }
+  },
+
+  "include": ["engines/litert/presets-base.json"],
+
+  "configurePresets": [
+    {
+      "name": "orch-base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "generator": "Ninja",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" },
+      "environment": { "CMAKE_POLICY_VERSION_MINIMUM": "3.5" }
+    },
+
+    {
+      "name": "litert-macos-x86_64-shared", "inherits": ["macos-x64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "macOS-x86_64", "runner": "macos-15", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-macos-x86_64-static", "inherits": ["macos-x64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "macOS-x86_64", "runner": "macos-15", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-macos-arm64-shared", "inherits": ["macos-arm64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "macOS-arm64", "runner": "macos-15", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-macos-arm64-static", "inherits": ["macos-arm64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "macOS-arm64", "runner": "macos-15", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-linux-x86_64-shared", "inherits": ["linux-x64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Linux-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-linux-x86_64-static", "inherits": ["linux-x64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Linux-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-linux-aarch64-shared", "inherits": ["linux-arm64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Linux-aarch64", "runner": "ubuntu-24.04-arm", "arch": "aarch64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-linux-aarch64-static", "inherits": ["linux-arm64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Linux-aarch64", "runner": "ubuntu-24.04-arm", "arch": "aarch64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-x86_64-shared", "inherits": ["windows-x64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-x86_64-static", "inherits": ["windows-x64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-x86_64-static-debug", "inherits": ["windows-x64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "CMAKE_BUILD_TYPE": "Debug" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "static", "config": "Debug", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-arm64-shared", "inherits": ["windows-arm64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-arm64-static", "inherits": ["windows-arm64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-arm64-static-debug", "inherits": ["windows-arm64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "CMAKE_BUILD_TYPE": "Debug" },
+      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Debug", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
+    },
+    {
+      "name": "litert-android-arm64-v8a-shared", "inherits": ["android-arm64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Android-arm64-v8a", "runner": "ubuntu-24.04", "arch": "arm64-v8a", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "android", "source": "build" } }
+    },
+    {
+      "name": "litert-android-arm64-v8a-static", "inherits": ["android-arm64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Android-arm64-v8a", "runner": "ubuntu-24.04", "arch": "arm64-v8a", "kind": "static", "config": "Release", "canRun": "0", "toolchain": "android", "source": "build" } }
+    },
+    {
+      "name": "litert-android-x86_64-shared", "inherits": ["android-x64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Android-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "android", "source": "build" } }
+    },
+    {
+      "name": "litert-android-x86_64-static", "inherits": ["android-x64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "vendor": { "anira": { "name": "Android-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "0", "toolchain": "android", "source": "build" } }
+    },
+
+    {
+      "name": "onnx-macos-x86_64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "macOS-x86_64", "runner": "macos-15", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "onnx-macos-arm64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "macOS-arm64", "runner": "macos-15", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "onnx-linux-x86_64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Linux-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "onnx-linux-aarch64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "aarch64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Linux-aarch64", "runner": "ubuntu-24.04-arm", "arch": "aarch64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "onnx-windows-x86_64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
+    },
+    {
+      "name": "onnx-windows-x86_64-static-debug", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Debug", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "static", "config": "Debug", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
+    },
+    {
+      "name": "onnx-windows-arm64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
+    },
+    {
+      "name": "onnx-windows-arm64-static-debug", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Debug", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Debug", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
+    },
+    {
+      "name": "onnx-android-arm64-v8a-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "android", "BACKENDS_ARCH": "arm64-v8a", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Android-arm64-v8a", "runner": "ubuntu-24.04", "arch": "arm64-v8a", "kind": "static", "config": "Release", "canRun": "0", "toolchain": "android", "source": "build" } }
+    },
+    {
+      "name": "onnx-android-x86_64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "android", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Android-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "0", "toolchain": "android", "source": "build" } }
+    },
+    {
+      "name": "onnx-macos-x86_64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "macOS-x86_64", "runner": "macos-15", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "onnx-macos-arm64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "macOS-arm64", "runner": "macos-15", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "onnx-linux-x86_64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Linux-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "prebuilt", "flavor": "linux", "asset": "onnxruntime-linux-x64", "ext": "tgz" } }
+    },
+    {
+      "name": "onnx-linux-aarch64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "aarch64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Linux-aarch64", "runner": "ubuntu-24.04-arm", "arch": "aarch64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "prebuilt", "flavor": "linux", "asset": "onnxruntime-linux-aarch64", "ext": "tgz" } }
+    },
+    {
+      "name": "onnx-windows-x86_64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "prebuilt", "flavor": "windows", "asset": "onnxruntime-win-x64", "ext": "zip" } }
+    },
+    {
+      "name": "onnx-windows-arm64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "prebuilt", "flavor": "windows", "asset": "onnxruntime-win-arm64", "ext": "zip" } }
+    },
+    {
+      "name": "onnx-android-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "android", "BACKENDS_ARCH": "multi", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt", "BACKENDS_ABIS": "arm64-v8a x86_64" },
+      "vendor": { "anira": { "name": "Android", "runner": "ubuntu-24.04", "arch": "multi", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "none", "source": "prebuilt", "flavor": "android-aar", "abis": "arm64-v8a x86_64" } }
+    },
+
+    {
+      "name": "libtorch-macos-x86_64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "libtorch", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "macOS-x86_64", "runner": "macos-15-intel", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "libtorch-macos-arm64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "libtorch", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "macOS-arm64", "runner": "macos-15", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "libtorch-linux-x86_64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "libtorch", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Linux-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "prebuilt", "asset": "libtorch-shared-with-deps", "cpuSuffix": "%2Bcpu" } }
+    },
+    {
+      "name": "libtorch-linux-aarch64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "libtorch", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "aarch64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Linux-aarch64", "runner": "ubuntu-24.04-arm", "arch": "aarch64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "libtorch-windows-x86_64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "libtorch", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "prebuilt", "asset": "libtorch-win-shared-with-deps", "cpuSuffix": "%2Bcpu" } }
+    },
+    {
+      "name": "libtorch-windows-arm64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "libtorch", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
+    }
+  ]
+}

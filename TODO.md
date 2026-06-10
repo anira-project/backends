@@ -1,5 +1,17 @@
 # TODO
 
+## Done — unified CI + CMake orchestrator (presets are the single source of truth)
+- Root `CMakePresets.json`: every leg is a preset `<engine>-<platform>-<arch>-<kind>[-debug]`;
+  `cacheVariables` drive the build, `vendor.anira` carries the CI/naming row. **No `ci-matrix.json`** —
+  `engine-meta` jq-generates the matrix from the presets. Hidden bases shared via `engines/litert/presets-base.json`.
+- Root `CMakeLists.txt` orchestrator: `cmake --preset` builds any engine (litert native `add_subdirectory`;
+  onnx/libtorch via `cmake/ExternalEngine.cmake` → `engines/<eng>/stage.sh`), then `cmake --install --prefix staging/<archive>`.
+- In-repo composite actions: `engine-meta`, `setup-toolchain`, `stage-build`, `publish-release`.
+  `_build-backend.yml` is engine-agnostic; `litert/onnxruntime/libtorch.yml` are thin wrappers (~65 lines each).
+- **Consistent naming**: archive/job/preset all share `<platform>-<arch>-<kind>` (ARM = aarch64 on Linux,
+  arm64 elsewhere, arm64-v8a for Android). `-<kind>` is now ALWAYS present (litert-shared / libtorch gained `-shared`).
+- NOTE: static-checked only (YAML/jq/`cmake --list-presets`/`bash -n`); build legs need a CI run to bless.
+
 ## Done — LiteRT, all platforms green + smoke-gated
 - macOS x64 / arm64 / universal — shared + static
 - Linux x64 / aarch64 — shared + static
@@ -131,4 +143,4 @@ Walls already cleared by the from-source recipe (kept): clone MAX_PATH (longpath
 - Backends: researching `executorch/` — static + AOT `.pte` model question
 - Linux `armv7l` (Bela) — needs `-DTFLITE_ENABLE_XNNPACK=OFF`
 - anira-side: `cmake/SetupTensorflowLite.cmake` to consume the new mobile/static archives
-- Contribute a `SOURCE_DIR` input to `tanh-lab/ci-actions/cmake-build` (drop our workaround)
+  (use the new always-`-<kind>` archive names)

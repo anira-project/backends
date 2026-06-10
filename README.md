@@ -18,6 +18,13 @@ Backends are versioned independently but **released together, keyed to the anira
 version**: tag `v2.0.3` builds every backend at its pinned `engines/<backend>/VERSION`
 and publishes all archives to a single release `v2.0.3`.
 
+The root `CMakePresets.json` is the single source of truth: every build leg is a preset
+(`<engine>-<platform>-<arch>-<kind>[-debug]`) whose `vendor.anira` block also carries the
+CI matrix row — there is no `ci-matrix.json`. One CMake orchestrator builds any engine
+(`cmake --preset … && cmake --build && cmake --install`); the per-engine workflows are thin
+wrappers over the shared `_build-backend.yml` pipeline and the `.github/actions/` verbs.
+See [docs/RELEASE.md](./docs/RELEASE.md).
+
 ## License
 
 This repo is licenced under [Apache-2.0](./LICENSE).

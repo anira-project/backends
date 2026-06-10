@@ -1,3 +1,0 @@
-[
-  { "label": "Wasm",           "name": "Wasm",           "runner": "ubuntu-24.04", "preset": "wasm-static",          "os": "wasm",    "arch": "wasm32",    "kind": "static", "toolchain": "wasm" }
-]

@@ -16,13 +16,24 @@ mkdir -p "$OUT"
 OUT_ABS="$(cd "$OUT" && pwd)/${NAME}.zip"
 
 # Dirs to archive. Defaults to include + lib (LiteRT/ONNXRuntime layout). libtorch
-# overrides with PACKAGE_DIRS="include lib share [bin]" — it ships a full CMake
-# package tree consumed via find_package(Torch), so share/ must be preserved.
+# overrides with PACKAGE_DIRS="include lib share bin" — it ships a full CMake package
+# tree consumed via find_package(Torch), so share/ must be preserved.
+#
+# include and lib are REQUIRED (a missing one means a broken stage -> hard error). share
+# and bin are OPTIONAL: packaged when present, skipped otherwise (bin/ only exists on some
+# Windows libtorch builds), so a single fixed PACKAGE_DIRS works for every leg.
 DIRS="${PACKAGE_DIRS:-include lib}"
+PACK=""
 for d in $DIRS; do
-  [ -d "$STAGING/$d" ] || { echo "ERROR: $STAGING/$d missing"; exit 1; }
+  if [ -d "$STAGING/$d" ]; then
+    PACK="$PACK $d"
+  elif [ "$d" = "share" ] || [ "$d" = "bin" ]; then
+    echo "note: optional $STAGING/$d not present — skipping"
+  else
+    echo "ERROR: required $STAGING/$d missing"; exit 1
+  fi
 done
 
-( cd "$STAGING" && cmake -E tar cf "$OUT_ABS" --format=zip $DIRS )
+( cd "$STAGING" && cmake -E tar cf "$OUT_ABS" --format=zip $PACK )
 echo "Packaged $OUT_ABS"
 cmake -E tar tf "$OUT_ABS" | sed 's/^/  /'

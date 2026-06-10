@@ -36,9 +36,11 @@ What anira expects inside each archive:
 └── lib/        # shared (.dylib/.so/.dll) and/or static (.a/.lib); Android: lib/<abi>/…
 ```
 
-Naming: `<lib>-<engine-version>-<platform>-<arch>[-<kind>][-debug].zip`
-(e.g. `tensorflowlite_c-2.17.0-Windows-x64-static-debug.zip`,
-`onnxruntime-1.26.0-iOS-xcframework.zip`).
+Naming: `<lib>-<engine-version>-<platform>-<arch>-<kind>[-debug].zip` — the platform/arch
+token is the canonical `vendor.anira.name` from the preset (ARM = `aarch64` on Linux, `arm64`
+elsewhere, `arm64-v8a` for Android ABIs), and `-<kind>` (`shared`/`static`) is **always**
+present (e.g. `tensorflowlite_c-2.17.0-Windows-x86_64-static-debug.zip`,
+`libtorch-2.12.0-macOS-arm64-shared.zip`, `onnxruntime-1.26.0-iOS-xcframework.zip`).
 
 ## Smoke gate
 
@@ -54,10 +56,24 @@ KVM-accelerated emulator (arm64-v8a is compile+link only — software emulation 
 
 ## Build & infrastructure
 
-Build steps reuse [`tanh-lab/ci-actions`](https://github.com/tanh-lab/ci-actions)
-(`setup-cpp-build-tools`), pinned to a SHA. Shared cross-backend scripts (package,
-sign, static bundling) live in `shared/`; backend-specific build/smoke/repackage
-scripts live in `engines/<backend>/`.
+**Presets are the single source of truth.** Every build leg is one preset in the root
+`CMakePresets.json`; the preset's `cacheVariables` drive the build and its `vendor.anira`
+block carries the CI + naming metadata (runner, canonical name, kind, config, arch, canRun,
+toolchain, source, prebuilt-URL bits). There is **no `ci-matrix.json`** — the `engine-meta`
+action jq-generates the matrix from the presets.
+
+**One CMake orchestrator builds every engine.** `cmake --preset <preset>` → `cmake --build`
+→ `cmake --install --prefix staging/<archive>` produces a uniform tree for any engine on any
+platform: litert is a native CMake build (`add_subdirectory`); onnx/libtorch run their own
+build/repackage via `cmake/ExternalEngine.cmake` → `engines/<backend>/stage.sh`.
+
+**Workflows are thin.** `litert.yml` / `onnxruntime.yml` / `libtorch.yml` only derive
+meta + call the shared `_build-backend.yml` pipeline. The reusable CI "verbs" are in-repo
+composite actions (`.github/actions/`): `engine-meta`, `setup-toolchain`, `stage-build`,
+`publish-release`. Base compilers/Ninja come from [`tanh-lab/ci-actions`](https://github.com/tanh-lab/ci-actions)
+(`setup-cpp-build-tools`), pinned to a SHA. Shared cross-backend scripts (package, sign,
+static bundling) live in `shared/`; per-backend build/smoke/repackage/stage/ios scripts in
+`engines/<backend>/`.
 
 Static libs are merged from their scattered component archives into one drop-in lib
 by `shared/bundle-static.sh` (macOS `libtool`, Linux `ar -M`, Windows `lib.exe`).
