@@ -66,7 +66,10 @@ case "$PLATFORM" in
     export CMAKE_OSX_ARCHITECTURES="$ARCH"
     export MACOSX_DEPLOYMENT_TARGET=11.0   # >=10.15 → std::filesystem / aligned_alloc OK
     export USE_MKLDNN=1          # oneDNN is fine on x86_64; no system MKL needed
-    export BLAS=Eigen            # avoid a system-Accelerate/MKL dependency in the lib
+    # BLAS: no override — match PyTorch's macOS default (.ci/pytorch/macos-build.sh sets
+    # none), which auto-detects Apple Accelerate (AMX-tuned, full GEMM). Our earlier
+    # BLAS=Eigen only routed GEMM through Eigen while still linking Accelerate for LAPACK;
+    # the default gives full Accelerate → faster matmul.
     export USE_MPS=0             # no Metal in a CPU libtorch build
     # USE_NATIVE_ARCH=0: don't emit -march=native. The runner's CPU can advertise
     # AVX-512, and Apple Clang rejects PyTorch's `-mavx512fp16` (clang: unknown
