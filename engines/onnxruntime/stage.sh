@@ -38,7 +38,7 @@ cp "$HERE"/include/*.h "$ST/include/"
 if [ "$KIND" = "shared" ]; then
   # macOS only (Linux/Windows/Android shared come from prebuilt). Builds libonnxruntime.dylib
   # directly — one self-contained lib, no re2 force-build / no bundling.
-  bash "$HERE/build-ort.sh" "$PLATFORM" "$ARCH" "$CONFIG" build shared
+  bash "$HERE/build-ort.sh" "$PLATFORM" "$ARCH" "$CONFIG" "$HERE/build" shared
   dy="$(find "$HERE/build/$CONFIG" -maxdepth 1 -type f -name 'libonnxruntime*.dylib' | head -1)"
   [ -n "$dy" ] || { echo "ERROR: no shared dylib built under $HERE/build/$CONFIG"; exit 1; }
   cp "$dy" "$ST/lib/libonnxruntime.dylib"
@@ -47,7 +47,7 @@ else
   # static (all platforms incl. Android) — build the component .a/.lib then merge them into
   # one self-contained archive. Exclude /testdata/ fixtures + the full libprotobuf/libprotoc
   # (build-time only; onnxruntime runs on protobuf-lite). The smoke link proves completeness.
-  bash "$HERE/build-ort.sh" "$PLATFORM" "$ARCH" "$CONFIG" build static
+  bash "$HERE/build-ort.sh" "$PLATFORM" "$ARCH" "$CONFIG" "$HERE/build" static
   if [ "$PLATFORM" = "windows" ]; then out="$ST/lib/onnxruntime.lib"; else out="$ST/lib/libonnxruntime.a"; fi
   BUNDLE_EXCLUDE_REGEX='/testdata/|libprotoc|libprotobuf[d]?\.(lib|a)' \
     bash "$ROOT/shared/bundle-static.sh" "$HERE/build/$CONFIG" "$out"

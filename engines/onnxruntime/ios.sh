@@ -11,8 +11,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
 # Device + simulator static builds (full op set, CPU).
-bash "$HERE/build-ort.sh" ios      arm64 Release build-ios-device
-bash "$HERE/build-ort.sh" ios-sim  arm64 Release build-ios-sim
+bash "$HERE/build-ort.sh" ios      arm64 Release "$HERE/build-ios-device"
+bash "$HERE/build-ort.sh" ios-sim  arm64 Release "$HERE/build-ios-sim"
 
 # Merge each slice's component archives, then create the xcframework.
 bash "$ROOT/shared/bundle-static.sh" "$HERE/build-ios-device/Release" dev/libonnxruntime.a
