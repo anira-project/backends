@@ -73,8 +73,11 @@ jobs:
           flavor:     ${{ matrix.flavor }}
 
       - name: package
-        shell: bash
-        run: PACKAGE_DIRS="${{ inputs.package_dirs }}" bash shared/package.sh "${{ steps.b.outputs.staging }}" "${{ steps.b.outputs.archive }}" dist
+        uses: ./.github/actions/package
+        with:
+          staging: ${{ steps.b.outputs.staging }}
+          name: ${{ steps.b.outputs.archive }}
+          dirs: ${{ inputs.package_dirs }}
 
       - uses: actions/upload-artifact@v7
         with:
@@ -196,7 +199,13 @@ jobs:
             lipo -create "ex/x64/lib/$libf" "ex/arm/lib/$libf" -output "$stage/lib/$libf"
             lipo -info "$stage/lib/$libf"
           fi
-          PACKAGE_DIRS="${{ inputs.package_dirs }}" bash shared/package.sh "$stage" "${{ steps.n.outputs.uni }}" dist
+
+      - name: package
+        uses: ./.github/actions/package
+        with:
+          staging: staging/${{ steps.n.outputs.uni }}
+          name: ${{ steps.n.outputs.uni }}
+          dirs: ${{ inputs.package_dirs }}
 
       - name: smoke (universal, arm64 slice)
         shell: bash
@@ -251,7 +260,11 @@ jobs:
           cp -R ex/arm/include "$stage/include"
           cp "ex/arm/lib/${{ steps.n.outputs.libf }}" "$stage/lib/arm64-v8a/"
           cp "ex/x64/lib/${{ steps.n.outputs.libf }}" "$stage/lib/x86_64/"
-          bash shared/package.sh "$stage" "${{ steps.n.outputs.bundle }}" dist
+      - name: package
+        uses: ./.github/actions/package
+        with:
+          staging: staging/${{ steps.n.outputs.bundle }}
+          name: ${{ steps.n.outputs.bundle }}
       - uses: actions/upload-artifact@v7
         with: { name: "${{ steps.n.outputs.bundle }}", path: "dist/${{ steps.n.outputs.bundle }}.zip", retention-days: 14 }
       - name: publish

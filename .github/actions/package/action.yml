@@ -1,0 +1,43 @@
+name: package
+description: >
+  Zip a staged install tree into <name>.zip via `cmake -E tar` (works on every runner,
+  incl. git-bash with no `unzip`). include/ and lib/ are required; share/ and bin/ are
+  optional (packaged when present) — so libtorch's full package tree and the flat
+  litert/onnx layout both work with one fixed `dirs`.
+
+inputs:
+  staging: { description: "Staged install prefix (contains include/ lib/ ...)", required: true }
+  name:    { description: "Archive basename (no extension)", required: true }
+  dirs:    { description: "Space-separated dirs to archive", required: false, default: "include lib" }
+  out_dir: { description: "Output directory for the zip", required: false, default: dist }
+
+outputs:
+  zip:
+    description: "Path to the produced .zip"
+    value: ${{ steps.p.outputs.zip }}
+
+runs:
+  using: composite
+  steps:
+    - id: p
+      shell: bash
+      run: |
+        set -euo pipefail
+        staging="${{ inputs.staging }}"
+        out="${{ inputs.out_dir }}"
+        mkdir -p "$out"
+        out_abs="$(cd "$out" && pwd)/${{ inputs.name }}.zip"
+        pack=""
+        for d in ${{ inputs.dirs }}; do
+          if [ -d "$staging/$d" ]; then
+            pack="$pack $d"
+          elif [ "$d" = "share" ] || [ "$d" = "bin" ]; then
+            echo "note: optional $staging/$d not present — skipping"
+          else
+            echo "::error::required $staging/$d missing"; exit 1
+          fi
+        done
+        ( cd "$staging" && cmake -E tar cf "$out_abs" --format=zip $pack )
+        echo "zip=$out/${{ inputs.name }}.zip" >> "$GITHUB_OUTPUT"
+        echo "packaged $out_abs"
+        cmake -E tar tf "$out_abs" | sed 's/^/  /'

@@ -1,0 +1,29 @@
+name: sign-macos
+description: >
+  Code-sign macOS/iOS dynamic libraries with a Developer ID Application identity so the
+  lib loads into Hardened-Runtime / Library-Validation hosts (DAWs, notarized apps). The
+  consuming app re-signs on embed; this does NOT notarize. Currently UNUSED — wired for
+  when Developer ID signing is enabled (the workflow must import the cert into a keychain
+  first; secrets APPLE_SIGN_IDENTITY / APPLE_CERT_P12_BASE64 / APPLE_CERT_PASSWORD).
+
+inputs:
+  dir:      { description: "Directory to scan for .dylib/.framework", required: true }
+  identity: { description: "Developer ID Application identity (APPLE_SIGN_IDENTITY)", required: true }
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        APPLE_SIGN_IDENTITY: ${{ inputs.identity }}
+      run: |
+        set -euo pipefail
+        : "${APPLE_SIGN_IDENTITY:?set APPLE_SIGN_IDENTITY}"
+        found=0
+        while IFS= read -r -d '' f; do
+          found=1
+          codesign --force --timestamp --options runtime --sign "$APPLE_SIGN_IDENTITY" "$f"
+          codesign --verify --strict --verbose=2 "$f"
+          echo "signed: $f"
+        done < <(find "${{ inputs.dir }}" \( -name '*.dylib' -o -name '*.framework' \) -print0)
+        [ "$found" -eq 1 ] || echo "WARN: no .dylib/.framework under ${{ inputs.dir }} (static build?)"

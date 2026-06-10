@@ -15,8 +15,8 @@ bash "$HERE/build-ort.sh" ios      arm64 Release "$HERE/build-ios-device"
 bash "$HERE/build-ort.sh" ios-sim  arm64 Release "$HERE/build-ios-sim"
 
 # Merge each slice's component archives, then create the xcframework.
-bash "$ROOT/shared/bundle-static.sh" "$HERE/build-ios-device/Release" dev/libonnxruntime.a
-bash "$ROOT/shared/bundle-static.sh" "$HERE/build-ios-sim/Release"    sim/libonnxruntime.a
+bash "$ROOT/scripts/bundle-static.sh" "$HERE/build-ios-device/Release" dev/libonnxruntime.a
+bash "$ROOT/scripts/bundle-static.sh" "$HERE/build-ios-sim/Release"    sim/libonnxruntime.a
 rm -rf onnxruntime.xcframework
 xcodebuild -create-xcframework \
   -library "$PWD/dev/libonnxruntime.a" -headers "$HERE/include" \

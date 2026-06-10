@@ -52,5 +52,5 @@ shared lib Microsoft doesn't ship, hence we build all of macOS ourselves).
 # from this directory
 bash build-ort.sh macos arm64 Release build           # <platform> <arch> <config> <build-dir> [kind]
 bash build-ort.sh macos arm64 Release build shared    # shared variant (libonnxruntime.dylib)
-bash ../../shared/bundle-static.sh build/Release /tmp/out/lib/libonnxruntime.a   # static only
+bash ../../scripts/bundle-static.sh build/Release /tmp/out/lib/libonnxruntime.a   # static only
 ```

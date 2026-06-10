@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build static onnxruntime (FULL op set, CPU provider) from source for one target,
-# leaving the component .a/.lib for shared/bundle-static.sh to merge into one lib.
+# leaving the component .a/.lib for scripts/bundle-static.sh to merge into one lib.
 #
 # Ports olilarkin/ort-builder's recipe MINUS the op-reduction (no --minimal_build /
 # --include_ops_by_config / --enable_reduced_operator_type_support / --disable_ml_ops),

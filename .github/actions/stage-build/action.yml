@@ -98,4 +98,4 @@ runs:
         set -euo pipefail
         if [ "${{ runner.os }}" = "Windows" ]; then out="${{ steps.n.outputs.staging }}/lib/${{ inputs.libname }}.lib"
         else out="${{ steps.n.outputs.staging }}/lib/lib${{ inputs.libname }}.a"; fi
-        bash shared/bundle-static.sh "build/${{ inputs.preset }}" "$out"
+        bash scripts/bundle-static.sh "build/${{ inputs.preset }}" "$out"

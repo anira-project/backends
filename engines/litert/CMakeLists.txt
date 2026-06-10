@@ -46,7 +46,7 @@ set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
 # Lib type uses upstream's own TFLITE_C_BUILD_SHARED_LIBS, not BUILD_SHARED_LIBS.
 if(LITERT_BUILD_STATIC)
     # The static .a holds only C-API objects; transitive dep archives must be
-    # merged in afterwards (shared/bundle-static.sh) to be usable.
+    # merged in afterwards (scripts/bundle-static.sh) to be usable.
     set(TFLITE_C_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 else()
     set(TFLITE_C_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)

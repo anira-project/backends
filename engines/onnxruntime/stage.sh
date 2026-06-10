@@ -50,7 +50,7 @@ else
   bash "$HERE/build-ort.sh" "$PLATFORM" "$ARCH" "$CONFIG" "$HERE/build" static
   if [ "$PLATFORM" = "windows" ]; then out="$ST/lib/onnxruntime.lib"; else out="$ST/lib/libonnxruntime.a"; fi
   BUNDLE_EXCLUDE_REGEX='/testdata/|libprotoc|libprotobuf[d]?\.(lib|a)' \
-    bash "$ROOT/shared/bundle-static.sh" "$HERE/build/$CONFIG" "$out"
+    bash "$ROOT/scripts/bundle-static.sh" "$HERE/build/$CONFIG" "$out"
 fi
 
 echo "staged onnxruntime ($PLATFORM/$ARCH/$KIND) -> $ST"
