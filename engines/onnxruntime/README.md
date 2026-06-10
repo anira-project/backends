@@ -28,9 +28,10 @@ shared lib Microsoft doesn't ship, hence we build all of macOS ourselves).
 | `VERSION`             | Pinned upstream version (single source of truth)             |
 | `build-ort.sh`        | Per-target build via onnxruntime's `tools/ci_build/build.py` |
 | `repackage-shared.sh` | Restage upstream prebuilt `shared` libs (Linux/Win/Android)  |
-| `smoke-onnx.sh`       | Compile + link + forward-pass smoke against the packaged lib |
-| `ci-matrix.json`      | Active CI build matrix                                       |
+| `stage.sh`            | Build/repackage + bundle, staged into the install prefix (orchestrator + CI) |
+| `ios.sh`              | Build device+sim → `.xcframework` (+ simulator smoke)        |
 | `include/`            | Vendored ONNX Runtime C/C++ API headers                      |
+| `test/CMakeLists.txt` | CMake smoke consumer (imported target; run via the smoke action / ctest) |
 | `test/smoke.cpp`      | Forward-pass smoke (`add.onnx`, `y = x + x` → `{2,4,6}`)     |
 | `test/add.onnx`       | Tiny model the smoke runs                                     |
 

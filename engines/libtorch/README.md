@@ -56,19 +56,19 @@ deliberately — not a quick `BUILD_SHARED_LIBS=0` flip.
 | File                  | Purpose                                                        |
 | --------------------- | ------------------------------------------------------------- |
 | `VERSION`             | Pinned PyTorch version (single source of truth)               |
-| `ci-matrix.json`      | CI matrix; `source` = `prebuilt` (download) or `build`        |
 | `repackage.sh`        | Download an upstream prebuilt, restage the full package tree  |
 | `build-libtorch.sh`   | Build CPU shared libtorch from source (the three gaps)        |
-| `smoke-torch.sh`      | Build + run the smoke via `find_package(Torch)`               |
+| `stage.sh`            | Repackage or build, staged into the install prefix (orchestrator + CI) |
+| `test/CMakeLists.txt` | `find_package(Torch)` smoke (run via the smoke action / ctest) |
 | `test/smoke.cpp`      | Forward pass: `a+b -> {3,5,7}`, `dot(a,b) -> 20`              |
-| `test/CMakeLists.txt` | `find_package(Torch)` consumer (mirrors anira's path)         |
 
 ## Archive naming
 
-`libtorch-<version>-<os>-<arch>.zip`, e.g. `libtorch-2.12.0-macOS-arm64.zip`,
-`libtorch-2.12.0-Linux-aarch64.zip`, `libtorch-2.12.0-Windows-x86_64.zip`
-(`os` ∈ macOS/Linux/Windows, `arch` ∈ arm64/x86_64/aarch64). Each extracts to
-`include/ lib/ share/ [bin/]` — point `CMAKE_PREFIX_PATH` at it and `find_package(Torch)`.
+`libtorch-<version>-<os>-<arch>-shared.zip`, e.g. `libtorch-2.12.0-macOS-arm64-shared.zip`,
+`libtorch-2.12.0-Linux-aarch64-shared.zip`, `libtorch-2.12.0-Windows-x86_64-shared.zip`
+(`os` ∈ macOS/Linux/Windows, `arch` ∈ arm64/x86_64/aarch64; `-shared` kind suffix is always
+present). Each extracts to `include/ lib/ share/ [bin/]` — point `CMAKE_PREFIX_PATH` at it and
+`find_package(Torch)`.
 
 ## Local repackage (prebuilt targets)
 
@@ -76,14 +76,14 @@ deliberately — not a quick `BUILD_SHARED_LIBS=0` flip.
 bash engines/libtorch/repackage.sh \
   https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-2.12.0.zip \
   /tmp/out                                   # -> /tmp/out/{include,lib,share}
-bash engines/libtorch/smoke-torch.sh /tmp/out engines/libtorch/test 1
+cmake -S engines/libtorch/test -B /tmp/smoke -DCMAKE_PREFIX_PATH=/tmp/out && cmake --build /tmp/smoke && ctest --test-dir /tmp/smoke --output-on-failure
 ```
 
 ## Local build (from-source targets)
 
 ```bash
 bash engines/libtorch/build-libtorch.sh linux aarch64 /tmp/out   # native arm64 host
-bash engines/libtorch/smoke-torch.sh /tmp/out engines/libtorch/test 1
+cmake -S engines/libtorch/test -B /tmp/smoke -DCMAKE_PREFIX_PATH=/tmp/out && cmake --build /tmp/smoke && ctest --test-dir /tmp/smoke --output-on-failure
 ```
 
 Needs Python 3.12 + PyTorch's build deps; Linux aarch64 needs `libopenblas-dev`.

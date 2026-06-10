@@ -90,8 +90,14 @@ jobs:
       # is not host-smokeable and is skipped here.
       - name: smoke (desktop)
         if: ${{ matrix.toolchain == 'none' && matrix.canRun == '1' }}
-        shell: bash
-        run: bash engines/${{ inputs.engine }}/smoke.sh "${{ steps.b.outputs.staging }}" "${{ matrix.kind }}" "${{ matrix.arch }}" "${{ matrix.config }}" "${{ matrix.canRun }}"
+        uses: ./.github/actions/smoke
+        with:
+          engine:  ${{ inputs.engine }}
+          staging: ${{ steps.b.outputs.staging }}
+          preset:  ${{ matrix.preset }}
+          kind:    ${{ matrix.kind }}
+          config:  ${{ matrix.config }}
+          arch:    ${{ matrix.arch }}
 
       # Android: NDK-cross-compile the smoke, run on a KVM-accelerated x86_64 emulator
       # (arm64-v8a software emulation hangs -> compile+link only). litert only — the model
@@ -208,8 +214,14 @@ jobs:
           dirs: ${{ inputs.package_dirs }}
 
       - name: smoke (universal, arm64 slice)
-        shell: bash
-        run: bash engines/${{ inputs.engine }}/smoke.sh "staging/${{ steps.n.outputs.uni }}" "${{ matrix.kind }}" arm64 Release 1
+        uses: ./.github/actions/smoke
+        with:
+          engine:  ${{ inputs.engine }}
+          staging: staging/${{ steps.n.outputs.uni }}
+          preset:  uni-${{ matrix.kind }}
+          kind:    ${{ matrix.kind }}
+          config:  Release
+          arch:    arm64
 
       - uses: actions/upload-artifact@v7
         with: { name: "${{ steps.n.outputs.uni }}", path: "dist/${{ steps.n.outputs.uni }}.zip", retention-days: 14 }

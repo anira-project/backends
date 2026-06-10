@@ -1,0 +1,50 @@
+name: smoke
+description: >
+  Build the engine's CMake smoke (engines/<engine>/test) against the staged archive and run
+  it via ctest — the same consumption path anira uses. The test CMakeLists owns all the
+  link knowledge; this action configures (Ninja+cl, so it's VS-version agnostic), builds, sets
+  up the runtime libs (rpath covers shared on unix; Windows copies the lib DLL + — for Debug —
+  the non-redist debug CRT DLLs next to the exe), and runs both Debug and Release.
+
+inputs:
+  engine:  { description: "litert | onnxruntime | libtorch", required: true }
+  staging: { description: "Staged install prefix to consume (CMAKE_PREFIX_PATH)", required: true }
+  preset:  { description: "Preset/name, used for a unique build dir", required: true }
+  kind:    { description: "static | shared", required: true }
+  config:  { description: "Release | Debug", required: true }
+  arch:    { description: "x86_64 | arm64 | aarch64 (macOS cross / Windows debug CRT)", required: true }
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        st="$(cd "${{ inputs.staging }}" && pwd)"
+        bdir="build/smoke-${{ inputs.preset }}"
+        extra=()
+        # macOS x86_64 legs build on the arm64 runner -> cross-compile the smoke to match the lib
+        # (runs under Rosetta). Other platforms build natively on their own runner.
+        [ "${{ runner.os }}" = "macOS" ] && extra+=(-DCMAKE_OSX_ARCHITECTURES=${{ inputs.arch }})
+
+        cmake -S "engines/${{ inputs.engine }}/test" -B "$bdir" -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ inputs.config }} \
+          -DCMAKE_PREFIX_PATH="$st" \
+          -DSMOKE_KIND=${{ inputs.kind }} "${extra[@]}"
+        cmake --build "$bdir"
+
+        # Runtime libs. Unix: the test bakes an rpath to the staging lib dir. Windows loads DLLs
+        # from the exe's own dir first, so copy what the run needs next to the built smoke.exe.
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          [ "${{ inputs.kind }}" = "shared" ] && cp "$st"/lib/*.dll "$bdir"/ 2>/dev/null || true
+          if [ "${{ inputs.config }}" = "Debug" ]; then
+            # /MDd needs the non-redistributable debug CRT DLLs (ucrtbased / vcruntime140d /
+            # msvcp140d), which aren't on PATH. Copy from the VC redist + Windows SDK (MSVC env).
+            a="x64"; [ "${{ inputs.arch }}" = "arm64" ] && a="arm64"
+            find "${VCToolsRedistDir:-/c/none}" -ipath "*debug_nonredist*/$a/*DebugCRT*/*.dll" -exec cp {} "$bdir"/ \; 2>/dev/null || true
+            u="$(find "${WindowsSdkDir:-/c/none}/bin" -name ucrtbased.dll 2>/dev/null | grep "/$a/" | head -1)"
+            [ -n "$u" ] && cp "$u" "$bdir"/ || true
+          fi
+        fi
+
+        ctest --test-dir "$bdir" --output-on-failure

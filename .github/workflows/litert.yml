@@ -12,7 +12,7 @@ on:
     branches: [main]
     paths:
       - 'engines/litert/**'
-      - 'shared/**'
+      - 'scripts/**'
       - 'cmake/**'
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
@@ -24,7 +24,7 @@ on:
   pull_request:
     paths:
       - 'engines/litert/**'
-      - 'shared/**'
+      - 'scripts/**'
       - 'cmake/**'
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
