@@ -75,10 +75,14 @@ Consumed via `find_package(Torch)`, so archives preserve `include/ lib/ share/ [
   - Windows arm64 — no 2.12.0 release prebuilt; native ARM64 MSVC `cl` from source (see below).
 - **Universal (macOS)**: `macos-universal` job lipos the two per-arch from-source archives.
 
-### CI status (run 5, commit ea81438)
-Green (incl. find_package(Torch) smoke): macOS arm64, macOS x86_64, **macOS universal** (lipo +
-smoke ✅), Linux aarch64, Linux x86_64, Windows x86_64. **7/8 archives green.** Only Windows arm64
-left. The `if: !cancelled()` decoupling worked — universal now validated.
+### CI status — DONE (run 9, commit e9a27da): full desktop matrix GREEN at 2.12.0
+All 7 archives pass the find_package(Torch) forward-pass smoke: macOS arm64 / x86_64 / universal,
+Linux x86_64 / aarch64, Windows x86_64, **Windows arm64** (native MSVC cl, 309 min build, smoke
+`sum={3,5,7} dot=20`). libtorch CPU shared desktop is complete.
+
+Remaining (not desktop coverage): anira-side `SetupLibTorch.cmake` to consume these archives from
+anira-backends; cut the release tag to publish; static (decided out); mobile = ExecuTorch (separate
+backend); niche armv7l/Bela + wasm.
 
 **Windows arm64: build 2.12.0 from source with NATIVE ARM64 MSVC `cl`** (not clang-cl). Decided
 after reading PyTorch's own win-arm64 CI (`.ci/pytorch/windows/arm64/build_libtorch.bat`): it does
