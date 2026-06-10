@@ -64,12 +64,14 @@ runs:
     - id: cfg
       shell: bash
       run: |
-        # No sccache for MSVC Debug: /Z7 emits no .pdb but CMake still passes /Fd, so
-        # sccache errors caching a pdb that doesn't exist.
-        if [ "${{ inputs.config }}" = "Debug" ]; then
-          echo "launchers=" >> "$GITHUB_OUTPUT"
-        else
+        # sccache compiler-launcher applies only to litert (the native CMake build). onnx/libtorch
+        # build via their own systems under a NONE orchestrator project, so the launcher would be
+        # an unused-variable warning. Also skip for MSVC Debug: /Z7 emits no .pdb but CMake still
+        # passes /Fd, so sccache errors caching a pdb that doesn't exist.
+        if [ "${{ inputs.engine }}" = "litert" ] && [ "${{ inputs.config }}" != "Debug" ]; then
           echo "launchers=-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache" >> "$GITHUB_OUTPUT"
+        else
+          echo "launchers=" >> "$GITHUB_OUTPUT"
         fi
 
     - name: configure

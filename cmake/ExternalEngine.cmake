@@ -29,6 +29,7 @@ add_custom_target(stage ALL
   COMMAND bash "${_script}" ${_args}
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
   VERBATIM
+  USES_TERMINAL  # console pool: stream the (long) engine build live instead of Ninja buffering it
   COMMENT "Staging ${BACKENDS_ENGINE} ${BACKENDS_PLATFORM}/${BACKENDS_ARCH} ${BACKENDS_KIND}/${BACKENDS_SOURCE}")
 
 # Copy whatever stage.sh produced (litert/onnx: include/ lib/; libtorch: + share/ [bin/])
