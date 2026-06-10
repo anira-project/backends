@@ -113,6 +113,12 @@ case "$PLATFORM" in
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
 
+# A restored/cached build tree pins CMake cache vars (BLAS, USE_*, deployment target…)
+# from the PRIOR config — env changes here would otherwise be silently ignored (CMake
+# cache vars are sticky). Drop CMakeCache so cmake re-detects against the current env;
+# the build objects + sccache keep the rebuild incremental. No-op on a cold build.
+rm -f "$SRC/build/CMakeCache.txt"
+
 echo "== building libtorch ${VER} for ${PLATFORM}/${ARCH} (shared, CPU) =="
 ( cd "$SRC" && python tools/build_libtorch.py )
 
