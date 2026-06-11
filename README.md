@@ -39,3 +39,6 @@ What ships per target — `shared` (dynamic lib) and/or `static` (one merged, dr
 Backends are versioned independently but **released together, keyed to the anira
 version**: tag `v2.0.3` builds every backend at its pinned `engines/<backend>/VERSION`
 and publishes all archives to a single release `v2.0.3`.
+
+## Sponsor
+<img src="https://raw.githubusercontent.com/anira-project/anira/main/docs/img/bmftr-funding.png" alt="Funded by the German Federal Ministry of Research, Technology and Space (BMFTR)" width="200">
