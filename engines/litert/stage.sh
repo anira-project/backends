@@ -67,13 +67,32 @@ esac
     --define=litert_disable_gpu=true --define=litert_disable_npu=true \
     //litert/c:litert_runtime_c_api_shared_lib )
 
-# Stage the native C API headers + everything they transitively #include (litert/c/litert_common.h
-# pulls in litert/build_common/build_config.h, etc.), preserving the litert/ layout so the
-# `litert/...` include paths resolve. Add dirs here if the smoke reveals more missing headers.
-mkdir -p "$ST/include" "$ST/lib"
-( cd "$SRC" && find litert/c litert/build_common -name '*.h' | while IFS= read -r h; do
+# Headers: the C API needs litert/c/*.h plus a GENERATED litert/build_common/build_config.h
+# (not in the source tree). Use the official litert_cc_sdk.zip header set — uniform across
+# platforms (desktop build / android+iOS repackage) — and synthesize the CPU-only build_config.h
+# from its .in template (just two toggles: DISABLE_GPU/DISABLE_NPU).
+mkdir -p "$ST/include/litert/build_common" "$ST/lib"
+sdk="$HERE/litert_cc_sdk"
+if [ ! -d "$sdk/litert/c" ]; then
+  curl -fsSL "https://github.com/google-ai-edge/LiteRT/releases/download/v${VER}/litert_cc_sdk.zip" -o "$HERE/litert_cc_sdk.zip"
+  ( cd "$HERE" && cmake -E tar xf litert_cc_sdk.zip )   # -> $HERE/litert_cc_sdk/
+fi
+( cd "$sdk" && find litert/c -name '*.h' | while IFS= read -r h; do
     mkdir -p "$ST/include/$(dirname "$h")"; cp "$h" "$ST/include/$h"
   done )
+cat > "$ST/include/litert/build_common/build_config.h" <<'EOF'
+#ifndef LITERT_BUILD_COMMON_BUILD_CONFIG_H_
+#define LITERT_BUILD_COMMON_BUILD_CONFIG_H_
+#define LITERT_BUILD_CONFIG_DISABLE_GPU 1
+#define LITERT_BUILD_CONFIG_DISABLE_NPU 1
+#if LITERT_BUILD_CONFIG_DISABLE_GPU
+#define LITERT_DISABLE_GPU
+#endif
+#if LITERT_BUILD_CONFIG_DISABLE_NPU
+#define LITERT_DISABLE_NPU
+#endif
+#endif  // LITERT_BUILD_COMMON_BUILD_CONFIG_H_
+EOF
 # bazel-bin is a SYMLINK into the bazel cache — follow it (-L). The C API shared lib lands at
 # bazel-bin/litert/c/libLiteRt.{so,dylib} (LiteRt.dll on Windows).
 lib="$(find -L "$SRC/bazel-bin" -maxdepth 6 \( -name 'libLiteRt.so' -o -name 'libLiteRt.dylib' -o -name 'libLiteRt.dll' -o -name 'LiteRt.dll' \) 2>/dev/null | head -1)"
