@@ -32,6 +32,6 @@ add_custom_target(stage ALL
   USES_TERMINAL  # console pool: stream the (long) engine build live instead of Ninja buffering it
   COMMENT "Staging ${BACKENDS_ENGINE} ${BACKENDS_PLATFORM}/${BACKENDS_ARCH} ${BACKENDS_KIND}/${BACKENDS_SOURCE}")
 
-# Copy whatever stage.sh produced (litert/onnx: include/ lib/; libtorch: + share/ [bin/])
+# Copy whatever stage.sh produced (tflite/onnx: include/ lib/; libtorch: + share/ [bin/])
 # to the install prefix. Populated at build time, copied at `cmake --install` time.
 install(DIRECTORY "${_stage}/" DESTINATION ".")

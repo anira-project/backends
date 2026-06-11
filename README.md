@@ -8,7 +8,7 @@ published as GitHub release archives that anira's CMake downloads at configure t
 
 | Backend     | Upstream                                                          | lib name           | License    |
 | ----------- | ----------------------------------------------------------------- | ------------------ | ---------- |
-| LiteRT      | [google-ai-edge/LiteRT](https://github.com/google-ai-edge/LiteRT) | `tensorflowlite_c` | Apache-2.0 |
+| TFLite      | [tensorflow/lite](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/c) | `tensorflowlite_c` | Apache-2.0 |
 | ONNXRuntime | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) | `onnxruntime`      | MIT        |
 | LibTorch    | [pytorch/pytorch](https://github.com/pytorch/pytorch)             | `torch`            | BSD-3      |
 
@@ -19,7 +19,7 @@ upstream licenses (above).
 
 What ships per target — `shared` and/or `static`:
 
-| Target                          | LiteRT            | ONNXRuntime       | LibTorch |
+| Target                          | TFLite            | ONNXRuntime       | LibTorch |
 | ------------------------------- | ----------------- | ----------------- | -------- |
 | macOS x86_64                    | shared · static   | shared · static   | shared   |
 | macOS arm64                     | shared · static   | shared · static   | shared   |

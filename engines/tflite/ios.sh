@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# iOS (litert): repackage Google's official prebuilt TensorFlowLiteC.xcframework (CPU, static,
+# iOS (tflite): repackage Google's official prebuilt TensorFlowLiteC.xcframework (CPU, static,
 # device + simulator). No build — the per-version download URL is read from the CocoaPods
 # podspec. Smoke-gated on the simulator (real forward pass), then zipped into dist/<archive>.zip.
 #

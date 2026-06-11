@@ -1,4 +1,4 @@
-// LiteRT smoke test: validates a packaged libtensorflowlite_c (headers + lib).
+// TFLite smoke test: validates a packaged libtensorflowlite_c (headers + lib).
 //
 // Loads TFLite's tiny `add.bin` test model (a 3x model), runs one forward pass,
 // and checks the exact output. Mirrors upstream tensorflow/lite/c/c_test.c:

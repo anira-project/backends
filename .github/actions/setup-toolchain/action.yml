@@ -8,7 +8,7 @@ description: >
 inputs:
   toolchain:    { description: "none | android", required: false, default: none }
   msvc_arch:    { description: "Windows MSVC arch: x64 | arm64 (empty elsewhere)", required: false, default: "" }
-  engine:       { description: "litert | onnxruntime | libtorch", required: true }
+  engine:       { description: "tflite | onnxruntime | libtorch", required: true }
   source:       { description: "build | prebuilt", required: false, default: build }
   version:      { description: "Engine version (source-cache key)", required: true }
   cache_suffix: { description: "Extra source-cache key segment (e.g. matrix.name)", required: false, default: "" }

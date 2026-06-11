@@ -2,7 +2,7 @@ name: stage-build
 description: >
   Build (or repackage) one leg via the root CMake orchestrator and produce a staging tree.
   Uniform for every engine: `cmake --preset` -> `cmake --build` -> `cmake --install` into
-  staging/<archive>. litert is a native CMake build (static legs then get their component
+  staging/<archive>. tflite is a native CMake build (static legs then get their component
   archives merged in); onnx/libtorch run their own build/repackage via the orchestrator's
   stage.sh. Composes the canonical archive name and, for prebuilt legs, the upstream URL.
 
@@ -11,7 +11,7 @@ inputs:
   name:         { description: "Canonical platform-arch token, e.g. macOS-arm64", required: true }
   kind:         { description: "shared | static", required: true }
   config:       { description: "Release | Debug", required: true }
-  engine:       { description: "Backend id: litert | onnxruntime | libtorch", required: true }
+  engine:       { description: "Backend id: tflite | onnxruntime | libtorch", required: true }
   libname:      { description: "Archive/lib prefix, e.g. tensorflowlite_c | onnxruntime | libtorch", required: true }
   version:      { description: "Upstream version (archive name + URL)", required: true }
   source:       { description: "build | prebuilt", required: false, default: build }
@@ -64,11 +64,11 @@ runs:
     - id: cfg
       shell: bash
       run: |
-        # sccache compiler-launcher applies only to litert (the native CMake build). onnx/libtorch
+        # sccache compiler-launcher applies only to tflite (the native CMake build). onnx/libtorch
         # build via their own systems under a NONE orchestrator project, so the launcher would be
         # an unused-variable warning. Also skip for MSVC Debug: /Z7 emits no .pdb but CMake still
         # passes /Fd, so sccache errors caching a pdb that doesn't exist.
-        if [ "${{ inputs.engine }}" = "litert" ] && [ "${{ inputs.config }}" != "Debug" ]; then
+        if [ "${{ inputs.engine }}" = "tflite" ] && [ "${{ inputs.config }}" != "Debug" ]; then
           echo "launchers=-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache" >> "$GITHUB_OUTPUT"
         else
           echo "launchers=" >> "$GITHUB_OUTPUT"
@@ -88,11 +88,11 @@ runs:
       shell: bash
       run: cmake --install build/${{ inputs.preset }} --config ${{ inputs.config }} --prefix "${{ steps.n.outputs.staging }}"
 
-    # litert static: the installed C-API archive holds only C-API objects — merge in all
+    # tflite static: the installed C-API archive holds only C-API objects — merge in all
     # transitive dependency archives so the shipped lib is a single self-contained drop-in.
     # (onnx/libtorch do their own bundling/repackaging inside the orchestrator's stage.sh.)
-    - name: bundle static deps (litert)
-      if: ${{ inputs.engine == 'litert' && inputs.kind == 'static' }}
+    - name: bundle static deps (tflite)
+      if: ${{ inputs.engine == 'tflite' && inputs.kind == 'static' }}
       shell: bash
       run: |
         set -euo pipefail

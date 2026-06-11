@@ -14,7 +14,7 @@
 #   <arch>      x86_64 | aarch64 | arm64
 #   <staging>   output prefix; gets include/ lib/ share/ [bin/]
 #
-# NOTE: this is the from-source recipe; like the ONNXRuntime/LiteRT builders it is
+# NOTE: this is the from-source recipe; like the ONNXRuntime/TFLite builders it is
 # expected to need a few CI rounds to converge per platform (see ../../TODO.md for
 # how those settled). Flags below follow PyTorch's official CPU libtorch config.
 set -euo pipefail
@@ -48,7 +48,7 @@ python -m pip install pyyaml typing_extensions setuptools numpy
 # PyTorch vendors an old third_party/protobuf whose CMakeLists has
 # cmake_minimum_required(VERSION <3.5); CMake 4.x (pulled in by pip) removed that
 # compatibility and errors when building the host protoc ("Could not compile
-# universal protoc"). Same class of issue as LiteRT's old deps — set the policy
+# universal protoc"). Same class of issue as TFLite's old deps — set the policy
 # floor in the env so every nested cmake invocation inherits it.
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 export USE_CUDA=0 USE_ROCM=0 USE_CUDNN=0 USE_NCCL=0

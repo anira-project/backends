@@ -4,14 +4,14 @@ cmake_minimum_required(VERSION 3.16)
 # version, build `tensorflowlite_c`, install into anira's layout (include/ + lib/).
 # Driven by CMakePresets.json (one preset per platform x shared/static).
 
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LITERT_VERSION)
-string(STRIP "${LITERT_VERSION}" LITERT_VERSION)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" TFLITE_VERSION)
+string(STRIP "${TFLITE_VERSION}" TFLITE_VERSION)
 
-project(litert-c LANGUAGES C CXX
-        VERSION ${LITERT_VERSION}
-        DESCRIPTION "TensorFlow Lite / LiteRT C API prebuilt for anira")
+project(tflite-c LANGUAGES C CXX
+        VERSION ${TFLITE_VERSION}
+        DESCRIPTION "TensorFlow Lite C API prebuilt for anira")
 
-option(LITERT_BUILD_STATIC "Build a static archive instead of a shared library" OFF)
+option(TFLITE_BUILD_STATIC "Build a static archive instead of a shared library" OFF)
 
 # TFLite uses C++20 features (e.g. designated initializers in core/c/operator.cc).
 # clang/gcc accept these as an extension under C++17, but MSVC is strict and errors
@@ -37,21 +37,21 @@ endif()
 # so disable it there — TFLite falls back to its built-in kernels.
 if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
     set(TFLITE_ENABLE_XNNPACK OFF CACHE BOOL "" FORCE)
-    message(STATUS "LiteRT: XNNPACK disabled on Windows/ARM64 (MSVC NEON microkernels unsupported)")
+    message(STATUS "TFLite: XNNPACK disabled on Windows/ARM64 (MSVC NEON microkernels unsupported)")
 else()
     set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "" FORCE)
 endif()
 set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
 
 # Lib type uses upstream's own TFLITE_C_BUILD_SHARED_LIBS, not BUILD_SHARED_LIBS.
-if(LITERT_BUILD_STATIC)
+if(TFLITE_BUILD_STATIC)
     # The static .a holds only C-API objects; transitive dep archives must be
     # merged in afterwards (scripts/bundle-static.sh) to be usable.
     set(TFLITE_C_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 else()
     set(TFLITE_C_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 endif()
-message(STATUS "LiteRT ${LITERT_VERSION}: ${LITERT_BUILD_STATIC}=static")
+message(STATUS "TFLite ${TFLITE_VERSION}: ${TFLITE_BUILD_STATIC}=static")
 
 # Windows: export DLL symbols so the .lib import library is usable.
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON CACHE BOOL "" FORCE)
@@ -77,7 +77,7 @@ include(FetchContent)
 FetchContent_Declare(
     tensorflow
     GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
-    GIT_TAG        v${LITERT_VERSION}
+    GIT_TAG        v${TFLITE_VERSION}
     GIT_SHALLOW    TRUE
     GIT_PROGRESS   TRUE
 )
@@ -93,10 +93,10 @@ add_subdirectory("${TFLITE_SOURCE_DIR}/c" "${CMAKE_BINARY_DIR}/tflite_c")
 # global CMAKE_CXX_STANDARD. MSVC then rejects TFLite's C++20 designated
 # initializers (C7555); clang/gcc accept them as an extension. So on MSVC, bump
 # every target the TFLite subtree produced to C++20 (target property wins).
-function(_litert_force_cxx20 dir)
+function(_tflite_force_cxx20 dir)
     get_property(_subs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
     foreach(_s ${_subs})
-        _litert_force_cxx20("${_s}")
+        _tflite_force_cxx20("${_s}")
     endforeach()
     get_property(_tgts DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
     foreach(_t ${_tgts})
@@ -107,7 +107,7 @@ function(_litert_force_cxx20 dir)
     endforeach()
 endfunction()
 if(MSVC)
-    _litert_force_cxx20("${TFLITE_SOURCE_DIR}/c")
+    _tflite_force_cxx20("${TFLITE_SOURCE_DIR}/c")
 endif()
 
 # Install. Library:

@@ -1,4 +1,4 @@
-# LiteRT (TensorFlow Lite C API)
+# TensorFlow Lite (C API)
 
 Builds `libtensorflowlite_c` from upstream `tensorflow/lite/c` at the version in
 [`VERSION`](./VERSION), packaged for [anira](https://github.com/anira-project/anira).
@@ -16,7 +16,7 @@ CPU only (XNNPACK; no GPU/NPU).
 | ------------------------- | ------------------------------------------------ |
 | `VERSION`                 | Pinned upstream version (single source of truth) |
 | `CMakeLists.txt`          | Fetch tensorflow, build + install the C API      |
-| `CMakePresets.json`       | Standalone litert presets (bases in `presets-base.json`) |
+| `CMakePresets.json`       | Standalone tflite presets (bases in `presets-base.json`) |
 | `presets-base.json`       | Hidden platform/kind bases, shared with the root presets |
 | `ios.sh`                  | Repackage Google's `TensorFlowLiteC.xcframework` |
 | `test/CMakeLists.txt`     | CMake smoke (run via the smoke action / ctest)   |

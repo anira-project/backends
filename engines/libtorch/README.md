@@ -1,14 +1,14 @@
 # LibTorch (PyTorch C++)
 
 CPU-only **shared** libtorch at the version in [`VERSION`](./VERSION), packaged for
-[anira](https://github.com/anira-project/anira). Unlike LiteRT/ONNXRuntime (flat
+[anira](https://github.com/anira-project/anira). Unlike TFLite/ONNXRuntime (flat
 `include/`+`lib/`), libtorch ships a full CMake package tree and is consumed via
 `find_package(Torch)` — so archives preserve `include/`, `lib/`, **`share/cmake/Torch/`**
 (and `bin/` where present).
 
 ## Static builds — not supported
 
-Unlike LiteRT and ONNXRuntime, LibTorch ships **shared only**. Static is intentionally
+Unlike TFLite and ONNXRuntime, LibTorch ships **shared only**. Static is intentionally
 out of scope:
 
 - **No static prebuilts exist for 2.12.0.** Upstream static archives
@@ -81,5 +81,5 @@ from the two from-source per-arch builds — both build from source so their dyl
   libtorch after 2.2.2). It's a heavy oneDNN+FBGEMM compile that runs close to GitHub's 6-hour
   hosted-runner cap — if it ever caps, trim the build (`USE_MKLDNN=0`) or add compile caching.
   `USE_NATIVE_ARCH=0`/`USE_MPS=0` dodge the Apple-Clang `-mavx512fp16` failure.
-- **These recipes are first-pass** — like LiteRT/ONNXRuntime they may need a CI round per
+- **These recipes are first-pass** — like TFLite/ONNXRuntime they may need a CI round per
   platform when the pinned version changes.

@@ -7,7 +7,7 @@ description: >
   the non-redist debug CRT DLLs next to the exe), and runs both Debug and Release.
 
 inputs:
-  engine:  { description: "litert | onnxruntime | libtorch", required: true }
+  engine:  { description: "tflite | onnxruntime | libtorch", required: true }
   staging: { description: "Staged install prefix to consume (CMAKE_PREFIX_PATH)", required: true }
   preset:  { description: "Preset/name, used for a unique build dir", required: true }
   kind:    { description: "static | shared", required: true }

@@ -4,7 +4,7 @@
 
   "vendor": {
     "anira": {
-      "doc": "Hidden platform/lib-type bases for litert, shared by engines/litert/CMakePresets.json (standalone litert dev) and the root CMakePresets.json (which builds litert via the orchestrator). Kept in one file so neither duplicates the platform matrix."
+      "doc": "Hidden platform/lib-type bases for tflite, shared by engines/tflite/CMakePresets.json (standalone tflite dev) and the root CMakePresets.json (which builds tflite via the orchestrator). Kept in one file so neither duplicates the platform matrix."
     }
   },
 
@@ -17,8 +17,8 @@
       "environment": { "CMAKE_POLICY_VERSION_MINIMUM": "3.5" }
     },
     { "name": "ninja",  "hidden": true, "inherits": "base", "generator": "Ninja" },
-    { "name": "shared", "hidden": true, "cacheVariables": { "LITERT_BUILD_STATIC": "OFF" } },
-    { "name": "static", "hidden": true, "cacheVariables": { "LITERT_BUILD_STATIC": "ON"  } },
+    { "name": "shared", "hidden": true, "cacheVariables": { "TFLITE_BUILD_STATIC": "OFF" } },
+    { "name": "static", "hidden": true, "cacheVariables": { "TFLITE_BUILD_STATIC": "ON"  } },
 
     {
       "name": "macos-x64", "hidden": true, "inherits": "ninja",

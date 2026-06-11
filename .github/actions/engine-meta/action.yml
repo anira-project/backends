@@ -6,7 +6,7 @@ description: >
 
 inputs:
   preset_prefix:
-    description: "Preset name prefix to select this engine's legs, e.g. litert | onnx | libtorch"
+    description: "Preset name prefix to select this engine's legs, e.g. tflite | onnx | libtorch"
     required: true
   version_file:
     description: "Path to the engine's VERSION file"
