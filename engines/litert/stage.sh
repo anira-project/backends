@@ -93,9 +93,17 @@ cat > "$ST/include/litert/build_common/build_config.h" <<'EOF'
 #endif
 #endif  // LITERT_BUILD_COMMON_BUILD_CONFIG_H_
 EOF
-# bazel-bin is a SYMLINK into the bazel cache — follow it (-L). The C API shared lib lands at
-# bazel-bin/litert/c/libLiteRt.{so,dylib} (LiteRt.dll on Windows).
-lib="$(find -L "$SRC/bazel-bin" -maxdepth 6 \( -name 'libLiteRt.so' -o -name 'libLiteRt.dylib' -o -name 'libLiteRt.dll' -o -name 'LiteRt.dll' \) 2>/dev/null | head -1)"
-[ -n "$lib" ] || { echo "ERROR: libLiteRt not found under $SRC/bazel-bin"; ls -la "$SRC/bazel-bin/litert/c" 2>/dev/null | head -20; exit 1; }
+# Locate the built shared lib. On unix bazel-bin is a symlink find -L follows; on Windows it's a
+# junction find won't traverse, so fall back to `bazel cquery` for the output path.
+lib="$(find -L "$SRC/bazel-bin" -maxdepth 6 \( -name 'libLiteRt.so' -o -name 'libLiteRt.dylib' \) 2>/dev/null | head -1)"
+if [ -z "$lib" ]; then
+  rel="$(cd "$SRC" && bazel cquery "${cfg[@]}" --define=litert_disable_gpu=true --define=litert_disable_npu=true \
+           --output=files //litert/c:litert_runtime_c_api_shared_lib 2>/dev/null | grep -iE '\.(dll|so|dylib)$' | head -1)"
+  [ -n "$rel" ] && lib="$SRC/$rel"
+fi
+[ -n "$lib" ] || { echo "ERROR: libLiteRt output not found (cquery returned nothing)"; exit 1; }
+libdir="$(dirname "$lib")"
 cp -L "$lib" "$ST/lib/"
+# Windows: consumers link the import lib (LiteRt.lib), which sits next to the .dll.
+[ "$PLATFORM" = "windows" ] && { cp -L "$libdir"/*.lib "$ST/lib/" 2>/dev/null || echo "WARN: no import .lib next to $lib"; }
 echo "staged litert ($PLATFORM/$ARCH/$KIND) -> $ST"
