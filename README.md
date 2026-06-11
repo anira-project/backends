@@ -17,7 +17,7 @@ upstream licenses (above).
 
 ## Support matrix
 
-What ships per target — `shared` (dynamic lib) and/or `static` (one merged, drop-in archive):
+What ships per target — `shared` and/or `static`:
 
 | Target                          | LiteRT            | ONNXRuntime       | LibTorch |
 | ------------------------------- | ----------------- | ----------------- | -------- |
