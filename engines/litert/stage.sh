@@ -67,10 +67,13 @@ esac
     --define=litert_disable_gpu=true --define=litert_disable_npu=true \
     //litert/c:litert_runtime_c_api_shared_lib )
 
-# Stage the native C API headers + the shared lib.
-mkdir -p "$ST/include/litert/c" "$ST/lib"
-cp "$SRC"/litert/c/litert_*.h "$ST/include/litert/c/"
-[ -d "$SRC/litert/c/options" ] && { mkdir -p "$ST/include/litert/c/options"; cp "$SRC"/litert/c/options/*.h "$ST/include/litert/c/options/" 2>/dev/null || true; }
+# Stage the native C API headers + everything they transitively #include (litert/c/litert_common.h
+# pulls in litert/build_common/build_config.h, etc.), preserving the litert/ layout so the
+# `litert/...` include paths resolve. Add dirs here if the smoke reveals more missing headers.
+mkdir -p "$ST/include" "$ST/lib"
+( cd "$SRC" && find litert/c litert/build_common -name '*.h' | while IFS= read -r h; do
+    mkdir -p "$ST/include/$(dirname "$h")"; cp "$h" "$ST/include/$h"
+  done )
 # bazel-bin is a SYMLINK into the bazel cache — follow it (-L). The C API shared lib lands at
 # bazel-bin/litert/c/libLiteRt.{so,dylib} (LiteRt.dll on Windows).
 lib="$(find -L "$SRC/bazel-bin" -maxdepth 6 \( -name 'libLiteRt.so' -o -name 'libLiteRt.dylib' -o -name 'libLiteRt.dll' -o -name 'LiteRt.dll' \) 2>/dev/null | head -1)"
