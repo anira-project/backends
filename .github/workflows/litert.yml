@@ -1,0 +1,70 @@
+name: litert
+
+# Thin wrapper: derive version + release flag + matrix (engine-meta, from CMakePresets
+# vendor.anira), then hand off to the shared _build-backend.yml pipeline. Builds LiteRT's
+# NATIVE C API (libLiteRt, LiteRt* symbols) from google-ai-edge/LiteRT via Bazel — distinct
+# from the `tflite` engine (legacy TfLite* C API). CPU-only, shared. FIRST-PASS: the Bazel
+# build needs CI iteration per platform; iOS is deferred (has_ios: false) until a litert ios.sh.
+#
+# Triggers (release model in the root README):
+#   - push/PR touching litert sources or shared CI -> validate only (no release)
+#   - tag v<anira-version> -> build at its VERSION, publish to that release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'engines/litert/**'
+      - 'scripts/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - '.github/actions/**'
+      - '.github/workflows/litert.yml'
+      - '.github/workflows/_build-backend.yml'
+    tags:
+      - 'v[0-9]*'
+  pull_request:
+    paths:
+      - 'engines/litert/**'
+      - 'scripts/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - '.github/actions/**'
+      - '.github/workflows/litert.yml'
+      - '.github/workflows/_build-backend.yml'
+
+concurrency:
+  group: litert-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.m.outputs.version }}
+      release: ${{ steps.m.outputs.release }}
+      release_tag: ${{ steps.m.outputs.release_tag }}
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: m
+        uses: ./.github/actions/engine-meta
+        with:
+          preset_prefix: litert
+          version_file: engines/litert/VERSION
+
+  build:
+    needs: meta
+    uses: ./.github/workflows/_build-backend.yml
+    with:
+      engine: litert
+      libname: LiteRt
+      version: ${{ needs.meta.outputs.version }}
+      release: ${{ needs.meta.outputs.release == 'true' }}
+      release_tag: ${{ needs.meta.outputs.release_tag }}
+      matrix: ${{ needs.meta.outputs.matrix }}
+      macos_universal_kinds: '["shared"]'
+      android_bundle_kinds: '["shared"]'
+    secrets: inherit

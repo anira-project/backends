@@ -6,11 +6,15 @@ published as GitHub release archives that anira's CMake downloads at configure t
 
 ## Backends
 
-| Backend     | Upstream                                                          | lib name           | License    |
-| ----------- | ----------------------------------------------------------------- | ------------------ | ---------- |
-| TFLite      | [tensorflow/lite](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/c) | `tensorflowlite_c` | Apache-2.0 |
-| ONNXRuntime | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) | `onnxruntime`      | MIT        |
-| LibTorch    | [pytorch/pytorch](https://github.com/pytorch/pytorch)             | `torch`            | BSD-3      |
+| Backend     | C API        | Upstream                                                          | lib name           | License    |
+| ----------- | ------------ | ----------------------------------------------------------------- | ------------------ | ---------- |
+| TFLite      | `TfLite*`    | [tensorflow/lite](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/c) | `tensorflowlite_c` | Apache-2.0 |
+| LiteRT      | `LiteRt*` ²  | [google-ai-edge/LiteRT](https://github.com/google-ai-edge/LiteRT) | `LiteRt`           | Apache-2.0 |
+| ONNXRuntime | —            | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) | `onnxruntime`      | MIT        |
+| LibTorch    | —            | [pytorch/pytorch](https://github.com/pytorch/pytorch)             | `torch`            | BSD-3      |
+
+TFLite and LiteRT are **two C APIs for the same runtime** (LiteRT is the rebranded TensorFlow
+Lite): `TfLite*` is the mature legacy API; `LiteRt*` is LiteRT's newer native API. Pick one.
 
 This repo is licensed [Apache-2.0](./LICENSE); the **published binaries** follow their
 upstream licenses (above).
@@ -19,19 +23,21 @@ upstream licenses (above).
 
 What ships per target — `shared` and/or `static`:
 
-| Target                          | TFLite            | ONNXRuntime       | LibTorch |
-| ------------------------------- | ----------------- | ----------------- | -------- |
-| macOS x86_64                    | shared · static   | shared · static   | shared   |
-| macOS arm64                     | shared · static   | shared · static   | shared   |
-| macOS universal                 | shared · static   | shared · static   | shared   |
-| Linux x86_64                    | shared · static   | shared · static   | shared   |
-| Linux aarch64                   | shared · static   | shared · static   | shared   |
-| Windows x86_64                  | shared · static ¹ | shared · static ¹ | shared   |
-| Windows arm64                   | shared · static ¹ | shared · static ¹ | shared   |
-| Android (`arm64-v8a` + `x86_64`)| shared · static   | shared · static   | —        |
-| iOS (xcframework)               | static            | static            | —        |
+| Target                          | TFLite            | LiteRT ²  | ONNXRuntime       | LibTorch |
+| ------------------------------- | ----------------- | --------- | ----------------- | -------- |
+| macOS x86_64                    | shared · static   | shared    | shared · static   | shared   |
+| macOS arm64                     | shared · static   | shared    | shared · static   | shared   |
+| macOS universal                 | shared · static   | shared    | shared · static   | shared   |
+| Linux x86_64                    | shared · static   | shared    | shared · static   | shared   |
+| Linux aarch64                   | shared · static   | shared    | shared · static   | shared   |
+| Windows x86_64                  | shared · static ¹ | shared    | shared · static ¹ | shared   |
+| Windows arm64                   | shared · static ¹ | shared    | shared · static ¹ | shared   |
+| Android (`arm64-v8a` + `x86_64`)| shared · static   | shared    | shared · static   | —        |
+| iOS (xcframework)               | static            | —         | static            | —        |
 
 > ¹ Windows `static` also ships a `Debug` variant.
+
+> ² LiteRT native is **in progress** (first-pass, shared-only; built via Bazel). iOS + static are deferred.
 
 > `—` = not provided.
 
