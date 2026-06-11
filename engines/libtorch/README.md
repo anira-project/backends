@@ -6,34 +6,6 @@ CPU-only **shared** libtorch at the version in [`VERSION`](./VERSION), packaged 
 `find_package(Torch)` — so archives preserve `include/`, `lib/`, **`share/cmake/Torch/`**
 (and `bin/` where present).
 
-## Target matrix (shared, 2.12.0)
-
-| Platform   | Arch    | Source        | Upstream archive / how                                   |
-| ---------- | ------- | ------------- | -------------------------------------------------------- |
-| 🍎 macOS   | arm64   | **build**     | from source — matches x86_64 so the universal lipo has matched slices |
-| 🍎 macOS   | x86_64  | **build**     | no prebuilt since 2.2.2 (Intel-mac dropped) → from source |
-| 🐧 Linux   | x86_64  | **prebuilt**  | `libtorch-shared-with-deps-<v>+cpu.zip`                  |
-| 🐧 Linux   | aarch64 | **build**     | no aarch64 in the `cpu/` index → from source             |
-| 🪟 Windows | x86_64  | **prebuilt**  | `libtorch-win-shared-with-deps-<v>+cpu.zip`              |
-| 🪟 Windows | arm64   | **build**     | no 2.12.0 release prebuilt → from source with **native ARM64 MSVC `cl`** |
-
-> **Windows arm64** builds from source with the **native ARM64 MSVC `cl`** toolchain
-> (`vcvarsall.bat arm64`), mirroring PyTorch's own win-arm64 CI
-> (`.ci/pytorch/windows/arm64/build_libtorch.bat`) — **not** clang-cl. An earlier clang-cl
-> attempt hit an x64-target mismatch, an OOM under emulation, and the `uint` NEON-vec error;
-> native `cl` is PyTorch's actual toolchain and sidesteps all three.
-| 🍎 macOS   | universal | **build (lipo)** | lipo of the two per-arch from-source archives          |
-
-The macOS **universal** archive is `lipo`'d from the two per-arch *from-source* macOS
-archives (identical build config → matched dylib sets — the prerequisite for a clean
-lipo). Both macOS arches build from source for this reason, mirroring LiteRT/ONNXRuntime;
-the official prebuilt arm64 isn't used (lipo'ing it against our from-source x86_64 would
-risk mismatched dylib sets).
-
-> The from-source targets are first-pass recipes (see `build-libtorch.sh`);
-> like the ONNXRuntime/LiteRT builders they are expected to need a few CI rounds to
-> converge per platform. Key fixes get recorded in [`../../TODO.md`](../../TODO.md).
-
 ## Static builds — not supported
 
 Unlike LiteRT and ONNXRuntime, LibTorch ships **shared only**. Static is intentionally
@@ -87,3 +59,27 @@ cmake -S engines/libtorch/test -B /tmp/smoke -DCMAKE_PREFIX_PATH=/tmp/out && cma
 ```
 
 Needs Python 3.12 + PyTorch's build deps; Linux aarch64 needs `libopenblas-dev`.
+
+## Build notes
+
+**Source per target**: Linux-x86_64 and Windows-x86_64 repackage upstream
+`download.pytorch.org` prebuilts; macOS (both arches), Linux-aarch64 and Windows-arm64 build
+from source (no matching CPU prebuilt at 2.12.0). The macOS **universal** archive is `lipo`'d
+from the two from-source per-arch builds — both build from source so their dylib sets match
+(a clean lipo needs matched slices; the official prebuilt arm64 isn't used).
+
+- **CPU-only config**: `USE_CUDA/ROCM/CUDNN/NCCL/DISTRIBUTED/MPI=0`. `USE_MKLDNN`+`FBGEMM`
+  on for x86_64 (off for arm64 — FBGEMM is x86-only). BLAS: Accelerate on macOS, OpenBLAS on
+  Linux aarch64, Eigen on Windows arm64 (self-contained).
+- **Windows arm64**: native ARM64 MSVC `cl`, **not** clang-cl (`vcvarsall.bat arm64`,
+  mirroring PyTorch's own win-arm64 CI). VS ships only x64 clang-cl → an earlier clang-cl
+  attempt hit an x64-target mismatch, OOM under emulation, and a `uint` NEON-vec error;
+  native `cl` sidesteps all three. `MAX_JOBS=2` on the 16 GB runner; `git core.longpaths`
+  (PyTorch `test/` paths exceed `MAX_PATH`); install only `requirements-build.txt` (the full
+  reqs drag in `lintrunner`, which has no win-arm64 wheel).
+- **macOS x86_64**: builds on `macos-15-intel` (the last Intel image; PyTorch dropped Intel-mac
+  libtorch after 2.2.2). It's a heavy oneDNN+FBGEMM compile that runs close to GitHub's 6-hour
+  hosted-runner cap — if it ever caps, trim the build (`USE_MKLDNN=0`) or add compile caching.
+  `USE_NATIVE_ARCH=0`/`USE_MPS=0` dodge the Apple-Clang `-mavx512fp16` failure.
+- **These recipes are first-pass** — like LiteRT/ONNXRuntime they may need a CI round per
+  platform when the pinned version changes.

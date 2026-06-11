@@ -6,21 +6,6 @@ libs upstream, so **static is built from source** (no op-reduction — every ope
 ships); **shared** is built for macOS but **repackaged** from Microsoft's prebuilts
 elsewhere.
 
-## Target matrix
-
-| Platform    | Arch                     | `static`                       | `shared`                |
-| ----------- | ------------------------ | ------------------------------ | ----------------------- |
-| 🍎 macOS    | x86_64, arm64, universal | ✅ built                       | 🚧 built (+ `lipo`)     |
-| 🪟 Windows  | x64, arm64               | ✅ built `Release` + `Debug`   | 🚧 upstream prebuilt    |
-| 🐧 Linux    | x86_64, aarch64          | ✅ built                       | 🚧 upstream prebuilt    |
-| 🤖 Android  | arm64-v8a, x86_64        | ✅ built (multi-ABI bundle)    | 🚧 from Maven AAR       |
-| 📱 iOS      | device + simulator       | ✅ built xcframework           | —                       |
-
-`static` = built from source everywhere (one merged lib via `bundle-static.sh`).
-`shared` = built for 🍎 macOS (so the universal slices match), **repackaged** from
-upstream prebuilts for 🪟🐧🤖 (no build — `onnxruntime-osx-x86_64` is the only CPU
-shared lib Microsoft doesn't ship, hence we build all of macOS ourselves).
-
 ## Files
 
 | File                  | Purpose                                                      |
@@ -35,17 +20,29 @@ shared lib Microsoft doesn't ship, hence we build all of macOS ourselves).
 | `test/smoke.cpp`      | Forward-pass smoke (`add.onnx`, `y = x + x` → `{2,4,6}`)     |
 | `test/add.onnx`       | Tiny model the smoke runs                                     |
 
-## Static-build notes (non-obvious bits)
+## Build notes (non-obvious bits)
 
-- **re2 force-build.** onnxruntime include-attaches re2 (`EXCLUDE_FROM_ALL`) but never
-  links it on desktop, so a normal build doesn't compile it → the static bundle misses
-  `re2::RE2`. We build the `re2` target after `build.py` (on Windows VS, by the project's
-  real path), with `CMAKE_DISABLE_FIND_PACKAGE_re2=ON` to force it from source everywhere.
+- **Windows: Ninja + cl**, not build.py's default `Visual Studio 17 2022` generator — the
+  runner images ship VS 18, which that generator can't find ("could not find any instance of
+  Visual Studio"). Ninja+cl is VS-version agnostic.
+- **Windows arm64: `onnxruntime_USE_KLEIDIAI=OFF` + `onnxruntime_USE_SVE=OFF`** — their `.S`
+  matmul microkernels are assembled by `armasm64.exe`, which rejects `/arch:armv8.2`
+  (error A2029). Other arm64 targets (clang) keep them.
+- **re2 force-build.** onnxruntime include-attaches re2 (`EXCLUDE_FROM_ALL`) but never links
+  it on desktop, so a normal build doesn't compile it → the static bundle misses `re2::RE2`.
+  We build the `re2` target after `build.py` (with Ninja it builds by name) and force it from
+  source everywhere with `CMAKE_DISABLE_FIND_PACKAGE_re2=ON`.
 - **`onnxruntime_ENABLE_MEMLEAK_CHECKER=OFF`** for `Debug` — else it aborts at clean exit
   over onnxruntime's never-freed singletons.
 - **`onnxruntime_ENABLE_LTO=OFF`** — pins MSVC `/GL`+`/LTCG` off (the ort-builder LTCG-patch
   effect; the literal patch no longer applies to 1.26).
-- **Bundle exclude** narrowed to `/testdata/` (not `-src/`) — some deps build in-source.
+- **Bundle exclude** narrowed to `/testdata/` + `libprotobuf`/`libprotoc` (build-time only;
+  onnxruntime runs on protobuf-lite).
+- **Smoke linking** (in `test/CMakeLists.txt`): Windows static needs the matching CRT
+  (`/MD`|`/MDd`) + `advapi32` + `ucrt[d]`, and the `/MDd` run needs the non-redist debug CRT
+  DLLs next to the exe; macOS needs `-framework Foundation -framework CoreFoundation`; Linux
+  needs `rt`/`dl`/`m`.
+- **iOS** `build.py` flag is `--apple_sysroot` (renamed from `--ios_sysroot` in 1.26).
 
 ## Local build
 

@@ -4,21 +4,7 @@ Builds `libtensorflowlite_c` from upstream `tensorflow/lite/c` at the version in
 [`VERSION`](./VERSION), packaged for [anira](https://github.com/anira-project/anira).
 CPU only (XNNPACK; no GPU/NPU).
 
-## Target matrix
-
-| Platform    | Arch                  | `shared`        | `static`                  | How                         |
-| ----------- | --------------------- | --------------- | ------------------------- | --------------------------- |
-| 🍎 macOS    | x86_64, arm64, universal | ✅           | ✅                        | CMake (+ `lipo` universal)  |
-| 🪟 Windows  | x64                   | ✅              | ✅ `Release` + `Debug`    | CMake (Ninja + MSVC)        |
-| 🪟 Windows  | arm64                 | ✅              | ✅ `Release` + `Debug`    | CMake — no XNNPACK¹         |
-| 🐧 Linux    | x86_64, aarch64       | ✅              | ✅                        | CMake                       |
-| 🤖 Android  | arm64-v8a, x86_64     | ✅ multi-ABI bundle | ✅ multi-ABI bundle    | CMake / NDK                 |
-| 📱 iOS      | device + simulator    | —               | ✅ xcframework            | **download** Google prebuilt |
-| 🌐 Web      | wasm32                | —               | 🚧 deferred               | CMake / Emscripten          |
-
-¹ Windows-arm64 disables XNNPACK (MSVC can't build its NEON microkernels).
-
-### Consuming the Windows `static` lib
+## Consuming the Windows `static` lib
 
 - `-DTFL_STATIC_LIBRARY_BUILD` — else the C-API header uses `__declspec(dllimport)` (link fails).
 - match the CRT — `/MD` for `-static`, `/MDd` for `-static-debug` (cl defaults to `/MT` → `LNK2038`).
@@ -30,9 +16,10 @@ CPU only (XNNPACK; no GPU/NPU).
 | ------------------------- | ------------------------------------------------ |
 | `VERSION`                 | Pinned upstream version (single source of truth) |
 | `CMakeLists.txt`          | Fetch tensorflow, build + install the C API      |
-| `CMakePresets.json`       | One preset per target (platform × shared/static) |
-| `ci-matrix.json`          | Active CI build matrix                           |
-| `ci-matrix.deferred.json` | Parked rows (wasm)                               |
+| `CMakePresets.json`       | Standalone litert presets (bases in `presets-base.json`) |
+| `presets-base.json`       | Hidden platform/kind bases, shared with the root presets |
+| `ios.sh`                  | Repackage Google's `TensorFlowLiteC.xcframework` |
+| `test/CMakeLists.txt`     | CMake smoke (run via the smoke action / ctest)   |
 | `test/smoke.cpp`          | Forward-pass smoke (`add.bin` → `{3,9}`)         |
 
 > iOS isn't built here — it repackages Google's prebuilt `TensorFlowLiteC.xcframework`
@@ -47,3 +34,14 @@ cmake --install build/macos-arm64-shared --prefix /tmp/out   # -> /tmp/out/{incl
 ```
 
 Android needs `ANDROID_NDK_HOME`; wasm needs `EMSDK` (4.0.23, to match anira-web's ABI).
+
+## Build notes
+
+- **Windows Debug** uses `/Z7` (no PDB → no `C1041`); no sccache for Debug.
+- **Windows arm64** disables XNNPACK (MSVC can't build its NEON microkernels).
+- **macOS x86_64 / iOS-sim x86_64** force `CMAKE_SYSTEM_PROCESSOR` so TFLite fetches the
+  NEON_2_SSE shim x86 needs (Apple keeps `CMAKE_SYSTEM_PROCESSOR` as the host arch otherwise).
+- **CMake 4 + old TFLite deps** need `CMAKE_POLICY_VERSION_MINIMUM=3.5` (set in the preset env).
+- **Android smoke** links `-static-libstdc++` (no `libc++_shared.so` on the device).
+- **Static bundling** merges the component archives wholesale: macOS `libtool`, Linux
+  `ar -M`, Windows `lib.exe` (`scripts/bundle-static.sh`).
