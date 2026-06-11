@@ -31,11 +31,8 @@ What ships per target — `shared` (dynamic lib) and/or `static` (one merged, dr
 | Android (`arm64-v8a` + `x86_64`)| shared · static   | shared · static   | —        |
 | iOS (xcframework)               | static            | static            | —        |
 
-¹ Windows `static` also ships a `Debug` variant. — = not provided (LibTorch is
-desktop-shared only).
-
-Archive names: `<lib>-<version>-<target>-<kind>[-debug].zip` (the target token is the
-canonical name above; ARM is `aarch64` on Linux, `arm64` elsewhere, `arm64-v8a` for Android).
+> ¹ Windows `static` also ships a `Debug` variant.
+> `—` = not provided (LibTorch is desktop-shared only).
 
 ## Releases
 
