@@ -24,17 +24,34 @@ if [ ! -d "$SRC/.git" ]; then
   git clone --depth 1 --branch "v${VER}" https://github.com/google-ai-edge/LiteRT "$SRC"
 fi
 
-# Bazel config per platform (from LiteRT's .github/workflows). CPU-only: GPU + NPU off.
+# LiteRT/TF Bazel needs configure.py FIRST to generate the (host) CC toolchain — without it,
+# "@@local_config_cc//:toolchain does not contain a toolchain for cpu". Run it non-interactively
+# (env mirrors LiteRT's own CI). NOTE: their CI runs inside the ml-build Docker container with
+# hermetic toolchains; bare-runner cross-builds (android/ios/windows) may need more here.
+export PYTHON_BIN_PATH="$(command -v python3)"
+export PYTHON_LIB_PATH="$(python3 -c 'import site; print(site.getsitepackages()[0])')"
+export TF_NEED_ROCM=0 TF_NEED_CUDA=0 CC_OPT_FLAGS='-Wno-sign-compare'
+if [ "$PLATFORM" = "android" ]; then
+  : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME not set}"
+  export TF_SET_ANDROID_WORKSPACE=1 ANDROID_NDK_API_LEVEL=24 \
+         ANDROID_SDK_API_LEVEL="${ANDROID_SDK_API_LEVEL:-33}" \
+         ANDROID_BUILD_TOOLS_VERSION="${ANDROID_BUILD_TOOLS_VERSION:-34.0.0}"
+else
+  export TF_SET_ANDROID_WORKSPACE=0
+fi
+( cd "$SRC" && chmod +x configure.py && yes "" | python3 configure.py )
+
+# Per-platform config (from LiteRT's .bazelrc / CI). CPU-only: GPU + NPU off.
 case "$PLATFORM" in
   linux)   cfg=(--config=bulk_test_cpu) ;;
-  macos)   cfg=(--config="macos_${ARCH}") ;;          # macos_arm64 / macos_x86_64
-  android) cfg=(--config="android_${ARCH%-v8a}") ;;    # android_arm64 / android_x86_64
+  macos)   cfg=(--config="macos_${ARCH}" --config=bulk_test_cpu) ;;  # macos_arm64 / macos_x86_64
+  android) cfg=(--config="android_${ARCH%-v8a}") ;;                  # android_arm64 / android_x86_64
   ios)     cfg=(--config=ios_arm64) ;;
   windows) cfg=(--config=windows) ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
 
-# bazelisk picks the repo-pinned Bazel from .bazelversion. CPU-only via the documented switches.
+# bazelisk picks the repo-pinned Bazel from .bazelversion.
 ( cd "$SRC" && bazel build "${cfg[@]}" \
     --define=litert_disable_gpu=true --define=litert_disable_npu=true \
     //litert/c:litert_runtime_c_api_shared_lib )
