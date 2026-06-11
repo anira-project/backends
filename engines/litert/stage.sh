@@ -28,12 +28,17 @@ fi
 # "@@local_config_cc//:toolchain does not contain a toolchain for cpu". Run it non-interactively
 # (env mirrors LiteRT's own CI). NOTE: their CI runs inside the ml-build Docker container with
 # hermetic toolchains; bare-runner cross-builds (android/ios/windows) may need more here.
-export PYTHON_BIN_PATH="$(command -v python3)"
+# sys.executable is the real interpreter path (.exe on Windows; `command -v python3` returns a
+# no-.exe path there that configure.py rejects).
+export PYTHON_BIN_PATH="$(python3 -c 'import sys; print(sys.executable)')"
 export PYTHON_LIB_PATH="$(python3 -c 'import site; print(site.getsitepackages()[0])')"
 export TF_NEED_ROCM=0 TF_NEED_CUDA=0 CC_OPT_FLAGS='-Wno-sign-compare'
 if [ "$PLATFORM" = "android" ]; then
   : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME not set}"
-  export TF_SET_ANDROID_WORKSPACE=1 ANDROID_NDK_API_LEVEL=24 \
+  # configure.py's android workspace needs the SDK too (not just the NDK).
+  export TF_SET_ANDROID_WORKSPACE=1 \
+         ANDROID_SDK_HOME="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?ANDROID SDK not found}}" \
+         ANDROID_NDK_API_LEVEL=24 \
          ANDROID_SDK_API_LEVEL="${ANDROID_SDK_API_LEVEL:-33}" \
          ANDROID_BUILD_TOOLS_VERSION="${ANDROID_BUILD_TOOLS_VERSION:-34.0.0}"
 else
