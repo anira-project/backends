@@ -32,7 +32,8 @@ What ships per target — `shared` (dynamic lib) and/or `static` (one merged, dr
 | iOS (xcframework)               | static            | static            | —        |
 
 > ¹ Windows `static` also ships a `Debug` variant.
-> `—` = not provided (LibTorch is desktop-shared only).
+
+> `—` = not provided.
 
 ## Releases
 
