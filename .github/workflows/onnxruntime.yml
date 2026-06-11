@@ -1,496 +1,70 @@
 name: onnxruntime
 
-# Static onnxruntime (full op set, CPU) built from source via engines/onnxruntime/build-ort.sh
-# (ports olilarkin/ort-builder minus op-reduction). Mirrors the LiteRT pipeline:
-# build -> bundle -> smoke -> package -> publish, plus macOS-universal / Android-bundle / iOS.
+# Thin wrapper: derive version + release flag + matrix (engine-meta, from CMakePresets
+# vendor.anira), then hand off to the shared _build-backend.yml pipeline. onnxruntime ships
+# static (built from source, all platforms incl. iOS xcframework) AND shared (macOS built
+# from source; Linux/Windows/Android repackaged from upstream prebuilts).
 #
-# Triggers: push/PR validates; tag v<anira-version> (e.g. v2.0.3) builds + publishes
-# to that release. Release model: ../../docs/RELEASE.md.
+# Triggers:
+#   - push/PR touching onnxruntime sources or shared CI -> validate only (no release)
+#   - tag v<anira-version> (e.g. v2.0.3) -> build at its VERSION, publish to that release
 
 on:
   push:
     branches: [main]
     paths:
       - 'engines/onnxruntime/**'
-      - 'shared/**'
+      - 'scripts/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - '.github/actions/**'
       - '.github/workflows/onnxruntime.yml'
+      - '.github/workflows/_build-backend.yml'
     tags:
       - 'v[0-9]*'
   pull_request:
     paths:
       - 'engines/onnxruntime/**'
-      - 'shared/**'
+      - 'scripts/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - '.github/actions/**'
       - '.github/workflows/onnxruntime.yml'
+      - '.github/workflows/_build-backend.yml'
 
 concurrency:
   group: onnxruntime-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  NDK_VERSION: r27b
-
 jobs:
-  setup:
+  meta:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.meta.outputs.version }}
-      release: ${{ steps.meta.outputs.release }}
-      release_tag: ${{ steps.meta.outputs.release_tag }}
-      matrix: ${{ steps.meta.outputs.matrix }}
+      version: ${{ steps.m.outputs.version }}
+      release: ${{ steps.m.outputs.release }}
+      release_tag: ${{ steps.m.outputs.release_tag }}
+      matrix: ${{ steps.m.outputs.matrix }}
     steps:
       - uses: actions/checkout@v6
-      - id: meta
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Engine version (pins what's built, appears in archive names).
-          echo "version=$(tr -d '[:space:]' < engines/onnxruntime/VERSION)" >> "$GITHUB_OUTPUT"
-          # Release is keyed to the anira version: a v<x.y.z> tag publishes to that release.
-          if [[ "$GITHUB_REF" == refs/tags/v[0-9]* ]]; then
-            echo "release=true" >> "$GITHUB_OUTPUT"
-            echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          else
-            echo "release=false" >> "$GITHUB_OUTPUT"
-          fi
-          echo "matrix=$(jq -c . engines/onnxruntime/ci-matrix.json)" >> "$GITHUB_OUTPUT"
+      - id: m
+        uses: ./.github/actions/engine-meta
+        with:
+          preset_prefix: onnx
+          version_file: engines/onnxruntime/VERSION
 
   build:
-    needs: setup
-    name: ${{ matrix.label }}-${{ matrix.kind }}${{ matrix.config == 'Debug' && '-debug' || '' }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.setup.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: setup build tools
-        uses: tanh-lab/ci-actions/setup-cpp-build-tools@bbdd199c8796cdec6f064827eedc45028cd60ce3
-      - name: ensure ninja (Linux fallback)
-        if: ${{ runner.os == 'Linux' }}
-        shell: bash
-        run: command -v ninja >/dev/null || { sudo apt-get update && sudo apt-get install -y ninja-build; }
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: python build deps
-        shell: bash
-        run: python -m pip install --upgrade pip setuptools wheel packaging numpy
-
-      - name: setup MSVC env (Windows)
-        if: ${{ runner.os == 'Windows' }}
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: ${{ matrix.msvc_arch }}
-
-      - name: setup Android NDK
-        if: ${{ matrix.platform == 'android' }}
-        id: ndk
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: ${{ env.NDK_VERSION }}
-      - name: export ANDROID_NDK_HOME
-        if: ${{ matrix.platform == 'android' }}
-        shell: bash
-        run: echo "ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
-
-      - name: cache onnxruntime source
-        uses: actions/cache@v4
-        with:
-          path: engines/onnxruntime/onnxruntime-src
-          key: ort-src-${{ needs.setup.outputs.version }}
-
-      - name: build onnxruntime (static, full ops)
-        working-directory: engines/onnxruntime
-        shell: bash
-        run: bash build-ort.sh "${{ matrix.platform }}" "${{ matrix.arch }}" "${{ matrix.config }}" build
-
-      - name: compose archive name
-        id: name
-        shell: bash
-        run: |
-          name="onnxruntime-${{ needs.setup.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}-static"
-          [ "${{ matrix.config }}" = "Debug" ] && name="${name}-debug"
-          echo "archive=$name" >> "$GITHUB_OUTPUT"
-
-      - name: bundle + install
-        shell: bash
-        run: |
-          set -euo pipefail
-          st="staging/${{ steps.name.outputs.archive }}"
-          mkdir -p "$st/include" "$st/lib"
-          cp engines/onnxruntime/include/*.h "$st/include/"
-          if [ "${{ runner.os }}" = "Windows" ]; then out="$st/lib/onnxruntime.lib"; else out="$st/lib/libonnxruntime.a"; fi
-          # Exclude:
-          #  - /testdata/  (only; NOT the broad "-src/", which would lose re2's in-source libre2.a)
-          #  - full libprotobuf + libprotoc — the protobuf descriptor/reflection/compiler, used
-          #    only at build time (onnxruntime runs on protobuf-LITE). merge-all swept them in,
-          #    bloating the .lib; the keep-lite regex matches libprotobuf-lite. (smoke verifies.)
-          BUNDLE_EXCLUDE_REGEX='/testdata/|libprotoc|libprotobuf[d]?\.(lib|a)' \
-            bash shared/bundle-static.sh "engines/onnxruntime/build/${{ matrix.config }}" "$out"
-
-      # Smoke: compile+link the example against the packaged lib (proves it's symbol-complete),
-      # run on native desktop targets. Android cross-compiles -> compile+link only (no run).
-      - name: smoke
-        if: ${{ matrix.platform != 'android' }}
-        shell: bash
-        run: |
-          bash engines/onnxruntime/smoke-onnx.sh "staging/${{ steps.name.outputs.archive }}" \
-            "engines/onnxruntime/test/smoke.cpp" "${{ matrix.arch }}" "${{ matrix.config }}" "${{ matrix.can_run }}"
-
-      - name: package
-        shell: bash
-        run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ${{ steps.name.outputs.archive }}
-          path: dist/${{ steps.name.outputs.archive }}.zip
-          retention-days: 14
-
-      # Per-ABI Android builds are combined below; they don't publish standalone.
-      - name: publish to release
-        if: ${{ needs.setup.outputs.release == 'true' && matrix.os != 'Android' }}
-        shell: bash
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          tag="${{ needs.setup.outputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
-
-  # --------------------------------------------------------------------------
-  # macOS universal: lipo the x86_64 + arm64 static libs into one.
-  # --------------------------------------------------------------------------
-  macos-universal:
-    needs: [setup, build]
-    name: macOS-universal-static
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v6
-      - name: names
-        id: n
-        shell: bash
-        run: |
-          base="onnxruntime-${{ needs.setup.outputs.version }}"
-          {
-            echo "x64=${base}-macOS-x86_64-static"
-            echo "arm=${base}-macOS-arm64-static"
-            echo "uni=${base}-macOS-universal-static"
-          } >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v8
-        with: { name: "${{ steps.n.outputs.x64 }}", path: dl/x64 }
-      - uses: actions/download-artifact@v8
-        with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
-      - name: lipo + repackage
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p ex/x64 ex/arm
-          unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
-          unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
-          stage="staging/${{ steps.n.outputs.uni }}"; mkdir -p "$stage/lib"
-          cp -R ex/x64/include "$stage/include"
-          lipo -create ex/x64/lib/libonnxruntime.a ex/arm/lib/libonnxruntime.a -output "$stage/lib/libonnxruntime.a"
-          lipo -info "$stage/lib/libonnxruntime.a"
-          bash shared/package.sh "$stage" "${{ steps.n.outputs.uni }}" dist
-      - uses: actions/upload-artifact@v7
-        with: { name: "${{ steps.n.outputs.uni }}", path: "dist/${{ steps.n.outputs.uni }}.zip", retention-days: 14 }
-      - name: publish to release
-        if: ${{ needs.setup.outputs.release == 'true' }}
-        shell: bash
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          tag="${{ needs.setup.outputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.n.outputs.uni }}.zip" --clobber
-
-  # --------------------------------------------------------------------------
-  # Android: combine per-ABI static libs into one archive with lib/<abi>/.
-  # --------------------------------------------------------------------------
-  android-bundle:
-    needs: [setup, build]
-    name: Android-static
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-      - name: names
-        id: n
-        shell: bash
-        run: |
-          base="onnxruntime-${{ needs.setup.outputs.version }}"
-          {
-            echo "arm=${base}-Android-arm64-v8a-static"
-            echo "x64=${base}-Android-x86_64-static"
-            echo "bundle=${base}-Android-static"
-          } >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v8
-        with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
-      - uses: actions/download-artifact@v8
-        with: { name: "${{ steps.n.outputs.x64 }}", path: dl/x64 }
-      - name: assemble multi-ABI
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p ex/arm ex/x64
-          unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
-          unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
-          stage="staging/${{ steps.n.outputs.bundle }}"
-          mkdir -p "$stage/lib/arm64-v8a" "$stage/lib/x86_64"
-          cp -R ex/arm/include "$stage/include"
-          cp ex/arm/lib/libonnxruntime.a "$stage/lib/arm64-v8a/"
-          cp ex/x64/lib/libonnxruntime.a "$stage/lib/x86_64/"
-          bash shared/package.sh "$stage" "${{ steps.n.outputs.bundle }}" dist
-      - uses: actions/upload-artifact@v7
-        with: { name: "${{ steps.n.outputs.bundle }}", path: "dist/${{ steps.n.outputs.bundle }}.zip", retention-days: 14 }
-      - name: publish to release
-        if: ${{ needs.setup.outputs.release == 'true' }}
-        shell: bash
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          tag="${{ needs.setup.outputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.n.outputs.bundle }}.zip" --clobber
-
-  # --------------------------------------------------------------------------
-  # iOS: build device + simulator (arm64) static libs from source, combine into
-  # an .xcframework. BUILT (no static prebuilt for ONNX). Smoke runs on the sim.
-  # --------------------------------------------------------------------------
-  ios-xcframework:
-    needs: setup
-    name: iOS-static
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
-      - name: python build deps
-        shell: bash
-        run: python -m pip install --upgrade pip setuptools wheel packaging numpy
-      - name: cache onnxruntime source
-        uses: actions/cache@v4
-        with:
-          path: engines/onnxruntime/onnxruntime-src
-          key: ort-src-${{ needs.setup.outputs.version }}
-
-      - name: build device + simulator
-        working-directory: engines/onnxruntime
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash build-ort.sh ios      arm64 Release build-ios-device
-          bash build-ort.sh ios-sim  arm64 Release build-ios-sim
-
-      - name: bundle slices + xcframework
-        shell: bash
-        run: |
-          set -euo pipefail
-          ver="${{ needs.setup.outputs.version }}"; archive="onnxruntime-${ver}-iOS-xcframework"
-          bash shared/bundle-static.sh engines/onnxruntime/build-ios-device/Release dev/libonnxruntime.a
-          bash shared/bundle-static.sh engines/onnxruntime/build-ios-sim/Release    sim/libonnxruntime.a
-          rm -rf onnxruntime.xcframework
-          xcodebuild -create-xcframework \
-            -library "$PWD/dev/libonnxruntime.a" -headers engines/onnxruntime/include \
-            -library "$PWD/sim/libonnxruntime.a" -headers engines/onnxruntime/include \
-            -output onnxruntime.xcframework
-          mkdir -p "dist" "staging/$archive"
-          cp -R onnxruntime.xcframework "staging/$archive/"
-          ( cd "staging/$archive" && cmake -E tar cf "$GITHUB_WORKSPACE/dist/$archive.zip" --format=zip onnxruntime.xcframework )
-
-      - uses: actions/upload-artifact@v7
-        with: { name: "onnxruntime-${{ needs.setup.outputs.version }}-iOS-xcframework", path: "dist/onnxruntime-${{ needs.setup.outputs.version }}-iOS-xcframework.zip", retention-days: 14 }
-      - name: publish to release
-        if: ${{ needs.setup.outputs.release == 'true' }}
-        shell: bash
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          tag="${{ needs.setup.outputs.release_tag }}"; a="onnxruntime-${{ needs.setup.outputs.version }}-iOS-xcframework"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/$a.zip" --clobber
-
-  # ==========================================================================
-  # SHARED libs (same release as static). macOS is BUILT from source (no upstream
-  # x86_64 prebuilt; the universal needs matched slices). Linux/Windows/Android are
-  # REPACKAGED from Microsoft's prebuilts — download + restage, no build.
-  # ==========================================================================
-  shared-macos:
-    needs: setup
-    name: macOS-${{ matrix.arch }}-shared
-    runs-on: macos-15
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x86_64, arm64]
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
-      - name: python build deps
-        shell: bash
-        run: python -m pip install --upgrade pip setuptools wheel packaging numpy
-      - name: cache onnxruntime source
-        uses: actions/cache@v4
-        with:
-          path: engines/onnxruntime/onnxruntime-src
-          key: ort-src-${{ needs.setup.outputs.version }}
-      - name: build shared
-        working-directory: engines/onnxruntime
-        shell: bash
-        run: bash build-ort.sh macos ${{ matrix.arch }} Release build shared
-      - name: install
-        id: name
-        shell: bash
-        run: |
-          set -euo pipefail
-          name="onnxruntime-${{ needs.setup.outputs.version }}-macOS-${{ matrix.arch }}-shared"
-          st="staging/$name"; mkdir -p "$st/include" "$st/lib"
-          cp engines/onnxruntime/include/*.h "$st/include/"
-          dy="$(find engines/onnxruntime/build/Release -maxdepth 1 -type f -name 'libonnxruntime*.dylib' | head -1)"
-          [ -n "$dy" ] || { echo "ERROR: no shared dylib built"; exit 1; }
-          cp "$dy" "$st/lib/libonnxruntime.dylib"
-          install_name_tool -id @rpath/libonnxruntime.dylib "$st/lib/libonnxruntime.dylib"
-          echo "archive=$name" >> "$GITHUB_OUTPUT"
-      - name: smoke (forward pass)
-        shell: bash
-        run: |
-          bash engines/onnxruntime/smoke-onnx.sh "staging/${{ steps.name.outputs.archive }}" \
-            engines/onnxruntime/test/smoke.cpp ${{ matrix.arch }} Release 1 shared
-      - name: package
-        shell: bash
-        run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist
-      - uses: actions/upload-artifact@v7
-        with: { name: "${{ steps.name.outputs.archive }}", path: "dist/${{ steps.name.outputs.archive }}.zip", retention-days: 14 }
-      - name: publish to release
-        if: ${{ needs.setup.outputs.release == 'true' }}
-        shell: bash
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          tag="${{ needs.setup.outputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
-
-  shared-macos-universal:
-    needs: [setup, shared-macos]
-    name: macOS-universal-shared
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v6
-      - name: names
-        id: n
-        shell: bash
-        run: |
-          base="onnxruntime-${{ needs.setup.outputs.version }}"
-          { echo "x64=${base}-macOS-x86_64-shared"; echo "arm=${base}-macOS-arm64-shared"; echo "uni=${base}-macOS-universal-shared"; } >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v8
-        with: { name: "${{ steps.n.outputs.x64 }}", path: dl/x64 }
-      - uses: actions/download-artifact@v8
-        with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
-      - name: lipo + repackage
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p ex/x64 ex/arm
-          unzip -q "dl/x64/${{ steps.n.outputs.x64 }}.zip" -d ex/x64
-          unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
-          stage="staging/${{ steps.n.outputs.uni }}"; mkdir -p "$stage/lib"
-          cp -R ex/arm/include "$stage/include"
-          lipo -create ex/x64/lib/libonnxruntime.dylib ex/arm/lib/libonnxruntime.dylib -output "$stage/lib/libonnxruntime.dylib"
-          lipo -info "$stage/lib/libonnxruntime.dylib"
-      - name: smoke (forward pass, arm64 slice)
-        shell: bash
-        run: |
-          bash engines/onnxruntime/smoke-onnx.sh "staging/${{ steps.n.outputs.uni }}" \
-            engines/onnxruntime/test/smoke.cpp arm64 Release 1 shared
-      - name: package
-        shell: bash
-        run: bash shared/package.sh "staging/${{ steps.n.outputs.uni }}" "${{ steps.n.outputs.uni }}" dist
-      - uses: actions/upload-artifact@v7
-        with: { name: "${{ steps.n.outputs.uni }}", path: "dist/${{ steps.n.outputs.uni }}.zip", retention-days: 14 }
-      - name: publish to release
-        if: ${{ needs.setup.outputs.release == 'true' }}
-        shell: bash
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          tag="${{ needs.setup.outputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.n.outputs.uni }}.zip" --clobber
-
-  shared-repackage:
-    needs: setup
-    name: ${{ matrix.os }}-${{ matrix.arch }}-shared
-    # Native runner per target so we can SMOKE the repackaged lib (validates our
-    # repackaging — right files, symlinks, headers — not just Microsoft's prebuilt).
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: Linux,   arch: x86_64,  flavor: linux,   asset: onnxruntime-linux-x64,     ext: tgz, runner: ubuntu-24.04 }
-          - { os: Linux,   arch: aarch64, flavor: linux,   asset: onnxruntime-linux-aarch64, ext: tgz, runner: ubuntu-24.04-arm }
-          - { os: Windows, arch: x86_64,  flavor: windows, asset: onnxruntime-win-x64,       ext: zip, runner: windows-2025,   msvc_arch: x64 }
-          - { os: Windows, arch: arm64,   flavor: windows, asset: onnxruntime-win-arm64,     ext: zip, runner: windows-11-arm, msvc_arch: arm64 }
-    steps:
-      - uses: actions/checkout@v6
-      - name: setup MSVC env (Windows)
-        if: ${{ matrix.os == 'Windows' }}
-        uses: ilammy/msvc-dev-cmd@v1
-        with: { arch: "${{ matrix.msvc_arch }}" }
-      - name: repackage upstream prebuilt
-        id: name
-        shell: bash
-        run: |
-          set -euo pipefail
-          ver="${{ needs.setup.outputs.version }}"
-          name="onnxruntime-$ver-${{ matrix.os }}-${{ matrix.arch }}-shared"
-          url="https://github.com/microsoft/onnxruntime/releases/download/v$ver/${{ matrix.asset }}-$ver.${{ matrix.ext }}"
-          bash engines/onnxruntime/repackage-shared.sh ${{ matrix.flavor }} "$url" "staging/$name"
-          echo "archive=$name" >> "$GITHUB_OUTPUT"
-      - name: smoke (forward pass)
-        shell: bash
-        run: |
-          bash engines/onnxruntime/smoke-onnx.sh "staging/${{ steps.name.outputs.archive }}" \
-            engines/onnxruntime/test/smoke.cpp ${{ matrix.arch }} Release 1 shared
-      - name: package
-        shell: bash
-        run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist
-      - uses: actions/upload-artifact@v7
-        with: { name: "${{ steps.name.outputs.archive }}", path: "dist/${{ steps.name.outputs.archive }}.zip", retention-days: 14 }
-      - name: publish to release
-        if: ${{ needs.setup.outputs.release == 'true' }}
-        shell: bash
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          tag="${{ needs.setup.outputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
-
-  shared-android:
-    needs: setup
-    name: Android-shared
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-      - name: repackage AAR (multi-ABI)
-        id: name
-        shell: bash
-        run: |
-          set -euo pipefail
-          ver="${{ needs.setup.outputs.version }}"
-          name="onnxruntime-$ver-Android-shared"
-          url="https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/$ver/onnxruntime-android-$ver.aar"
-          bash engines/onnxruntime/repackage-shared.sh android-aar "$url" "staging/$name" "arm64-v8a x86_64"
-          echo "archive=$name" >> "$GITHUB_OUTPUT"
-      - name: package
-        shell: bash
-        run: bash shared/package.sh "staging/${{ steps.name.outputs.archive }}" "${{ steps.name.outputs.archive }}" dist
-      - uses: actions/upload-artifact@v7
-        with: { name: "${{ steps.name.outputs.archive }}", path: "dist/${{ steps.name.outputs.archive }}.zip", retention-days: 14 }
-      - name: publish to release
-        if: ${{ needs.setup.outputs.release == 'true' }}
-        shell: bash
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          tag="${{ needs.setup.outputs.release_tag }}"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "anira backends $tag"
-          gh release upload "$tag" "dist/${{ steps.name.outputs.archive }}.zip" --clobber
+    needs: meta
+    uses: ./.github/workflows/_build-backend.yml
+    with:
+      engine: onnxruntime
+      libname: onnxruntime
+      version: ${{ needs.meta.outputs.version }}
+      release: ${{ needs.meta.outputs.release == 'true' }}
+      release_tag: ${{ needs.meta.outputs.release_tag }}
+      matrix: ${{ needs.meta.outputs.matrix }}
+      macos_universal_kinds: '["static","shared"]'
+      android_bundle_kinds: '["static"]'
+      has_ios: true
+    secrets: inherit

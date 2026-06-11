@@ -1,0 +1,59 @@
+name: engine-meta
+description: >
+  Derive an engine's version + release flag, and generate its CI matrix straight from
+  CMakePresets.json (vendor.anira blocks) — there is no ci-matrix.json. The matrix rows
+  are {preset, name, runner, kind, config, arch, canRun, toolchain, source, ...}.
+
+inputs:
+  preset_prefix:
+    description: "Preset name prefix to select this engine's legs, e.g. litert | onnx | libtorch"
+    required: true
+  version_file:
+    description: "Path to the engine's VERSION file"
+    required: true
+  presets:
+    description: "Path to the root CMakePresets.json"
+    required: false
+    default: CMakePresets.json
+
+outputs:
+  version:
+    description: "Upstream version pinned in the engine VERSION file"
+    value: ${{ steps.meta.outputs.version }}
+  release:
+    description: "true on a v<x.y.z> tag (publish), false otherwise (validate only)"
+    value: ${{ steps.meta.outputs.release }}
+  release_tag:
+    description: "The release tag (the anira version) when release==true"
+    value: ${{ steps.meta.outputs.release_tag }}
+  matrix:
+    description: "JSON array of build legs generated from CMakePresets vendor.anira"
+    value: ${{ steps.meta.outputs.matrix }}
+
+runs:
+  using: composite
+  steps:
+    - id: meta
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "version=$(tr -d '[:space:]' < '${{ inputs.version_file }}')" >> "$GITHUB_OUTPUT"
+
+        # Release is keyed to the anira version: a v<x.y.z> tag publishes to that release.
+        if [[ "$GITHUB_REF" == refs/tags/v[0-9]* ]]; then
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+        else
+          echo "release=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        # Matrix = every visible preset whose name starts with "<prefix>-" and carries a
+        # vendor.anira block, flattened to {preset: <name>} + vendor.anira fields.
+        matrix=$(jq -c --arg eng '${{ inputs.preset_prefix }}' \
+          '[ .configurePresets[]
+             | select(.name | startswith($eng + "-"))
+             | select(.vendor.anira != null)
+             | { preset: .name } + .vendor.anira ]' \
+          '${{ inputs.presets }}')
+        echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+        echo "::notice::${{ inputs.preset_prefix }} matrix: $(echo "$matrix" | jq length) legs"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build static onnxruntime (FULL op set, CPU provider) from source for one target,
-# leaving the component .a/.lib for shared/bundle-static.sh to merge into one lib.
+# leaving the component .a/.lib for scripts/bundle-static.sh to merge into one lib.
 #
 # Ports olilarkin/ort-builder's recipe MINUS the op-reduction (no --minimal_build /
 # --include_ops_by_config / --enable_reduced_operator_type_support / --disable_ml_ops),
@@ -67,6 +67,16 @@ case "$PLATFORM" in
     ;;
   linux) ;;     # native arch
   windows)
+    # Build with Ninja + cl (MSVC env from ilammy/msvc-dev-cmd), NOT build.py's default
+    # "Visual Studio 17 2022" generator: the windows runner images now ship VS 18, and the
+    # hardcoded VS-2022 generator fails with "could not find any instance of Visual Studio".
+    # Ninja+cl is generator/VS-version agnostic (and is what every other leg already uses).
+    ARGS+=(--cmake_generator Ninja)
+    # win-arm64: KleidiAI/SVE ship .S microkernels that CMake assembles with armasm64.exe,
+    # which rejects the /arch:armv8.2 flag emitted for them (error A2029). They're optional
+    # ARM CPU-matmul accelerators; disable on win-arm64 for a working CPU build. The other
+    # arm64 targets (linux/macOS/android) assemble these with clang and keep them.
+    [ "$ARCH" = "arm64" ] && ARGS+=(--cmake_extra_defines onnxruntime_USE_KLEIDIAI=OFF onnxruntime_USE_SVE=OFF)
     # build.py forces CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase (/Zi)
     # GLOBALLY — even for Release, which embeds CodeView in every .obj and bloats the
     # shipped static .lib ~5x (854 MB!). The Release lib we ship needs no debug info,
@@ -102,17 +112,9 @@ if [ "$KIND" = "shared" ]; then
   exit 0
 fi
 echo "+ force-build re2 (static bundle needs libre2.a / re2.lib)"
-if [ "$PLATFORM" = "windows" ]; then
-  # VS generator: `cmake --build --target re2` invokes `msbuild re2.vcxproj` as a
-  # bare name from the binary-dir root, but the project lives in _deps/re2-build/
-  # (MSB1009). re2 is fetched from source (CMAKE_DISABLE_FIND_PACKAGE_re2=ON +
-  # onnxruntime_USE_VCPKG=OFF), so build the project by its real path instead.
-  vcxproj="$(find "$OUT/$CONFIG" -name re2.vcxproj | head -1)"
-  [ -n "$vcxproj" ] || { echo "ERROR: re2.vcxproj not found under $OUT/$CONFIG"; exit 1; }
-  echo "  msbuild $vcxproj ($CONFIG)"
-  MSYS_NO_PATHCONV=1 MSBuild.exe "$(cygpath -w "$vcxproj")" -p:Configuration="$CONFIG" -m -nologo
-else
-  cmake --build "$OUT/$CONFIG" --config "$CONFIG" --target re2
-fi
+# re2 is fetched from source (CMAKE_DISABLE_FIND_PACKAGE_re2=ON + onnxruntime_USE_VCPKG=OFF).
+# With Ninja on every platform, the target builds by name (the old Windows msbuild-by-path
+# workaround for the VS generator's MSB1009 is no longer needed).
+cmake --build "$OUT/$CONFIG" --config "$CONFIG" --target re2
 
 echo "onnxruntime $VER ($PLATFORM/$ARCH/$CONFIG) built -> $OUT/$CONFIG"

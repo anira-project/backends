@@ -1,0 +1,67 @@
+name: setup-toolchain
+description: >
+  Per-leg toolchain setup, factored out of the workflows (tanh-lab style): Ninja fallback,
+  Android NDK, MSVC dev env, Python + engine build deps, and the engine source caches.
+  Each step is guarded by inputs, so build and iOS jobs share one entry point. Run AFTER
+  tanh-lab/ci-actions/setup-cpp-build-tools (which installs the base compilers/Ninja).
+
+inputs:
+  toolchain:    { description: "none | android", required: false, default: none }
+  msvc_arch:    { description: "Windows MSVC arch: x64 | arm64 (empty elsewhere)", required: false, default: "" }
+  engine:       { description: "litert | onnxruntime | libtorch", required: true }
+  source:       { description: "build | prebuilt", required: false, default: build }
+  version:      { description: "Engine version (source-cache key)", required: true }
+  cache_suffix: { description: "Extra source-cache key segment (e.g. matrix.name)", required: false, default: "" }
+
+runs:
+  using: composite
+  steps:
+    - name: ensure ninja (Linux fallback)
+      if: ${{ runner.os == 'Linux' }}
+      shell: bash
+      run: command -v ninja >/dev/null || { sudo apt-get update && sudo apt-get install -y ninja-build; }
+
+    - name: setup Android NDK
+      if: ${{ inputs.toolchain == 'android' }}
+      id: ndk
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r27b
+    - name: export ANDROID_NDK_HOME
+      if: ${{ inputs.toolchain == 'android' }}
+      shell: bash
+      run: echo "ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+
+    - name: setup MSVC env (Windows)
+      if: ${{ runner.os == 'Windows' }}
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ inputs.msvc_arch }}
+
+    # onnxruntime always builds via build.py (Python); libtorch-from-source needs Python too.
+    - name: setup python
+      if: ${{ inputs.engine == 'onnxruntime' || (inputs.engine == 'libtorch' && inputs.source == 'build') }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: python build deps (onnxruntime)
+      if: ${{ inputs.engine == 'onnxruntime' && inputs.source == 'build' }}
+      shell: bash
+      run: python -m pip install --upgrade pip setuptools wheel packaging numpy
+    - name: linux build deps (libtorch aarch64 OpenBLAS)
+      if: ${{ inputs.engine == 'libtorch' && inputs.source == 'build' && runner.os == 'Linux' }}
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y libopenblas-dev build-essential
+
+    - name: cache onnxruntime source
+      if: ${{ inputs.engine == 'onnxruntime' }}
+      uses: actions/cache@v4
+      with:
+        path: engines/onnxruntime/onnxruntime-src
+        key: ort-src-${{ inputs.version }}
+    - name: cache pytorch source
+      if: ${{ inputs.engine == 'libtorch' && inputs.source == 'build' }}
+      uses: actions/cache@v4
+      with:
+        path: engines/libtorch/pytorch-src
+        key: pytorch-src-${{ inputs.version }}-${{ inputs.cache_suffix }}
