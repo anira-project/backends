@@ -44,7 +44,10 @@ if [ "$PLATFORM" = "android" ]; then
 else
   export TF_SET_ANDROID_WORKSPACE=0
 fi
-( cd "$SRC" && chmod +x configure.py && yes "" | python3 configure.py )
+# NB: `yes "" |` feeds defaults, but `yes` gets SIGPIPE (exit 141) when configure.py closes the
+# pipe — which `set -o pipefail` would wrongly treat as failure. Disable pipefail for this pipe so
+# only configure.py's own exit code counts.
+( cd "$SRC" && chmod +x configure.py && { set +o pipefail; yes "" | python3 configure.py; } )
 
 # Per-platform config (from LiteRT's .bazelrc / CI). CPU-only: GPU + NPU off.
 case "$PLATFORM" in
