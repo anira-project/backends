@@ -94,14 +94,26 @@ cat > "$ST/include/litert/build_common/build_config.h" <<'EOF'
 #endif  // LITERT_BUILD_COMMON_BUILD_CONFIG_H_
 EOF
 # Locate the built shared lib. On unix bazel-bin is a symlink find -L follows; on Windows it's a
-# junction find won't traverse, so fall back to `bazel cquery` for the output path.
+# junction find won't traverse, so resolve the REAL output dir via `bazel info bazel-bin` and
+# search that (+ a cquery fallback). Capture without tripping set -e on a no-match.
 lib="$(find -L "$SRC/bazel-bin" -maxdepth 6 \( -name 'libLiteRt.so' -o -name 'libLiteRt.dylib' \) 2>/dev/null | head -1)"
 if [ -z "$lib" ]; then
-  rel="$(cd "$SRC" && bazel cquery "${cfg[@]}" --define=litert_disable_gpu=true --define=litert_disable_npu=true \
-           --output=files //litert/c:litert_runtime_c_api_shared_lib 2>/dev/null | grep -iE '\.(dll|so|dylib)$' | head -1)"
-  [ -n "$rel" ] && lib="$SRC/$rel"
+  set +e
+  bindir="$(cd "$SRC" && bazel info "${cfg[@]}" --define=litert_disable_gpu=true --define=litert_disable_npu=true bazel-bin 2>/dev/null)"
+  lib="$(find -L "$bindir" -maxdepth 6 \( -name 'LiteRt.dll' -o -name 'libLiteRt.dll' -o -name 'libLiteRt.so' -o -name 'libLiteRt.dylib' \) 2>/dev/null | head -1)"
+  if [ -z "$lib" ]; then
+    files="$(cd "$SRC" && bazel cquery "${cfg[@]}" --define=litert_disable_gpu=true --define=litert_disable_npu=true --output=files //litert/c:litert_runtime_c_api_shared_lib 2>/dev/null)"
+    rel="$(printf '%s\n' "$files" | grep -iE '\.(dll|so|dylib)$' | head -1)"
+    [ -n "$rel" ] && lib="$SRC/$rel"
+  fi
+  set -e
+  if [ -z "$lib" ] || [ ! -f "$lib" ]; then
+    echo "ERROR: could not locate libLiteRt. bazel-bin=$bindir"
+    echo "--- cquery files ---"; printf '%s\n' "${files:-}"
+    echo "--- *LiteRt* under bazel-bin ---"; find -L "$bindir" -iname '*litert*' \( -name '*.dll' -o -name '*.so' -o -name '*.dylib' -o -name '*.lib' \) 2>/dev/null | head -20
+    exit 1
+  fi
 fi
-[ -n "$lib" ] || { echo "ERROR: libLiteRt output not found (cquery returned nothing)"; exit 1; }
 libdir="$(dirname "$lib")"
 cp -L "$lib" "$ST/lib/"
 # Windows: consumers link the import lib (LiteRt.lib), which sits next to the .dll.
