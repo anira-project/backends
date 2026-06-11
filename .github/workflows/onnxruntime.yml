@@ -5,7 +5,7 @@ name: onnxruntime
 # static (built from source, all platforms incl. iOS xcframework) AND shared (macOS built
 # from source; Linux/Windows/Android repackaged from upstream prebuilts).
 #
-# Triggers (release model: ../../docs/RELEASE.md):
+# Triggers:
 #   - push/PR touching onnxruntime sources or shared CI -> validate only (no release)
 #   - tag v<anira-version> (e.g. v2.0.3) -> build at its VERSION, publish to that release
 

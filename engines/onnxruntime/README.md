@@ -4,7 +4,7 @@ Builds `onnxruntime` (C API, **full operator set** — any model works, CPU prov
 for [anira](https://github.com/anira-project/anira). ONNX Runtime ships only *shared*
 libs upstream, so **static is built from source** (no op-reduction — every operator
 ships); **shared** is built for macOS but **repackaged** from Microsoft's prebuilts
-elsewhere. Release model & CI: [docs/RELEASE.md](../../docs/RELEASE.md).
+elsewhere.
 
 ## Target matrix
 

@@ -6,7 +6,7 @@ name: libtorch
 # source where PyTorch ships none. Consumed via find_package(Torch), so archives preserve
 # the full package tree (include/ lib/ share/ [bin/]).
 #
-# Triggers (release model: ../../docs/RELEASE.md):
+# Triggers:
 #   - push/PR touching libtorch sources or shared CI -> validate only (no release)
 #   - tag v<anira-version> (e.g. v2.0.3) -> build at its VERSION, publish to that release
 

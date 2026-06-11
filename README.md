@@ -6,32 +6,39 @@ published as GitHub release archives that anira's CMake downloads at configure t
 
 ## Backends
 
-| Backend     | Status            | Upstream                                                                                | lib name           |
-| ----------- | ----------------- | --------------------------------------------------------------------------------------- | ------------------ |
-| LiteRT      | Active            | [google-ai-edge/LiteRT](https://github.com/google-ai-edge/LiteRT)   | `tensorflowlite_c` |
-| ONNXRuntime | Active            | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime)                       | `onnxruntime`      |
-| LibTorch    | In progress (shared) | [pytorch/pytorch](https://github.com/pytorch/pytorch)                                 | `torch`            |
+| Backend     | Upstream                                                          | lib name           | License    |
+| ----------- | ----------------------------------------------------------------- | ------------------ | ---------- |
+| LiteRT      | [google-ai-edge/LiteRT](https://github.com/google-ai-edge/LiteRT) | `tensorflowlite_c` | Apache-2.0 |
+| ONNXRuntime | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) | `onnxruntime`      | MIT        |
+| LibTorch    | [pytorch/pytorch](https://github.com/pytorch/pytorch)             | `torch`            | BSD-3      |
 
-## Releases & CI
+This repo is licensed [Apache-2.0](./LICENSE); the **published binaries** follow their
+upstream licenses (above).
+
+## Support matrix
+
+What ships per target — `shared` (dynamic lib) and/or `static` (one merged, drop-in archive):
+
+| Target                          | LiteRT            | ONNXRuntime       | LibTorch |
+| ------------------------------- | ----------------- | ----------------- | -------- |
+| macOS x86_64                    | shared · static   | shared · static   | shared   |
+| macOS arm64                     | shared · static   | shared · static   | shared   |
+| macOS universal                 | shared · static   | shared · static   | shared   |
+| Linux x86_64                    | shared · static   | shared · static   | shared   |
+| Linux aarch64                   | shared · static   | shared · static   | shared   |
+| Windows x86_64                  | shared · static ¹ | shared · static ¹ | shared   |
+| Windows arm64                   | shared · static ¹ | shared · static ¹ | shared   |
+| Android (`arm64-v8a` + `x86_64`)| shared · static   | shared · static   | —        |
+| iOS (xcframework)               | static            | static            | —        |
+
+¹ Windows `static` also ships a `Debug` variant. — = not provided (LibTorch is
+desktop-shared only).
+
+Archive names: `<lib>-<version>-<target>-<kind>[-debug].zip` (the target token is the
+canonical name above; ARM is `aarch64` on Linux, `arm64` elsewhere, `arm64-v8a` for Android).
+
+## Releases
 
 Backends are versioned independently but **released together, keyed to the anira
 version**: tag `v2.0.3` builds every backend at its pinned `engines/<backend>/VERSION`
 and publishes all archives to a single release `v2.0.3`.
-
-The root `CMakePresets.json` is the single source of truth: every build leg is a preset
-(`<engine>-<platform>-<arch>-<kind>[-debug]`) whose `vendor.anira` block also carries the
-CI matrix row — there is no `ci-matrix.json`. One CMake orchestrator builds any engine
-(`cmake --preset … && cmake --build && cmake --install`); the per-engine workflows are thin
-wrappers over the shared `_build-backend.yml` pipeline and the `.github/actions/` verbs.
-See [docs/RELEASE.md](./docs/RELEASE.md).
-
-## License
-
-This repo is licenced under [Apache-2.0](./LICENSE).
-The **published binaries** are built/repackaged from upstream and follow **their** licenses:
-
-| Backend     | License    | Upstream license |
-| ----------- | ---------- | ---------------- |
-| LiteRT      | Apache-2.0 | [tensorflow/LICENSE](https://github.com/tensorflow/tensorflow/blob/master/LICENSE) |
-| ONNXRuntime | MIT        | [onnxruntime/LICENSE](https://github.com/microsoft/onnxruntime/blob/main/LICENSE) |
-| LibTorch    | BSD-3      | [pytorch/LICENSE](https://github.com/pytorch/pytorch/blob/main/LICENSE) |

@@ -4,7 +4,7 @@ CPU-only **shared** libtorch at the version in [`VERSION`](./VERSION), packaged 
 [anira](https://github.com/anira-project/anira). Unlike LiteRT/ONNXRuntime (flat
 `include/`+`lib/`), libtorch ships a full CMake package tree and is consumed via
 `find_package(Torch)` — so archives preserve `include/`, `lib/`, **`share/cmake/Torch/`**
-(and `bin/` where present). Release model & CI: [docs/RELEASE.md](../../docs/RELEASE.md).
+(and `bin/` where present).
 
 ## Target matrix (shared, 2.12.0)
 

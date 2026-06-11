@@ -2,7 +2,7 @@
 
 Builds `libtensorflowlite_c` from upstream `tensorflow/lite/c` at the version in
 [`VERSION`](./VERSION), packaged for [anira](https://github.com/anira-project/anira).
-CPU only (XNNPACK; no GPU/NPU). Release model & CI: [docs/RELEASE.md](../../docs/RELEASE.md).
+CPU only (XNNPACK; no GPU/NPU).
 
 ## Target matrix
 
