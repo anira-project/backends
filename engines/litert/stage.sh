@@ -36,10 +36,12 @@ export TF_NEED_ROCM=0 TF_NEED_CUDA=0 CC_OPT_FLAGS='-Wno-sign-compare'
 if [ "$PLATFORM" = "android" ]; then
   : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME not set}"
   # configure.py's android workspace needs the SDK too (not just the NDK).
+  # Force INT api levels — the runner preset ANDROID_SDK_API_LEVEL can be a float (e.g. 37.0),
+  # which android_sdk_repository rejects ("expected int for api_level, got 37.0").
   export TF_SET_ANDROID_WORKSPACE=1 \
          ANDROID_SDK_HOME="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?ANDROID SDK not found}}" \
          ANDROID_NDK_API_LEVEL=24 \
-         ANDROID_SDK_API_LEVEL="${ANDROID_SDK_API_LEVEL:-33}" \
+         ANDROID_SDK_API_LEVEL=34 \
          ANDROID_BUILD_TOOLS_VERSION="${ANDROID_BUILD_TOOLS_VERSION:-34.0.0}"
 else
   export TF_SET_ANDROID_WORKSPACE=0
@@ -52,7 +54,8 @@ fi
 # Per-platform config (from LiteRT's .bazelrc / CI). CPU-only: GPU + NPU off.
 case "$PLATFORM" in
   linux)   cfg=(--config=bulk_test_cpu) ;;
-  macos)   cfg=(--config="macos_${ARCH}" --config=bulk_test_cpu) ;;  # macos_arm64 / macos_x86_64
+  macos)   if [ "$ARCH" = "arm64" ]; then cfg=(--config=macos_arm64 --config=bulk_test_cpu)
+           else cfg=(--config=bulk_test_cpu --cpu=darwin_x86_64); fi ;;  # no macos_x86_64 config exists
   android) cfg=(--config="android_${ARCH%-v8a}") ;;                  # android_arm64 / android_x86_64
   ios)     cfg=(--config=ios_arm64) ;;
   windows) cfg=(--config=windows) ;;
@@ -68,7 +71,9 @@ esac
 mkdir -p "$ST/include/litert/c" "$ST/lib"
 cp "$SRC"/litert/c/litert_*.h "$ST/include/litert/c/"
 [ -d "$SRC/litert/c/options" ] && { mkdir -p "$ST/include/litert/c/options"; cp "$SRC"/litert/c/options/*.h "$ST/include/litert/c/options/" 2>/dev/null || true; }
-lib="$(find "$SRC/bazel-bin" -maxdepth 4 -name 'libLiteRt.*' \( -name '*.so' -o -name '*.dylib' -o -name '*.dll' \) | head -1)"
-[ -n "$lib" ] || { echo "ERROR: libLiteRt shared lib not found under $SRC/bazel-bin"; exit 1; }
-cp "$lib" "$ST/lib/"
+# bazel-bin is a SYMLINK into the bazel cache — follow it (-L). The C API shared lib lands at
+# bazel-bin/litert/c/libLiteRt.{so,dylib} (LiteRt.dll on Windows).
+lib="$(find -L "$SRC/bazel-bin" -maxdepth 6 \( -name 'libLiteRt.so' -o -name 'libLiteRt.dylib' -o -name 'libLiteRt.dll' -o -name 'LiteRt.dll' \) 2>/dev/null | head -1)"
+[ -n "$lib" ] || { echo "ERROR: libLiteRt not found under $SRC/bazel-bin"; ls -la "$SRC/bazel-bin/litert/c" 2>/dev/null | head -20; exit 1; }
+cp -L "$lib" "$ST/lib/"
 echo "staged litert ($PLATFORM/$ARCH/$KIND) -> $ST"
