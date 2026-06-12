@@ -127,6 +127,12 @@ if [ "$KIND" = "static" ]; then
   # BAZEL_LLVM points at the runner's preinstalled LLVM. XNNPACK stays enabled.
   if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ]; then
     export USE_CLANG_CL=1 BAZEL_LLVM="C:/Program Files/LLVM"
+    # LiteRT 2.1.5 pins a cpuinfo whose arm64-Windows path has an illegal array assignment
+    # (init-by-logical-sys-info.c — fixed upstream). Override the repo with a current cpuinfo.
+    cpu="$HERE/cpuinfo-fixed"
+    [ -d "$cpu/.git" ] || git clone --depth 1 https://github.com/pytorch/cpuinfo "$cpu"
+    cpuw="$cpu"; command -v cygpath >/dev/null 2>&1 && cpuw="$(cygpath -w "$cpu")"
+    cfg+=("--override_repository=cpuinfo=$cpuw")
   fi
   # git-bash/MSYS rewrites bare bazel-label args like //foo:bar to /foo:bar — disable that. File
   # paths handed to bazel must then be made Windows-native explicitly (cygpath), since conversion
