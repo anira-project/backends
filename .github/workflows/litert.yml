@@ -67,4 +67,5 @@ jobs:
       matrix: ${{ needs.meta.outputs.matrix }}
       macos_universal_kinds: '["shared"]'
       android_bundle_kinds: '["shared"]'
+      has_ios: true
     secrets: inherit
