@@ -181,25 +181,19 @@ STAR
     awk -v r="$execroot" '{print r"/"$0}' "$HERE/archives.txt" > "$HERE/filelist.txt"
     libtool -static -no_warning_for_no_symbols -filelist "$HERE/filelist.txt" -o "$out"
   elif [ "$PLATFORM" = "windows" ]; then
-    # MSVC lib.exe merges the .lib archives via a response file (Windows paths; cygpath converts).
+    # Merge the .lib archives via a response file (Windows paths; cygpath converts).
     win() { command -v cygpath >/dev/null 2>&1 && cygpath -w "$1" || echo "$1"; }
     : > "$HERE/libs.rsp"
-    if [ "$ARCH" = "arm64" ]; then
-      # The clang-cl arm64 build emits some zero-object (header-only) archives; lib.exe rejects
-      # those (LNK1160). Keep only archives whose member list is non-empty. Capture lib /list to a
-      # file first — piping to grep would SIGPIPE lib under pipefail.
-      kept=0
-      while IFS= read -r a; do
-        p="$(win "$execroot/$a")"
-        MSYS_NO_PATHCONV=1 lib /nologo /list "$p" > "$HERE/_members.txt" 2>/dev/null || true
-        if [ -s "$HERE/_members.txt" ]; then printf '"%s"\n' "$p" >> "$HERE/libs.rsp"; kept=$((kept+1)); fi
-      done < "$HERE/archives.txt"
-      echo "litert static: kept $kept/$count archives with objects for lib.exe"
-    else
-      while IFS= read -r a; do printf '"%s"\n' "$(win "$execroot/$a")" >> "$HERE/libs.rsp"; done < "$HERE/archives.txt"
-    fi
+    while IFS= read -r a; do printf '"%s"\n' "$(win "$execroot/$a")" >> "$HERE/libs.rsp"; done < "$HERE/archives.txt"
     mm=x64; [ "$ARCH" = "arm64" ] && mm=arm64
-    MSYS_NO_PATHCONV=1 lib /nologo /machine:$mm /OUT:"$(win "$out")" "@$(win "$HERE/libs.rsp")"
+    if [ "$ARCH" = "arm64" ]; then
+      # The arm64 archives are produced by the clang-cl toolchain; MSVC lib.exe gives LNK1160 on
+      # them. Merge with LLVM's own archiver (llvm-lib), which reads them natively.
+      llvmlib=llvm-lib; [ -x "$BAZEL_LLVM/bin/llvm-lib.exe" ] && llvmlib="$BAZEL_LLVM/bin/llvm-lib.exe"
+      MSYS_NO_PATHCONV=1 "$llvmlib" "/machine:$mm" "/out:$(win "$out")" "@$(win "$HERE/libs.rsp")"
+    else
+      MSYS_NO_PATHCONV=1 lib /nologo /machine:$mm /OUT:"$(win "$out")" "@$(win "$HERE/libs.rsp")"
+    fi
   else
     # GNU ar MRI script: addlib copies every member (dup names across libs are fine), then index.
     { echo "create $out"
