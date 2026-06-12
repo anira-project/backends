@@ -92,12 +92,20 @@ defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 
 # ---- source=build, kind=static: no static prebuilt ships upstream, so build it ----------------
 # litert_runtime_c_api_so_shim is the cc_library that pulls in LITERT_C_API_COMMON_DEPS (the real
-# C API impl) — the same closure the .so/.dylib link from. We build it (compiling every transitive
-# dep to a .a), enumerate that closure's static archives from the target's CcInfo linking context
-# (precise: only libraries that actually feed the link), and merge them into one libLiteRt.a.
+# C API impl) — the same closure the .so/.dylib link from. Strategy: build with --force_pic (so the
+# merged archive links into PIE executables and dylibs), then merge every transitive static archive
+# into one libLiteRt.a. Building the top cc_library only COMPILES the deps (to .o); each dep's .a is
+# materialised on disk only when that library is explicitly requested — so we cquery the transitive
+# cc_library labels and `bazel build` them all first, then collect the archives from CcInfo.
 if [ "$KIND" = "static" ]; then
   target=//litert/c:litert_runtime_c_api_so_shim
-  ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "$target" )
+  pic=(--force_pic)
+  ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "${pic[@]}" "$target" )
+  # Materialise every transitive cc_library's archive (the top build leaves them as .o only).
+  ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" "${pic[@]}" \
+      "kind('cc_library rule', deps($target))" --output=label 2>/dev/null ) \
+      | grep -v '^$' > "$HERE/labels.txt"
+  ( cd "$SRC" && xargs bazel build "${cfg[@]}" "${defines[@]}" "${pic[@]}" < "$HERE/labels.txt" )
   cat > "$HERE/collect_static_libs.star" <<'STAR'
 def format(target):
     ps = providers(target)
@@ -107,19 +115,20 @@ def format(target):
     out = []
     for li in cc.linking_context.linker_inputs.to_list():
         for lib in li.libraries:
-            f = lib.pic_static_library
-            if f == None:
-                f = lib.static_library
-            if f != None:
-                out.append(f.path)
+            for f in [lib.pic_static_library, lib.static_library]:
+                if f != None:
+                    out.append(f.path)
     return "\n".join(out)
 STAR
-  ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" "$target" \
+  ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" "${pic[@]}" "$target" \
       --output=starlark --starlark:file="$HERE/collect_static_libs.star" ) \
-      | grep -v '^$' | sort -u > "$HERE/archives.txt"
+      | grep -v '^$' | sort -u > "$HERE/all_archives.txt"
   execroot="$( cd "$SRC" && bazel info execution_root )"
+  # Keep only archives that actually exist (with --force_pic, the non-pic candidate paths won't).
+  : > "$HERE/archives.txt"
+  while IFS= read -r a; do [ -f "$execroot/$a" ] && printf '%s\n' "$a" >> "$HERE/archives.txt"; done < "$HERE/all_archives.txt"
   count="$(wc -l < "$HERE/archives.txt" | tr -d ' ')"
-  [ "$count" -gt 0 ] || { echo "ERROR: no static archives collected for $target"; exit 1; }
+  [ "$count" -gt 0 ] || { echo "ERROR: no static archives materialised for $target"; exit 1; }
   echo "litert static: merging $count transitive archives -> libLiteRt.a"
   out="$ST/lib/libLiteRt.a"; rm -f "$out"
   if [ "$PLATFORM" = "macos" ]; then
