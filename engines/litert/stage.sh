@@ -102,17 +102,24 @@ defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 # cc_library labels and `bazel build` them all first, then collect the archives from CcInfo.
 if [ "$KIND" = "static" ]; then
   target=//litert/c:litert_runtime_c_api_so_shim
-  # Linux PIE consumers need PIC archives; macOS is always-PIC; PE has no PIC notion.
-  pic=(); [ "$PLATFORM" = "linux" ] && pic=(--force_pic)
-  # git-bash/MSYS rewrites bare-bazel-label args like //foo:bar to /foo:bar — disable that.
-  [ "$PLATFORM" = "windows" ] && export MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1
-  ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "${pic[@]}" "$target" )
+  # Linux PIE consumers need PIC archives; macOS is always-PIC; PE has no PIC notion. Fold into
+  # defines (never empty) — an empty array under `set -u` is an "unbound variable" on bash 3.2.
+  [ "$PLATFORM" = "linux" ] && defines+=(--force_pic)
+  # git-bash/MSYS rewrites bare bazel-label args like //foo:bar to /foo:bar — disable that. File
+  # paths handed to bazel must then be made Windows-native explicitly (cygpath), since conversion
+  # is now off for every arg.
+  star="$HERE/collect_static_libs.star"
+  if [ "$PLATFORM" = "windows" ]; then
+    export MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1
+    command -v cygpath >/dev/null 2>&1 && star="$(cygpath -w "$star")"
+  fi
+  ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "$target" )
   # Materialise every transitive cc_library's archive (the top build leaves them as .o only).
   # cquery --output=label appends the config hash as " (abcdef0)" — keep only the bare label.
-  ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" "${pic[@]}" \
+  ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" \
       "kind('cc_library rule', deps($target))" --output=label 2>/dev/null ) \
       | awk 'NF{print $1}' | sort -u > "$HERE/labels.txt"
-  ( cd "$SRC" && xargs bazel build "${cfg[@]}" "${defines[@]}" "${pic[@]}" < "$HERE/labels.txt" )
+  ( cd "$SRC" && xargs bazel build "${cfg[@]}" "${defines[@]}" < "$HERE/labels.txt" )
   cat > "$HERE/collect_static_libs.star" <<'STAR'
 def format(target):
     ps = providers(target)
@@ -127,8 +134,8 @@ def format(target):
                     out.append(f.path)
     return "\n".join(out)
 STAR
-  ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" "${pic[@]}" "$target" \
-      --output=starlark --starlark:file="$HERE/collect_static_libs.star" ) \
+  ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" "$target" \
+      --output=starlark --starlark:file="$star" ) \
       | grep -v '^$' | sort -u > "$HERE/all_archives.txt"
   execroot="$( cd "$SRC" && bazel info execution_root )"
   # Keep only archives that actually exist (with --force_pic, the non-pic candidate paths won't).
