@@ -42,8 +42,10 @@ curl -fsSL "$base/ios_sim_arm64/libLiteRt.dylib.lfs" -o sim/libLiteRt.dylib
 install_name_tool -id @rpath/libLiteRt.dylib dev/libLiteRt.dylib
 install_name_tool -id @rpath/libLiteRt.dylib sim/libLiteRt.dylib
 echo "device slices:"; lipo -info dev/libLiteRt.dylib; echo "sim slices:"; lipo -info sim/libLiteRt.dylib
-# Verify the native C API is present (not a stub).
-nm -gU dev/libLiteRt.dylib | grep -q LiteRtCreateEnvironment || { echo "::error::libLiteRt missing LiteRtCreateEnvironment"; exit 1; }
+# Verify the native C API is present (not a stub). Capture nm output to a file first — piping to
+# `grep -q` closes the pipe early, which makes nm SIGPIPE and pipefail flag a false failure.
+nm -gU dev/libLiteRt.dylib > "$HERE/ios_syms.txt" 2>/dev/null || true
+grep -q LiteRtCreateEnvironment "$HERE/ios_syms.txt" || { echo "::error::libLiteRt missing LiteRtCreateEnvironment"; head "$HERE/ios_syms.txt"; exit 1; }
 
 rm -rf LiteRt.xcframework
 xcodebuild -create-xcframework \
