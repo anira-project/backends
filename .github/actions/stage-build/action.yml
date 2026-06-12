@@ -54,6 +54,8 @@ runs:
             esac ;;
           libtorch)
             url="https://download.pytorch.org/libtorch/cpu/${{ inputs.asset }}-${ver}${{ inputs.cpu_suffix }}.zip" ;;
+          litert)
+            url="" ;;   # litert fetches its prebuilt libLiteRt internally (Git-LFS media endpoint)
           *) echo "::error::no prebuilt URL template for engine ${{ inputs.engine }}"; exit 1 ;;
         esac
         echo "url=$url" >> "$GITHUB_OUTPUT"
