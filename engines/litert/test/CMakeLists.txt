@@ -24,9 +24,12 @@ if(SMOKE_KIND STREQUAL "static")
   if(WIN32)
     target_link_libraries(smoke PRIVATE advapi32)            # cpuinfo's RegGetValueW
   elseif(APPLE)
-    target_link_libraries(smoke PRIVATE "-framework Foundation" "-framework CoreFoundation")
+    # Foundation/CoreFoundation for absl/cpuinfo; Metal+Accelerate are referenced by the runtime's
+    # (CPU-unused) GPU/BLAS objects pulled in transitively.
+    target_link_libraries(smoke PRIVATE "-framework Foundation" "-framework CoreFoundation"
+                                        "-framework Metal" "-framework Accelerate")
   else()
-    target_link_libraries(smoke PRIVATE ${CMAKE_DL_LIBS} m rt)
+    target_link_libraries(smoke PRIVATE ${CMAKE_DL_LIBS} m rt stdc++fs)  # stdc++fs: std::filesystem
   endif()
 endif()
 
