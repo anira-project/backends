@@ -2,9 +2,10 @@ name: litert
 
 # Thin wrapper: derive version + release flag + matrix (engine-meta, from CMakePresets
 # vendor.anira), then hand off to the shared _build-backend.yml pipeline. Builds LiteRT's
-# NATIVE C API (libLiteRt, LiteRt* symbols) from google-ai-edge/LiteRT via Bazel — distinct
-# from the `tflite` engine (legacy TfLite* C API). CPU-only, shared. FIRST-PASS: the Bazel
-# build needs CI iteration per platform; iOS is deferred (has_ios: false) until a litert ios.sh.
+# NATIVE C API (libLiteRt, LiteRt* symbols) from google-ai-edge/LiteRT — distinct from the
+# `tflite` engine (legacy TfLite* C API). CPU-only, shared. Sourced from official prebuilts
+# (litert/prebuilt/, pinned SHA) for every platform incl. iOS xcframework, plus from-source
+# Bazel for macOS x86_64. Windows-arm64 and static are unavailable upstream (see README ²).
 #
 # Triggers (release model in the root README):
 #   - push/PR touching litert sources or shared CI -> validate only (no release)

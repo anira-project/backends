@@ -31,13 +31,15 @@ What ships per target — `shared` and/or `static`:
 | Linux x86_64                    | shared · static   | shared    | shared · static   | shared   |
 | Linux aarch64                   | shared · static   | shared    | shared · static   | shared   |
 | Windows x86_64                  | shared · static ¹ | shared    | shared · static ¹ | shared   |
-| Windows arm64                   | shared · static ¹ | shared    | shared · static ¹ | shared   |
+| Windows arm64                   | shared · static ¹ | —         | shared · static ¹ | shared   |
 | Android (`arm64-v8a` + `x86_64`)| shared · static   | shared    | shared · static   | —        |
-| iOS (xcframework)               | static            | —         | static            | —        |
+| iOS (xcframework)               | static            | shared    | static            | —        |
 
 > ¹ Windows `static` also ships a `Debug` variant.
 
-> ² LiteRT native is **in progress** (first-pass, shared-only; built via Bazel). iOS + static are deferred.
+> ² LiteRT ships the **native `LiteRt*` C API** (`libLiteRt`), `shared` only. Built from a mix of
+> official prebuilts (`litert/prebuilt/`, pinned to a main SHA) and from-source Bazel (macOS x86_64).
+> **Windows-arm64** and **static** are unavailable upstream (no prebuilt; no static lib ships).
 
 > `—` = not provided.
 
