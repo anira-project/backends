@@ -291,7 +291,7 @@
     {
       "name": "litert-windows-arm64-static", "inherits": "orch-base",
       "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
-      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
+      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-2025", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "0", "toolchain": "none", "msvcArch": "amd64_arm64", "source": "build" } }
     }
   ]
 }

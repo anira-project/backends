@@ -119,13 +119,14 @@ if [ "$KIND" = "static" ]; then
   # already-green aarch64 leg on its working hermetic toolchain.
   [ "$PLATFORM" = "linux" ] && [ "$ARCH" = "x86_64" ] && \
     defines+=(--repo_env=USE_HERMETIC_CC_TOOLCHAIN=0 --noincompatible_enable_cc_toolchain_resolution)
-  # Windows arm64: several deps guard MSVC-incompat constructs only for x64_windows, not
-  # arm64_windows, so they leak into the arm64 MSVC build. Work around them for this leg:
-  #  - XNNPACK leaks clang warning flags to cl -> drop the XNNPACK delegate (ruy/builtin kernels).
-  #  - farmhash (and others) use the GCC/clang hint __builtin_expect, absent in MSVC -> define it
-  #    to its first arg (a correct no-op: it only hints branch prediction).
+  # Windows arm64: build with clang-cl, not MSVC cl. Many deps (XNNPACK, farmhash, …) only guard
+  # their GCC/clang constructs (__builtin_expect, -Wimplicit-fallthrough) for x64_windows, not
+  # arm64_windows, so they leak into the cl build and fail. clang-cl is MSVC-ABI-compatible but
+  # understands those constructs natively — the standard way to build Windows-on-ARM (TF's
+  # --config=win_clang). USE_CLANG_CL makes Bazel's @local_config_cc pick the clang-cl toolchain;
+  # BAZEL_LLVM points at the runner's preinstalled LLVM. XNNPACK stays enabled.
   if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ]; then
-    defines+=(--define=tflite_with_xnnpack=false "--copt=/D__builtin_expect(a,b)=(a)")
+    export USE_CLANG_CL=1 BAZEL_LLVM="C:/Program Files/LLVM"
   fi
   # git-bash/MSYS rewrites bare bazel-label args like //foo:bar to /foo:bar — disable that. File
   # paths handed to bazel must then be made Windows-native explicitly (cygpath), since conversion
