@@ -102,7 +102,10 @@ defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 # cc_library labels and `bazel build` them all first, then collect the archives from CcInfo.
 if [ "$KIND" = "static" ]; then
   target=//litert/c:litert_runtime_c_api_so_shim
-  pic=(--force_pic); [ "$PLATFORM" = "windows" ] && pic=()   # PE has no PIC notion; MSVC rejects it
+  # Linux PIE consumers need PIC archives; macOS is always-PIC; PE has no PIC notion.
+  pic=(); [ "$PLATFORM" = "linux" ] && pic=(--force_pic)
+  # git-bash/MSYS rewrites bare-bazel-label args like //foo:bar to /foo:bar — disable that.
+  [ "$PLATFORM" = "windows" ] && export MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1
   ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "${pic[@]}" "$target" )
   # Materialise every transitive cc_library's archive (the top build leaves them as .o only).
   # cquery --output=label appends the config hash as " (abcdef0)" — keep only the bare label.
