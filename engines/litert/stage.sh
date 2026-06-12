@@ -102,9 +102,19 @@ defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 # cc_library labels and `bazel build` them all first, then collect the archives from CcInfo.
 if [ "$KIND" = "static" ]; then
   target=//litert/c:litert_runtime_c_api_so_shim
+  # macOS x86_64: a plain cc_library needs the Apple platform transition that the shared dylib rule
+  # applies internally — without it tflite's x86 NEON-emulation header (NEON_2_SSE.h) is unwired.
+  # Mirror the build:macos_arm64 recipe with x86_64 values (there is no build:macos_x86_64).
+  [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "x86_64" ] && \
+    cfg=(--config=macos --cpu=darwin_x86_64 --macos_minimum_os=11.0 \
+         --platforms=@build_bazel_apple_support//platforms:macos_x86_64 --config=bulk_test_cpu)
   # Linux PIE consumers need PIC archives; macOS is always-PIC; PE has no PIC notion. Fold into
   # defines (never empty) — an empty array under `set -u` is an "unbound variable" on bash 3.2.
   [ "$PLATFORM" = "linux" ] && defines+=(--force_pic)
+  # Linux x86_64: build against the system libstdc++ instead of LiteRT's hermetic sysroot, so the
+  # archive's std::filesystem ABI matches what consumers link. Scoped to x86_64 to keep the
+  # already-green aarch64 leg on its working hermetic toolchain.
+  [ "$PLATFORM" = "linux" ] && [ "$ARCH" = "x86_64" ] && defines+=(--repo_env=USE_HERMETIC_CC_TOOLCHAIN=0)
   # git-bash/MSYS rewrites bare bazel-label args like //foo:bar to /foo:bar — disable that. File
   # paths handed to bazel must then be made Windows-native explicitly (cygpath), since conversion
   # is now off for every arg.
