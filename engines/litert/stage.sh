@@ -127,6 +127,10 @@ if [ "$KIND" = "static" ]; then
   # BAZEL_LLVM points at the runner's preinstalled LLVM. XNNPACK stays enabled.
   if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ]; then
     export USE_CLANG_CL=1 BAZEL_LLVM="C:/Program Files/LLVM"
+    # XNNPACK's pinned Bazel build has no arm64_windows arch support: it selects x86 microkernels
+    # and emits x64 objects, which can't merge into an arm64 library. clang-cl handles the other
+    # deps' GCC/clang constructs, so disable just XNNPACK here (CPU kernels via ruy/builtin).
+    defines+=(--define=tflite_with_xnnpack=false)
     # LiteRT 2.1.5 pins a cpuinfo whose arm64-Windows path has an illegal array assignment
     # (init-by-logical-sys-info.c — fixed upstream). Override the repo with a current cpuinfo.
     cpu="$HERE/cpuinfo-fixed"
