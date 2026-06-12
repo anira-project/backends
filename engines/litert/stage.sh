@@ -119,10 +119,14 @@ if [ "$KIND" = "static" ]; then
   # already-green aarch64 leg on its working hermetic toolchain.
   [ "$PLATFORM" = "linux" ] && [ "$ARCH" = "x86_64" ] && \
     defines+=(--repo_env=USE_HERMETIC_CC_TOOLCHAIN=0 --noincompatible_enable_cc_toolchain_resolution)
-  # Windows arm64: XNNPACK's Bazel build leaks clang warning flags to MSVC cl (no arm64_windows
-  # guard) — drop the XNNPACK delegate to get arm64-Windows building (CPU kernels via ruy/builtin,
-  # without XNNPACK acceleration). The only arm64-Windows target lacking it.
-  [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ] && defines+=(--define=tflite_with_xnnpack=false)
+  # Windows arm64: several deps guard MSVC-incompat constructs only for x64_windows, not
+  # arm64_windows, so they leak into the arm64 MSVC build. Work around them for this leg:
+  #  - XNNPACK leaks clang warning flags to cl -> drop the XNNPACK delegate (ruy/builtin kernels).
+  #  - farmhash (and others) use the GCC/clang hint __builtin_expect, absent in MSVC -> define it
+  #    to its first arg (a correct no-op: it only hints branch prediction).
+  if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ]; then
+    defines+=(--define=tflite_with_xnnpack=false "--copt=/D__builtin_expect(a,b)=(a)")
+  fi
   # git-bash/MSYS rewrites bare bazel-label args like //foo:bar to /foo:bar — disable that. File
   # paths handed to bazel must then be made Windows-native explicitly (cygpath), since conversion
   # is now off for every arg.
