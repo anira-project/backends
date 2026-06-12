@@ -184,7 +184,18 @@ STAR
     # MSVC lib.exe merges the .lib archives via a response file (Windows paths; cygpath converts).
     win() { command -v cygpath >/dev/null 2>&1 && cygpath -w "$1" || echo "$1"; }
     : > "$HERE/libs.rsp"
-    while IFS= read -r a; do printf '"%s"\n' "$(win "$execroot/$a")" >> "$HERE/libs.rsp"; done < "$HERE/archives.txt"
+    if [ "$ARCH" = "arm64" ]; then
+      # The clang-cl arm64 build emits some zero-object (header-only) archives; lib.exe rejects
+      # those (LNK1160). Keep only archives that actually contain object members. Capture lib /list
+      # to a file first — piping to `grep -q` would SIGPIPE lib under pipefail.
+      while IFS= read -r a; do
+        p="$(win "$execroot/$a")"
+        MSYS_NO_PATHCONV=1 lib /nologo /list "$p" > "$HERE/_members.txt" 2>/dev/null || true
+        grep -qi '\.obj' "$HERE/_members.txt" && printf '"%s"\n' "$p" >> "$HERE/libs.rsp"
+      done < "$HERE/archives.txt"
+    else
+      while IFS= read -r a; do printf '"%s"\n' "$(win "$execroot/$a")" >> "$HERE/libs.rsp"; done < "$HERE/archives.txt"
+    fi
     mm=x64; [ "$ARCH" = "arm64" ] && mm=arm64
     MSYS_NO_PATHCONV=1 lib /nologo /machine:$mm /OUT:"$(win "$out")" "@$(win "$HERE/libs.rsp")"
   else
