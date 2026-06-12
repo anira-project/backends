@@ -186,13 +186,15 @@ STAR
     : > "$HERE/libs.rsp"
     if [ "$ARCH" = "arm64" ]; then
       # The clang-cl arm64 build emits some zero-object (header-only) archives; lib.exe rejects
-      # those (LNK1160). Keep only archives that actually contain object members. Capture lib /list
-      # to a file first — piping to `grep -q` would SIGPIPE lib under pipefail.
+      # those (LNK1160). Keep only archives whose member list is non-empty. Capture lib /list to a
+      # file first — piping to grep would SIGPIPE lib under pipefail.
+      kept=0
       while IFS= read -r a; do
         p="$(win "$execroot/$a")"
         MSYS_NO_PATHCONV=1 lib /nologo /list "$p" > "$HERE/_members.txt" 2>/dev/null || true
-        grep -qi '\.obj' "$HERE/_members.txt" && printf '"%s"\n' "$p" >> "$HERE/libs.rsp"
+        if [ -s "$HERE/_members.txt" ]; then printf '"%s"\n' "$p" >> "$HERE/libs.rsp"; kept=$((kept+1)); fi
       done < "$HERE/archives.txt"
+      echo "litert static: kept $kept/$count archives with objects for lib.exe"
     else
       while IFS= read -r a; do printf '"%s"\n' "$(win "$execroot/$a")" >> "$HERE/libs.rsp"; done < "$HERE/archives.txt"
     fi
