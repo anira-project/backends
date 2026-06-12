@@ -102,9 +102,10 @@ if [ "$KIND" = "static" ]; then
   pic=(--force_pic)
   ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "${pic[@]}" "$target" )
   # Materialise every transitive cc_library's archive (the top build leaves them as .o only).
+  # cquery --output=label appends the config hash as " (abcdef0)" — keep only the bare label.
   ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" "${pic[@]}" \
       "kind('cc_library rule', deps($target))" --output=label 2>/dev/null ) \
-      | grep -v '^$' > "$HERE/labels.txt"
+      | awk 'NF{print $1}' | sort -u > "$HERE/labels.txt"
   ( cd "$SRC" && xargs bazel build "${cfg[@]}" "${defines[@]}" "${pic[@]}" < "$HERE/labels.txt" )
   cat > "$HERE/collect_static_libs.star" <<'STAR'
 def format(target):
