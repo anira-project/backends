@@ -6,8 +6,9 @@
 #   source=prebuilt — fetch the official prebuilt libLiteRt from google-ai-edge/LiteRT's
 #                     litert/prebuilt/<platform>/ (Git-LFS, via the media endpoint), pinned to a
 #                     main commit (upstream ships these mobile/desktop prebuilts UNVERSIONED).
-#   source=build    — build from source via Bazel, CPU-only. Used where no prebuilt exists
-#                     (macOS x86_64).
+#   source=build    — build from source via Bazel, CPU-only. Used where no prebuilt exists:
+#                     macOS x86_64 (shared), and ALL static legs (upstream ships no static lib —
+#                     we build the C API impl and merge its transitive .a closure into libLiteRt.a).
 #
 # Usage: stage.sh <platform> <arch> <config> <kind> <source> <staging> [url]
 set -euo pipefail
@@ -87,10 +88,57 @@ case "$PLATFORM" in
   linux) cfg=(--config=bulk_test_cpu) ;;
   *) echo "ERROR: no from-source litert recipe for '$PLATFORM' (use a prebuilt leg)"; exit 1 ;;
 esac
-( cd "$SRC" && bazel build "${cfg[@]}" \
-    --define=litert_disable_gpu=true --define=litert_disable_npu=true \
-    //litert/c:litert_runtime_c_api_shared_lib )
+defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 
+# ---- source=build, kind=static: no static prebuilt ships upstream, so build it ----------------
+# litert_runtime_c_api_so_shim is the cc_library that pulls in LITERT_C_API_COMMON_DEPS (the real
+# C API impl) — the same closure the .so/.dylib link from. We build it (compiling every transitive
+# dep to a .a), enumerate that closure's static archives from the target's CcInfo linking context
+# (precise: only libraries that actually feed the link), and merge them into one libLiteRt.a.
+if [ "$KIND" = "static" ]; then
+  target=//litert/c:litert_runtime_c_api_so_shim
+  ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "$target" )
+  cat > "$HERE/collect_static_libs.star" <<'STAR'
+def format(target):
+    ps = providers(target)
+    cc = ps.get("CcInfo") if ps else None
+    if cc == None:
+        return ""
+    out = []
+    for li in cc.linking_context.linker_inputs.to_list():
+        for lib in li.libraries:
+            f = lib.pic_static_library
+            if f == None:
+                f = lib.static_library
+            if f != None:
+                out.append(f.path)
+    return "\n".join(out)
+STAR
+  ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" "$target" \
+      --output=starlark --starlark:file="$HERE/collect_static_libs.star" ) \
+      | grep -v '^$' | sort -u > "$HERE/archives.txt"
+  execroot="$( cd "$SRC" && bazel info execution_root )"
+  count="$(wc -l < "$HERE/archives.txt" | tr -d ' ')"
+  [ "$count" -gt 0 ] || { echo "ERROR: no static archives collected for $target"; exit 1; }
+  echo "litert static: merging $count transitive archives -> libLiteRt.a"
+  out="$ST/lib/libLiteRt.a"; rm -f "$out"
+  if [ "$PLATFORM" = "macos" ]; then
+    # BSD libtool: feed the (absolute) archive paths via -filelist to dodge ARG_MAX.
+    awk -v r="$execroot" '{print r"/"$0}' "$HERE/archives.txt" > "$HERE/filelist.txt"
+    libtool -static -no_warning_for_no_symbols -filelist "$HERE/filelist.txt" -o "$out"
+  else
+    # GNU ar MRI script: addlib copies every member (dup names across libs are fine), then index.
+    { echo "create $out"
+      awk -v r="$execroot" '{print "addlib "r"/"$0}' "$HERE/archives.txt"
+      echo save; echo end; } | ar -M
+    ranlib "$out"
+  fi
+  echo "staged litert ($PLATFORM/$ARCH/static, from source, $(du -h "$out" | cut -f1)) -> $ST"
+  exit 0
+fi
+
+# ---- source=build, kind=shared: build libLiteRt.{so,dylib} (macOS x86_64) --------------------
+( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" //litert/c:litert_runtime_c_api_shared_lib )
 # Locate the built shared lib (bazel-bin is a symlink find -L follows on unix).
 lib="$(find -L "$SRC/bazel-bin" -maxdepth 6 \( -name 'libLiteRt.so' -o -name 'libLiteRt.dylib' \) 2>/dev/null | head -1)"
 [ -n "$lib" ] || { echo "ERROR: libLiteRt not found under bazel-bin"; exit 1; }
