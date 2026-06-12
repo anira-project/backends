@@ -282,6 +282,11 @@
       "name": "litert-linux-aarch64-static", "inherits": "orch-base",
       "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "aarch64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
       "vendor": { "anira": { "name": "Linux-aarch64", "runner": "ubuntu-24.04-arm", "arch": "aarch64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-x86_64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
     }
   ]
 }

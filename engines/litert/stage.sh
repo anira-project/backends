@@ -86,6 +86,9 @@ case "$PLATFORM" in
   macos) if [ "$ARCH" = "arm64" ]; then cfg=(--config=macos_arm64 --config=bulk_test_cpu)
          else cfg=(--config=bulk_test_cpu --cpu=darwin_x86_64); fi ;;
   linux) cfg=(--config=bulk_test_cpu) ;;
+  # Windows: --enable_platform_specific_config auto-applies build:windows, so no explicit config.
+  # Only static is built from source here (shared uses the prebuilt DLL).
+  windows) cfg=() ;;
   *) echo "ERROR: no from-source litert recipe for '$PLATFORM' (use a prebuilt leg)"; exit 1 ;;
 esac
 defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
@@ -99,7 +102,7 @@ defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 # cc_library labels and `bazel build` them all first, then collect the archives from CcInfo.
 if [ "$KIND" = "static" ]; then
   target=//litert/c:litert_runtime_c_api_so_shim
-  pic=(--force_pic)
+  pic=(--force_pic); [ "$PLATFORM" = "windows" ] && pic=()   # PE has no PIC notion; MSVC rejects it
   ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "${pic[@]}" "$target" )
   # Materialise every transitive cc_library's archive (the top build leaves them as .o only).
   # cquery --output=label appends the config hash as " (abcdef0)" — keep only the bare label.
@@ -130,12 +133,20 @@ STAR
   while IFS= read -r a; do [ -f "$execroot/$a" ] && printf '%s\n' "$a" >> "$HERE/archives.txt"; done < "$HERE/all_archives.txt"
   count="$(wc -l < "$HERE/archives.txt" | tr -d ' ')"
   [ "$count" -gt 0 ] || { echo "ERROR: no static archives materialised for $target"; exit 1; }
-  echo "litert static: merging $count transitive archives -> libLiteRt.a"
-  out="$ST/lib/libLiteRt.a"; rm -f "$out"
+  # Output name: libLiteRt.a (unix) / LiteRt.lib (windows, matching the shared import-lib name).
+  out="$ST/lib/libLiteRt.a"; [ "$PLATFORM" = "windows" ] && out="$ST/lib/LiteRt.lib"
+  rm -f "$out"
+  echo "litert static: merging $count transitive archives -> $(basename "$out")"
   if [ "$PLATFORM" = "macos" ]; then
     # BSD libtool: feed the (absolute) archive paths via -filelist to dodge ARG_MAX.
     awk -v r="$execroot" '{print r"/"$0}' "$HERE/archives.txt" > "$HERE/filelist.txt"
     libtool -static -no_warning_for_no_symbols -filelist "$HERE/filelist.txt" -o "$out"
+  elif [ "$PLATFORM" = "windows" ]; then
+    # MSVC lib.exe merges the .lib archives via a response file (Windows paths; cygpath converts).
+    win() { command -v cygpath >/dev/null 2>&1 && cygpath -w "$1" || echo "$1"; }
+    : > "$HERE/libs.rsp"
+    while IFS= read -r a; do printf '"%s"\n' "$(win "$execroot/$a")" >> "$HERE/libs.rsp"; done < "$HERE/archives.txt"
+    MSYS_NO_PATHCONV=1 lib /nologo /OUT:"$(win "$out")" "@$(win "$HERE/libs.rsp")"
   else
     # GNU ar MRI script: addlib copies every member (dup names across libs are fine), then index.
     { echo "create $out"
