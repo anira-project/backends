@@ -108,8 +108,8 @@ if [ "$KIND" = "static" ]; then
   [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "x86_64" ] && \
     cfg=(--config=macos --cpu=darwin_x86_64 --macos_minimum_os=11.0 \
          --platforms=@build_bazel_apple_support//platforms:macos_x86_64 --config=bulk_test_cpu)
-  # Windows arm64: cross-compile from the x64 runner (MSVC amd64_arm64 tools) — override the
-  # auto-applied build:windows --cpu=x64_windows.
+  # Windows arm64: build natively on a windows-11-arm runner (native arm64 MSVC) — still override
+  # the auto-applied build:windows --cpu=x64_windows, which is hardcoded in LiteRT's .bazelrc.
   [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ] && cfg=(--cpu=arm64_windows)
   # Linux PIE consumers need PIC archives; macOS is always-PIC; PE has no PIC notion. Fold into
   # defines (never empty) — an empty array under `set -u` is an "unbound variable" on bash 3.2.
@@ -117,7 +117,8 @@ if [ "$KIND" = "static" ]; then
   # Linux x86_64: build against the system libstdc++ instead of LiteRT's hermetic sysroot, so the
   # archive's std::filesystem ABI matches what consumers link. Scoped to x86_64 to keep the
   # already-green aarch64 leg on its working hermetic toolchain.
-  [ "$PLATFORM" = "linux" ] && [ "$ARCH" = "x86_64" ] && defines+=(--repo_env=USE_HERMETIC_CC_TOOLCHAIN=0)
+  [ "$PLATFORM" = "linux" ] && [ "$ARCH" = "x86_64" ] && \
+    defines+=(--repo_env=USE_HERMETIC_CC_TOOLCHAIN=0 --noincompatible_enable_cc_toolchain_resolution)
   # git-bash/MSYS rewrites bare bazel-label args like //foo:bar to /foo:bar — disable that. File
   # paths handed to bazel must then be made Windows-native explicitly (cygpath), since conversion
   # is now off for every arg.
