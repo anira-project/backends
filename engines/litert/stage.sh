@@ -108,6 +108,9 @@ if [ "$KIND" = "static" ]; then
   [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "x86_64" ] && \
     cfg=(--config=macos --cpu=darwin_x86_64 --macos_minimum_os=11.0 \
          --platforms=@build_bazel_apple_support//platforms:macos_x86_64 --config=bulk_test_cpu)
+  # Windows arm64: cross-compile from the x64 runner (MSVC amd64_arm64 tools) — override the
+  # auto-applied build:windows --cpu=x64_windows.
+  [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ] && cfg=(--cpu=arm64_windows)
   # Linux PIE consumers need PIC archives; macOS is always-PIC; PE has no PIC notion. Fold into
   # defines (never empty) — an empty array under `set -u` is an "unbound variable" on bash 3.2.
   [ "$PLATFORM" = "linux" ] && defines+=(--force_pic)
@@ -166,7 +169,8 @@ STAR
     win() { command -v cygpath >/dev/null 2>&1 && cygpath -w "$1" || echo "$1"; }
     : > "$HERE/libs.rsp"
     while IFS= read -r a; do printf '"%s"\n' "$(win "$execroot/$a")" >> "$HERE/libs.rsp"; done < "$HERE/archives.txt"
-    MSYS_NO_PATHCONV=1 lib /nologo /OUT:"$(win "$out")" "@$(win "$HERE/libs.rsp")"
+    mm=x64; [ "$ARCH" = "arm64" ] && mm=arm64
+    MSYS_NO_PATHCONV=1 lib /nologo /machine:$mm /OUT:"$(win "$out")" "@$(win "$HERE/libs.rsp")"
   else
     # GNU ar MRI script: addlib copies every member (dup names across libs are fine), then index.
     { echo "create $out"
