@@ -32,12 +32,14 @@ endif()
 # CMake 4+. It's set via the preset `environment` (not a cache var here) so the
 # nested cmake download processes inherit it too.
 
-# CPU-only: XNNPACK (SIMD CPU) on; GPU/NPU delegates off. Exception: Windows-on-ARM64
-# with MSVC can't build XNNPACK's NEON microkernels (unresolved xnn_*_ukernel__neon*),
-# so disable it there — TFLite falls back to its built-in kernels.
-if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+# CPU-only: XNNPACK (SIMD CPU) on; GPU/NPU delegates off. Exception: Windows-on-ARM64 built with
+# **MSVC cl** can't compile XNNPACK's NEON microkernels (unresolved xnn_*_ukernel__neon*), so it's
+# disabled there. The arm64-Windows presets build with **clang-cl** instead, which compiles those
+# microkernels fine — so XNNPACK stays ON. clang-cl also sets MSVC=TRUE, so gate on the compiler ID
+# (CMAKE_CXX_COMPILER_ID is "MSVC" for cl, "Clang" for clang-cl).
+if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64" AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     set(TFLITE_ENABLE_XNNPACK OFF CACHE BOOL "" FORCE)
-    message(STATUS "TFLite: XNNPACK disabled on Windows/ARM64 (MSVC NEON microkernels unsupported)")
+    message(STATUS "TFLite: XNNPACK disabled on Windows/ARM64 + MSVC cl (NEON microkernels unsupported)")
 else()
     set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "" FORCE)
 endif()
