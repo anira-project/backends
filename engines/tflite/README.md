@@ -38,7 +38,12 @@ Android needs `ANDROID_NDK_HOME`; wasm needs `EMSDK` (4.0.23, to match anira-web
 ## Build notes
 
 - **Windows Debug** uses `/Z7` (no PDB → no `C1041`); no sccache for Debug.
-- **Windows arm64** disables XNNPACK (MSVC can't build its NEON microkernels).
+- **Windows arm64** disables XNNPACK (MSVC can't build its NEON microkernels) → reference kernels.
+  Building this leg with clang-cl was explored to re-enable XNNPACK: clang-cl does compile the
+  baseline NEON microkernels, but the pinned XNNPACK/cpuinfo predate Windows-arm64 support (XNNPACK
+  applies its per-file `-march=armv8.2+fp16/dotprod` flags only for non-MSVC compilers; cpuinfo
+  doesn't compile its arm/Windows source) — so it needs multi-dep overrides upstream. Left on the
+  reference-kernel build; revisit when TFLite bumps to an XNNPACK/cpuinfo with arm64-Windows support.
 - **macOS x86_64 / iOS-sim x86_64** force `CMAKE_SYSTEM_PROCESSOR` so TFLite fetches the
   NEON_2_SSE shim x86 needs (Apple keeps `CMAKE_SYSTEM_PROCESSOR` as the host arch otherwise).
 - **CMake 4 + old TFLite deps** need `CMAKE_POLICY_VERSION_MINIMUM=3.5` (set in the preset env).

@@ -28,46 +28,18 @@ if(APPLE AND CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_SYSTEM_PROCESSOR "${CMAKE_OSX_ARCHITECTURES}")
 endif()
 
-# Windows-on-ARM64: CMake sets CMAKE_SYSTEM_PROCESSOR to "ARM64" (uppercase). The XNNPACK version
-# TFLite pins predates Windows-arm64 support and its arch regex only matches lowercase
-# "aarch64"/"arm64", so "ARM64" falls through and XNNPACK compiles NO NEON microkernels (only
-# configs/tables), leaving every xnn_*_ukernel__neon* undefined at link. Normalise to "aarch64" so
-# XNNPACK selects its NEON sources.
-if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
-    set(CMAKE_SYSTEM_PROCESSOR "aarch64")
-endif()
-
 # NOTE: old TFLite deps (FP16/psimd/…) need CMAKE_POLICY_VERSION_MINIMUM=3.5 under
 # CMake 4+. It's set via the preset `environment` (not a cache var here) so the
 # nested cmake download processes inherit it too.
 
-# CPU-only: XNNPACK (SIMD CPU) on; GPU/NPU delegates off. Exception: Windows-on-ARM64 built with
-# **MSVC cl** can't compile XNNPACK's NEON microkernels (unresolved xnn_*_ukernel__neon*), so it's
-# disabled there. The arm64-Windows presets build with **clang-cl** instead, which compiles those
-# microkernels fine — so XNNPACK stays ON. clang-cl also sets MSVC=TRUE, so gate on the compiler ID
-# (CMAKE_CXX_COMPILER_ID is "MSVC" for cl, "Clang" for clang-cl).
-if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64" AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+# CPU-only: XNNPACK (SIMD CPU) on; GPU/NPU delegates off. Exception: Windows-on-ARM64
+# with MSVC can't build XNNPACK's NEON microkernels (unresolved xnn_*_ukernel__neon*),
+# so disable it there — TFLite falls back to its built-in kernels.
+if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
     set(TFLITE_ENABLE_XNNPACK OFF CACHE BOOL "" FORCE)
-    message(STATUS "TFLite: XNNPACK disabled on Windows/ARM64 + MSVC cl (NEON microkernels unsupported)")
+    message(STATUS "TFLite: XNNPACK disabled on Windows/ARM64 (MSVC NEON microkernels unsupported)")
 else()
     set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "" FORCE)
-endif()
-# Windows-arm64 (clang-cl): build XNNPACK's BASELINE NEON microkernels — a big speedup over
-# TFLite's reference kernels. Two clang-cl-on-Windows constraints, both scoped to this leg:
-#   - No .S assembly microkernels (GNU-syntax; clang-cl can't assemble them on Windows).
-#   - No specialized-ISA microkernels (fp16/dotprod/i8mm/bf16). XNNPACK applies their per-file
-#     -march=armv8.2-a+<feature> flags only for non-MSVC compilers; clang-cl (MSVC driver) doesn't
-#     get them, so e.g. neonfp16arith.c fails ("requires target feature 'fullfp16'"). Dropping just
-#     those keeps baseline NEON (no runtime feature requirement); the fp16/dot/i8mm-accelerated
-#     paths are simply not included on this one target.
-# (CMAKE_SYSTEM_PROCESSOR was normalised to "aarch64" above so XNNPACK selects its ARM sources.)
-if(WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-    set(XNNPACK_ENABLE_ASSEMBLY        OFF CACHE BOOL "" FORCE)
-    set(XNNPACK_ENABLE_ARM_FP16_VECTOR OFF CACHE BOOL "" FORCE)
-    set(XNNPACK_ENABLE_ARM_FP16_SCALAR OFF CACHE BOOL "" FORCE)
-    set(XNNPACK_ENABLE_ARM_BF16        OFF CACHE BOOL "" FORCE)
-    set(XNNPACK_ENABLE_ARM_DOTPROD     OFF CACHE BOOL "" FORCE)
-    set(XNNPACK_ENABLE_ARM_I8MM        OFF CACHE BOOL "" FORCE)
 endif()
 set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
 
