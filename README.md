@@ -23,23 +23,29 @@ upstream licenses (above).
 
 What ships per target — `shared` and/or `static`:
 
-| Target                          | TFLite            | LiteRT ²  | ONNXRuntime       | LibTorch |
-| ------------------------------- | ----------------- | --------- | ----------------- | -------- |
-| macOS x86_64                    | shared · static   | shared    | shared · static   | shared   |
-| macOS arm64                     | shared · static   | shared    | shared · static   | shared   |
-| macOS universal                 | shared · static   | shared    | shared · static   | shared   |
-| Linux x86_64                    | shared · static   | shared    | shared · static   | shared   |
-| Linux aarch64                   | shared · static   | shared    | shared · static   | shared   |
-| Windows x86_64                  | shared · static ¹ | shared    | shared · static ¹ | shared   |
-| Windows arm64                   | shared · static ¹ | —         | shared · static ¹ | shared   |
-| Android (`arm64-v8a` + `x86_64`)| shared · static   | shared    | shared · static   | —        |
-| iOS (xcframework)               | static            | shared    | static            | —        |
+| Target                          | TFLite            | LiteRT ²          | ONNXRuntime       | LibTorch |
+| ------------------------------- | ----------------- | ----------------- | ----------------- | -------- |
+| macOS x86_64                    | shared · static   | shared · static   | shared · static   | shared   |
+| macOS arm64                     | shared · static   | shared · static   | shared · static   | shared   |
+| macOS universal                 | shared · static   | shared · static   | shared · static   | shared   |
+| Linux x86_64                    | shared · static   | shared · static   | shared · static   | shared   |
+| Linux aarch64                   | shared · static   | shared · static   | shared · static   | shared   |
+| Windows x86_64                  | shared · static ¹ | shared · static   | shared · static ¹ | shared   |
+| Windows arm64                   | shared · static ¹ | static ³          | shared · static ¹ | shared   |
+| Android (`arm64-v8a` + `x86_64`)| shared · static   | shared            | shared · static   | —        |
+| iOS (xcframework)               | static            | shared            | static            | —        |
 
 > ¹ Windows `static` also ships a `Debug` variant.
 
-> ² LiteRT ships the **native `LiteRt*` C API** (`libLiteRt`), `shared` only. Built from a mix of
-> official prebuilts (`litert/prebuilt/`, pinned to a main SHA) and from-source Bazel (macOS x86_64).
-> **Windows-arm64** and **static** are unavailable upstream (no prebuilt; no static lib ships).
+> ² LiteRT ships the **native `LiteRt*` C API** (`libLiteRt`). `shared` is repackaged from official
+> prebuilts (`litert/prebuilt/`, pinned to a main SHA) plus from-source Bazel (macOS x86_64); `static`
+> is built from source (no static lib ships upstream) and merged into one archive. Android/iOS
+> `static` aren't provided (Android-from-source is Bazel-blocked; iOS ships the prebuilt xcframework).
+
+> ³ Windows-arm64 has no upstream prebuilt, so only `static` (from source). It's built natively on a
+> windows-11-arm runner with **clang-cl** (MSVC `cl` can't compile the deps' GCC/clang constructs) and
+> **without XNNPACK** (its pinned Bazel build has no arm64-Windows microkernels) — CPU kernels via
+> ruy/builtin.
 
 > `—` = not provided.
 
