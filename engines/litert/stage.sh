@@ -128,8 +128,20 @@ if [ "$KIND" = "static" ]; then
     # cross-compile toolchain/platform mismatch. Just override the .bazelrc's auto
     # --cpu=x64_windows back to arm64, and use clang-cl (handles the deps' GCC/clang constructs
     # MSVC cl rejects, e.g. __builtin_expect).
-    export USE_CLANG_CL=1 BAZEL_LLVM="C:/Program Files/LLVM"
+    export USE_CLANG_CL=1
     cfg+=(--cpu=arm64_windows)
+    # The runner ships LLVM 22, whose clang resource-dir path Bazel 7.7's clang-cl auto-config
+    # mis-detects (bazelbuild/bazel#17863) -> "absolute path inclusion" errors. Install the LLVM
+    # version the x64 leg uses (20.1.x, woa64 = native arm64) and point Bazel at it.
+    llvm_dir='C:/LLVM20'
+    if [ ! -x "$llvm_dir/bin/clang-cl.exe" ]; then
+      curl -fsSL -o "$HERE/llvm20.exe" \
+        "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe"
+      # NSIS silent install; /D (install dir) must be last and unquoted, and a space-free path.
+      MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "$HERE/llvm20.exe" /S /D=C:\\LLVM20
+      [ -x "$llvm_dir/bin/clang-cl.exe" ] || { echo "::error::LLVM 20 install failed"; exit 1; }
+    fi
+    export BAZEL_LLVM="$llvm_dir"
     # XNNPACK's pinned Bazel build lacks arm64_windows microkernels — disable it (ruy/builtin CPU).
     defines+=(--define=tflite_with_xnnpack=false)
     # The pinned cpuinfo's arm64-Windows source has a fixed-upstream array-assignment bug; override.
