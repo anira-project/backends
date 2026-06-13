@@ -28,6 +28,15 @@ if(APPLE AND CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_SYSTEM_PROCESSOR "${CMAKE_OSX_ARCHITECTURES}")
 endif()
 
+# Windows-on-ARM64: CMake sets CMAKE_SYSTEM_PROCESSOR to "ARM64" (uppercase). The XNNPACK version
+# TFLite pins predates Windows-arm64 support and its arch regex only matches lowercase
+# "aarch64"/"arm64", so "ARM64" falls through and XNNPACK compiles NO NEON microkernels (only
+# configs/tables), leaving every xnn_*_ukernel__neon* undefined at link. Normalise to "aarch64" so
+# XNNPACK selects its NEON sources.
+if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+    set(CMAKE_SYSTEM_PROCESSOR "aarch64")
+endif()
+
 # NOTE: old TFLite deps (FP16/psimd/…) need CMAKE_POLICY_VERSION_MINIMUM=3.5 under
 # CMake 4+. It's set via the preset `environment` (not a cache var here) so the
 # nested cmake download processes inherit it too.
@@ -42,6 +51,13 @@ if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64" AND CMAKE_CXX_
     message(STATUS "TFLite: XNNPACK disabled on Windows/ARM64 + MSVC cl (NEON microkernels unsupported)")
 else()
     set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "" FORCE)
+endif()
+# Windows-arm64 (clang-cl): use XNNPACK's C NEON microkernels, but NOT its aarch64 .S assembly
+# microkernels — those are GNU-syntax and clang-cl can't assemble them on Windows. The C NEON
+# intrinsic kernels still deliver the SIMD speedup over reference kernels. (CMAKE_SYSTEM_PROCESSOR
+# was normalised to "aarch64" above for this leg.)
+if(WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+    set(XNNPACK_ENABLE_ASSEMBLY OFF CACHE BOOL "" FORCE)
 endif()
 set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
 
