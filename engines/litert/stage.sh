@@ -123,28 +123,16 @@ if [ "$KIND" = "static" ]; then
   # --config=win_clang). USE_CLANG_CL makes Bazel's @local_config_cc pick the clang-cl toolchain;
   # BAZEL_LLVM points at the runner's preinstalled LLVM. XNNPACK stays enabled.
   if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ]; then
+    # Build natively on a windows-11-arm runner: the arm64 host makes clang-cl emit arm64, the
+    # archiver use /machine:arm64, and every dep's select() resolve to arm64 sources — no
+    # cross-compile toolchain/platform mismatch. Just override the .bazelrc's auto
+    # --cpu=x64_windows back to arm64, and use clang-cl (handles the deps' GCC/clang constructs
+    # MSVC cl rejects, e.g. __builtin_expect).
     export USE_CLANG_CL=1 BAZEL_LLVM="C:/Program Files/LLVM"
-    # Drive the build by a real arm64 target PLATFORM, not the legacy --cpu=arm64_windows (which
-    # only set the toolchain CPU and left the Bazel platform at the x64 host, so every dep's
-    # select() resolved to x86-Windows sources). With cpu:arm64 on the target platform, deps like
-    # cpuinfo correctly select their arm64-Windows sources. Keep toolchain resolution off so the
-    # clang-cl toolchain is still used (no arm64-Windows toolchain is registered); --target below
-    # makes clang-cl actually emit arm64 machine code.
-    mkdir -p "$SRC/anira_platforms"
-    cat > "$SRC/anira_platforms/BUILD" <<'EOF'
-platform(
-    name = "windows_arm64",
-    constraint_values = ["@platforms//os:windows", "@platforms//cpu:arm64"],
-    visibility = ["//visibility:public"],
-)
-EOF
-    cfg+=(--platforms=//anira_platforms:windows_arm64 --noincompatible_enable_cc_toolchain_resolution)
-    # Cross-compiling from the x64 runner, clang-cl defaults to an x64 target — force arm64.
-    defines+=(--copt=--target=arm64-pc-windows-msvc --linkopt=--target=arm64-pc-windows-msvc)
-    # XNNPACK's pinned Bazel build still lacks an arm64_windows microkernel selection, so disable
-    # just XNNPACK here (CPU kernels via ruy/builtin); clang-cl handles the other deps.
+    cfg+=(--cpu=arm64_windows)
+    # XNNPACK's pinned Bazel build lacks arm64_windows microkernels — disable it (ruy/builtin CPU).
     defines+=(--define=tflite_with_xnnpack=false)
-    # LiteRT 2.1.5 pins an older cpuinfo; override with a current one that has arm64-Windows sources.
+    # The pinned cpuinfo's arm64-Windows source has a fixed-upstream array-assignment bug; override.
     cpu="$HERE/cpuinfo-fixed"
     [ -d "$cpu/.git" ] || git clone --depth 1 https://github.com/pytorch/cpuinfo "$cpu"
     cpuw="$cpu"; command -v cygpath >/dev/null 2>&1 && cpuw="$(cygpath -w "$cpu")"
