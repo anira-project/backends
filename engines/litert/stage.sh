@@ -108,9 +108,6 @@ if [ "$KIND" = "static" ]; then
   [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "x86_64" ] && \
     cfg=(--config=macos --cpu=darwin_x86_64 --macos_minimum_os=11.0 \
          --platforms=@build_bazel_apple_support//platforms:macos_x86_64 --config=bulk_test_cpu)
-  # Windows arm64: build natively on a windows-11-arm runner (native arm64 MSVC) — still override
-  # the auto-applied build:windows --cpu=x64_windows, which is hardcoded in LiteRT's .bazelrc.
-  [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ] && cfg=(--cpu=arm64_windows)
   # Linux PIE consumers need PIC archives; macOS is always-PIC; PE has no PIC notion. Fold into
   # defines (never empty) — an empty array under `set -u` is an "unbound variable" on bash 3.2.
   [ "$PLATFORM" = "linux" ] && defines+=(--force_pic)
@@ -127,16 +124,27 @@ if [ "$KIND" = "static" ]; then
   # BAZEL_LLVM points at the runner's preinstalled LLVM. XNNPACK stays enabled.
   if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ]; then
     export USE_CLANG_CL=1 BAZEL_LLVM="C:/Program Files/LLVM"
-    # We cross-compile from the x64 runner, where clang-cl defaults to an x64 target — so
-    # --cpu=arm64_windows alone only renamed the output dir while objects stayed x64 (machine-type
-    # conflict at merge). Force clang-cl's target to arm64 for the target-config compiles.
+    # Drive the build by a real arm64 target PLATFORM, not the legacy --cpu=arm64_windows (which
+    # only set the toolchain CPU and left the Bazel platform at the x64 host, so every dep's
+    # select() resolved to x86-Windows sources). With cpu:arm64 on the target platform, deps like
+    # cpuinfo correctly select their arm64-Windows sources. Keep toolchain resolution off so the
+    # clang-cl toolchain is still used (no arm64-Windows toolchain is registered); --target below
+    # makes clang-cl actually emit arm64 machine code.
+    mkdir -p "$SRC/anira_platforms"
+    cat > "$SRC/anira_platforms/BUILD" <<'EOF'
+platform(
+    name = "windows_arm64",
+    constraint_values = ["@platforms//os:windows", "@platforms//cpu:arm64"],
+    visibility = ["//visibility:public"],
+)
+EOF
+    cfg+=(--platforms=//anira_platforms:windows_arm64 --noincompatible_enable_cc_toolchain_resolution)
+    # Cross-compiling from the x64 runner, clang-cl defaults to an x64 target — force arm64.
     defines+=(--copt=--target=arm64-pc-windows-msvc --linkopt=--target=arm64-pc-windows-msvc)
-    # XNNPACK's pinned Bazel build has no arm64_windows arch support (selects x86 microkernel
-    # sources), so disable just XNNPACK here (CPU kernels via ruy/builtin); clang-cl handles the
-    # other deps' GCC/clang constructs.
+    # XNNPACK's pinned Bazel build still lacks an arm64_windows microkernel selection, so disable
+    # just XNNPACK here (CPU kernels via ruy/builtin); clang-cl handles the other deps.
     defines+=(--define=tflite_with_xnnpack=false)
-    # LiteRT 2.1.5 pins a cpuinfo whose arm64-Windows path has an illegal array assignment
-    # (init-by-logical-sys-info.c — fixed upstream). Override the repo with a current cpuinfo.
+    # LiteRT 2.1.5 pins an older cpuinfo; override with a current one that has arm64-Windows sources.
     cpu="$HERE/cpuinfo-fixed"
     [ -d "$cpu/.git" ] || git clone --depth 1 https://github.com/pytorch/cpuinfo "$cpu"
     cpuw="$cpu"; command -v cygpath >/dev/null 2>&1 && cpuw="$(cygpath -w "$cpu")"
