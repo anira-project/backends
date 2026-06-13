@@ -77,17 +77,17 @@
     },
     {
       "name": "tflite-windows-arm64-shared", "inherits": ["windows-arm64", "shared"],
-      "cacheVariables": { "BACKENDS_ENGINE": "tflite", "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe", "CMAKE_CXX_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe" },
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite", "CMAKE_C_COMPILER": "C:/LLVM20/bin/clang-cl.exe", "CMAKE_CXX_COMPILER": "C:/LLVM20/bin/clang-cl.exe" },
       "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
     },
     {
       "name": "tflite-windows-arm64-static", "inherits": ["windows-arm64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "tflite", "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe", "CMAKE_CXX_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe" },
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite", "CMAKE_C_COMPILER": "C:/LLVM20/bin/clang-cl.exe", "CMAKE_CXX_COMPILER": "C:/LLVM20/bin/clang-cl.exe" },
       "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
     },
     {
       "name": "tflite-windows-arm64-static-debug", "inherits": ["windows-arm64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "tflite", "CMAKE_BUILD_TYPE": "Debug", "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe", "CMAKE_CXX_COMPILER": "C:/Program Files/LLVM/bin/clang-cl.exe" },
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite", "CMAKE_BUILD_TYPE": "Debug", "CMAKE_C_COMPILER": "C:/LLVM20/bin/clang-cl.exe", "CMAKE_CXX_COMPILER": "C:/LLVM20/bin/clang-cl.exe" },
       "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Debug", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
     },
     {

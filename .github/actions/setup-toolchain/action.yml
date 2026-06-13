@@ -38,6 +38,21 @@ runs:
       with:
         arch: ${{ inputs.msvc_arch }}
 
+    # tflite Windows-arm64 builds with clang-cl (MSVC cl can't compile XNNPACK's NEON microkernels).
+    # The runner's default C:/Program Files/LLVM is the x64 LLVM (emulated) and emits x64 objects, so
+    # install the native arm64 LLVM (woa64) the presets point at. Idempotent. litert installs its own.
+    - name: setup clang-cl (tflite Windows-arm64 native LLVM)
+      if: ${{ inputs.engine == 'tflite' && inputs.msvc_arch == 'arm64' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ ! -x "/c/LLVM20/bin/clang-cl.exe" ]; then
+          curl -fsSL -o llvm20.exe \
+            "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe"
+          MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 ./llvm20.exe /S /D=C:\\LLVM20
+          [ -x "/c/LLVM20/bin/clang-cl.exe" ] || { echo "::error::LLVM20 woa64 install failed"; exit 1; }
+        fi
+
     # Python-driven from-source builds (onnxruntime build.py; litert/libtorch Bazel/configure.py).
     # litert prebuilt legs just curl the lib + headers — no python/bazel.
     - name: setup python
