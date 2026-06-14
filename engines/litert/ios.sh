@@ -1,40 +1,59 @@
 #!/usr/bin/env bash
-# iOS (litert): repackage Google's official prebuilt TensorFlowLiteC.xcframework (CPU, static,
-# device + simulator). No build — the per-version download URL is read from the CocoaPods
-# podspec. Smoke-gated on the simulator (real forward pass), then zipped into dist/<archive>.zip.
+# iOS (litert): repackage the official prebuilt libLiteRt.dylib (device + simulator, arm64) from
+# google-ai-edge/LiteRT's litert/prebuilt/ios_* (Git-LFS, via the media endpoint) into an
+# .xcframework — LiteRT's native C API (LiteRt* symbols), CPU-only. Headers from litert_cc_sdk.zip.
+# Produces dist/<archive>.zip.
 #
-# Usage: ios.sh <archive-name>   (produces dist/<archive>.zip)
+# Usage: ios.sh <archive-name>
 set -euo pipefail
 ARCHIVE="${1:?archive name}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
+PREBUILT_SHA="89c838788bba9c2ec6bbefd52971daf39d8e2856"
+base="https://media.githubusercontent.com/media/google-ai-edge/LiteRT/${PREBUILT_SHA}/litert/prebuilt"
 
-# CocoaPods Specs shard for "TensorFlowLiteC" = 1/6/0
-spec="https://raw.githubusercontent.com/CocoaPods/Specs/master/Specs/1/6/0/TensorFlowLiteC/${VER}/TensorFlowLiteC.podspec.json"
-url="$(curl -fsSL "$spec" | python3 -c 'import json,sys; print(json.load(sys.stdin)["source"]["http"])')"
-echo "framework url: $url"
-curl -fsSL "$url" -o tflc.tar.gz
-mkdir -p ex && tar -xzf tflc.tar.gz -C ex
-xcf="$(find ex -maxdepth 4 -type d -name 'TensorFlowLiteC.xcframework' | head -1)"
-[ -n "$xcf" ] || { echo "::error::TensorFlowLiteC.xcframework not found"; exit 1; }
+# Headers: SDK litert/c/*.h + synthesized CPU-only build_config.h (same set as the other legs).
+sdk="$HERE/litert_cc_sdk"
+if [ ! -d "$sdk/litert/c" ]; then
+  curl -fsSL "https://github.com/google-ai-edge/LiteRT/releases/download/v${VER}/litert_cc_sdk.zip" -o "$HERE/litert_cc_sdk.zip"
+  ( cd "$HERE" && cmake -E tar xf litert_cc_sdk.zip )
+fi
+hdr="$HERE/ios_include"; rm -rf "$hdr"; mkdir -p "$hdr/litert/build_common"
+( cd "$sdk" && find litert/c -name '*.h' | while IFS= read -r h; do mkdir -p "$hdr/$(dirname "$h")"; cp "$h" "$hdr/$h"; done )
+cat > "$hdr/litert/build_common/build_config.h" <<'EOF'
+#ifndef LITERT_BUILD_COMMON_BUILD_CONFIG_H_
+#define LITERT_BUILD_COMMON_BUILD_CONFIG_H_
+#define LITERT_BUILD_CONFIG_DISABLE_GPU 1
+#define LITERT_BUILD_CONFIG_DISABLE_NPU 1
+#if LITERT_BUILD_CONFIG_DISABLE_GPU
+#define LITERT_DISABLE_GPU
+#endif
+#if LITERT_BUILD_CONFIG_DISABLE_NPU
+#define LITERT_DISABLE_NPU
+#endif
+#endif  // LITERT_BUILD_COMMON_BUILD_CONFIG_H_
+EOF
 
-echo "slices:"; ls "$xcf"
-ls "$xcf" | grep -q 'ios-arm64'  || { echo "::error::no device (ios-arm64) slice"; exit 1; }
-ls "$xcf" | grep -qi 'simulator' || { echo "::error::no simulator slice"; exit 1; }
+# Prebuilt dylibs: device (ios_arm64) + simulator (ios_sim_arm64). @rpath install_name so the
+# consuming app embeds it normally.
+mkdir -p dev sim
+curl -fsSL "$base/ios_arm64/libLiteRt.dylib.lfs"     -o dev/libLiteRt.dylib
+curl -fsSL "$base/ios_sim_arm64/libLiteRt.dylib.lfs" -o sim/libLiteRt.dylib
+install_name_tool -id @rpath/libLiteRt.dylib dev/libLiteRt.dylib
+install_name_tool -id @rpath/libLiteRt.dylib sim/libLiteRt.dylib
+echo "device slices:"; lipo -info dev/libLiteRt.dylib; echo "sim slices:"; lipo -info sim/libLiteRt.dylib
+# Verify the native C API is present (not a stub). Capture nm output to a file first — piping to
+# `grep -q` closes the pipe early, which makes nm SIGPIPE and pipefail flag a false failure.
+nm -gU dev/libLiteRt.dylib > "$HERE/ios_syms.txt" 2>/dev/null || true
+grep -q LiteRtCreateEnvironment "$HERE/ios_syms.txt" || { echo "::error::libLiteRt missing LiteRtCreateEnvironment"; head "$HERE/ios_syms.txt"; exit 1; }
 
-# Smoke: compile + link smoke.cpp against the simulator slice, then RUN it on a booted sim
-# and check the real forward pass (1->3, 3->9).
-fw_dir="$(find "$xcf" -maxdepth 1 -type d -name '*simulator*' | head -1)"
-sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-clang++ -std=c++17 -arch arm64 -isysroot "$sdk" -mios-simulator-version-min=12.0 \
-  -F "$fw_dir" -framework TensorFlowLiteC -framework Foundation \
-  "$HERE/test/smoke.cpp" -o smoke_ios
-curl -fsSL "https://raw.githubusercontent.com/tensorflow/tensorflow/v${VER}/tensorflow/lite/testdata/add.bin" -o add.bin
-dev="$(xcrun simctl list devices available | grep -m1 -oE '[0-9A-F-]{36}')"
-xcrun simctl boot "$dev" 2>/dev/null || true
-xcrun simctl spawn "$dev" "$PWD/smoke_ios" "$PWD/add.bin"   # exits non-zero on wrong output
+rm -rf LiteRt.xcframework
+xcodebuild -create-xcframework \
+  -library "$PWD/dev/libLiteRt.dylib" -headers "$hdr" \
+  -library "$PWD/sim/libLiteRt.dylib" -headers "$hdr" \
+  -output LiteRt.xcframework
 
 mkdir -p dist "staging/$ARCHIVE"
-cp -R "$xcf" "staging/$ARCHIVE/"
-( cd "staging/$ARCHIVE" && cmake -E tar cf "$OLDPWD/dist/$ARCHIVE.zip" --format=zip TensorFlowLiteC.xcframework )
+cp -R LiteRt.xcframework "staging/$ARCHIVE/"
+( cd "staging/$ARCHIVE" && cmake -E tar cf "$OLDPWD/dist/$ARCHIVE.zip" --format=zip LiteRt.xcframework )
 echo "packaged dist/$ARCHIVE.zip"

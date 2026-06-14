@@ -1,7 +1,7 @@
 name: _build-backend
 
 # Engine-agnostic build pipeline shared by every backend. A per-backend wrapper
-# (litert.yml / onnxruntime.yml / libtorch.yml) derives version + release flag + the
+# (tflite.yml / onnxruntime.yml / libtorch.yml) derives version + release flag + the
 # matrix (engine-meta, straight from CMakePresets vendor.anira) and calls this.
 #
 # Every build leg goes through the root CMake orchestrator (stage-build action):
@@ -15,7 +15,7 @@ name: _build-backend
 on:
   workflow_call:
     inputs:
-      engine:      { description: "Backend id: litert | onnxruntime | libtorch", required: true, type: string }
+      engine:      { description: "Backend id: tflite | onnxruntime | libtorch", required: true, type: string }
       libname:     { description: "Archive/lib prefix: tensorflowlite_c | onnxruntime | libtorch", required: true, type: string }
       version:     { description: "Upstream version (engine VERSION)", required: true, type: string }
       release:     { description: "Publish artifacts to a GitHub release", required: false, type: boolean, default: false }
@@ -54,7 +54,7 @@ jobs:
           version:      ${{ inputs.version }}
           cache_suffix: ${{ matrix.name }}
 
-      # Build / repackage + install + (litert static) bundle -> staging/<archive>.
+      # Build / repackage + install + (tflite static) bundle -> staging/<archive>.
       - name: stage build
         id: b
         uses: ./.github/actions/stage-build
@@ -100,10 +100,10 @@ jobs:
           arch:    ${{ matrix.arch }}
 
       # Android: NDK-cross-compile the smoke, run on a KVM-accelerated x86_64 emulator
-      # (arm64-v8a software emulation hangs -> compile+link only). litert only — the model
+      # (arm64-v8a software emulation hangs -> compile+link only). tflite only — the model
       # + lib are TFLite-specific; onnx Android stays build-only as before.
       - name: smoke (android, build binary)
-        if: ${{ matrix.toolchain == 'android' && inputs.engine == 'litert' }}
+        if: ${{ matrix.toolchain == 'android' && inputs.engine == 'tflite' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -122,7 +122,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
       - name: smoke (android, run on emulator)
-        if: ${{ matrix.toolchain == 'android' && inputs.engine == 'litert' && matrix.arch == 'x86_64' && matrix.kind == 'static' }}
+        if: ${{ matrix.toolchain == 'android' && inputs.engine == 'tflite' && matrix.arch == 'x86_64' && matrix.kind == 'static' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -200,7 +200,7 @@ jobs:
               fi
             done
           else
-            # single lib (litert / onnx)
+            # single lib (tflite / onnx)
             if [ "${{ matrix.kind }}" = "static" ]; then libf="lib${{ inputs.libname }}.a"; else libf="lib${{ inputs.libname }}.dylib"; fi
             lipo -create "ex/x64/lib/$libf" "ex/arm/lib/$libf" -output "$stage/lib/$libf"
             lipo -info "$stage/lib/$libf"
@@ -285,7 +285,7 @@ jobs:
         with: { tag: "${{ inputs.release_tag }}", file: "dist/${{ steps.n.outputs.bundle }}.zip", token: "${{ github.token }}" }
 
   # --------------------------------------------------------------------------
-  # iOS xcframework: engines/<engine>/ios.sh repackages (litert) or builds (onnx) it,
+  # iOS xcframework: engines/<engine>/ios.sh repackages (tflite) or builds (onnx) it,
   # smoke-gates on the simulator, and produces dist/<archive>.zip.
   # --------------------------------------------------------------------------
   ios:

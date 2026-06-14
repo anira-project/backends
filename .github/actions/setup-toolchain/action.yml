@@ -8,7 +8,7 @@ description: >
 inputs:
   toolchain:    { description: "none | android", required: false, default: none }
   msvc_arch:    { description: "Windows MSVC arch: x64 | arm64 (empty elsewhere)", required: false, default: "" }
-  engine:       { description: "litert | onnxruntime | libtorch", required: true }
+  engine:       { description: "tflite | onnxruntime | libtorch", required: true }
   source:       { description: "build | prebuilt", required: false, default: build }
   version:      { description: "Engine version (source-cache key)", required: true }
   cache_suffix: { description: "Extra source-cache key segment (e.g. matrix.name)", required: false, default: "" }
@@ -38,12 +38,18 @@ runs:
       with:
         arch: ${{ inputs.msvc_arch }}
 
-    # onnxruntime always builds via build.py (Python); libtorch-from-source needs Python too.
+    # Python-driven from-source builds (onnxruntime build.py; litert/libtorch Bazel/configure.py).
+    # litert prebuilt legs just curl the lib + headers — no python/bazel.
     - name: setup python
-      if: ${{ inputs.engine == 'onnxruntime' || (inputs.engine == 'libtorch' && inputs.source == 'build') }}
+      if: ${{ inputs.engine == 'onnxruntime' || (inputs.engine == 'litert' && inputs.source == 'build') || (inputs.engine == 'libtorch' && inputs.source == 'build') }}
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
+    # litert from-source builds libLiteRt via Bazel (bazelisk picks the repo-pinned Bazel).
+    - name: setup bazelisk (litert from source)
+      if: ${{ inputs.engine == 'litert' && inputs.source == 'build' }}
+      shell: bash
+      run: npm install -g @bazel/bazelisk && bazel version || bazelisk version
     - name: python build deps (onnxruntime)
       if: ${{ inputs.engine == 'onnxruntime' && inputs.source == 'build' }}
       shell: bash

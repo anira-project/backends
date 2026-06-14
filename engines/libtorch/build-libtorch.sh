@@ -14,7 +14,7 @@
 #   <arch>      x86_64 | aarch64 | arm64
 #   <staging>   output prefix; gets include/ lib/ share/ [bin/]
 #
-# NOTE: this is the from-source recipe; like the ONNXRuntime/LiteRT builders it is
+# NOTE: this is the from-source recipe; like the ONNXRuntime/TFLite builders it is
 # expected to need a few CI rounds to converge per platform (see ../../TODO.md for
 # how those settled). Flags below follow PyTorch's official CPU libtorch config.
 set -euo pipefail
@@ -48,7 +48,7 @@ python -m pip install pyyaml typing_extensions setuptools numpy
 # PyTorch vendors an old third_party/protobuf whose CMakeLists has
 # cmake_minimum_required(VERSION <3.5); CMake 4.x (pulled in by pip) removed that
 # compatibility and errors when building the host protoc ("Could not compile
-# universal protoc"). Same class of issue as LiteRT's old deps — set the policy
+# universal protoc"). Same class of issue as TFLite's old deps — set the policy
 # floor in the env so every nested cmake invocation inherits it.
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
 export USE_CUDA=0 USE_ROCM=0 USE_CUDNN=0 USE_NCCL=0
@@ -81,10 +81,20 @@ case "$PLATFORM" in
     # aarch64 native on ubuntu-24.04-arm. No MKL on ARM → OpenBLAS (apt: libopenblas-dev).
     export USE_MKL=0
     export BLAS=OpenBLAS
-    # oneDNN on aarch64 wants the Arm Compute Library; keep it off for the first
-    # self-contained pass (reference kernels). Revisit for perf once green.
-    export USE_MKLDNN=0
     export USE_FBGEMM=0          # FBGEMM is x86-only
+    # oneDNN's optimized aarch64 GEMM/conv kernels come from the Arm Compute Library (ACL); without
+    # it libtorch ships slow reference kernels. Build ACL (pinned to the version PyTorch 2.12 uses,
+    # .ci/docker/common/install_acl.sh) with the same scons flags, then enable oneDNN+ACL.
+    python -m pip install scons
+    ACL_DIR="$HERE/ComputeLibrary"
+    if [ ! -e "$ACL_DIR/build/libarm_compute.so" ]; then
+      [ -d "$ACL_DIR/.git" ] || git clone https://github.com/ARM-software/ComputeLibrary.git \
+        -b v52.6.0 --depth 1 --shallow-submodules "$ACL_DIR"
+      ( cd "$ACL_DIR" && scons -j"$MAX_JOBS" Werror=0 debug=0 neon=1 opencl=0 embed_kernels=0 \
+          os=linux arch=armv8a build=native multi_isa=1 fixed_format_kernels=1 openmp=1 cppthreads=0 )
+    fi
+    export ACL_ROOT_DIR="$ACL_DIR"
+    export USE_MKLDNN=1 USE_MKLDNN_ACL=1
     ;;
   windows)
     # arm64 native on windows-11-arm with native ARM64 MSVC (cl.exe) — mirroring PyTorch's

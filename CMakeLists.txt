@@ -8,31 +8,33 @@ cmake_minimum_required(VERSION 3.25)
 #   cmake --install build/<preset> --prefix staging/<name>
 # produces a uniform install tree for every engine.
 #
-#   litert      — native CMake build (add_subdirectory).
+#   tflite      — native CMake build (add_subdirectory): legacy TFLite C API (tensorflowlite_c).
 #   onnxruntime — driven via engines/onnxruntime/stage.sh (build.py + bundle, or repackage).
 #   libtorch    — driven via engines/libtorch/stage.sh   (build_libtorch.py, or repackage).
+#   litert      — driven via engines/litert/stage.sh      (Bazel): LiteRT native C API (libLiteRt).
 # The orchestrated engines use their own build systems for cross-compilation; the root
 # CMake is a uniform launcher + staging contract, not a CMake build of those engines.
 
-set(BACKENDS_ENGINE "" CACHE STRING "Engine to build: litert | onnxruntime | libtorch")
-set_property(CACHE BACKENDS_ENGINE PROPERTY STRINGS litert onnxruntime libtorch)
+set(BACKENDS_ENGINE "" CACHE STRING "Engine to build: tflite | onnxruntime | libtorch | litert")
+set_property(CACHE BACKENDS_ENGINE PROPERTY STRINGS tflite onnxruntime libtorch litert)
 
 if(NOT BACKENDS_ENGINE)
   project(anira-backends NONE)
   message(FATAL_ERROR
     "BACKENDS_ENGINE is not set. Use a preset, e.g.\n"
-    "  cmake --preset litert-macos-arm64-static\n"
+    "  cmake --preset tflite-macos-arm64-static\n"
     "  cmake --preset onnx-linux-x86_64-static\n"
-    "  cmake --preset libtorch-macos-arm64-shared")
+    "  cmake --preset libtorch-macos-arm64-shared\n"
+    "  cmake --preset litert-macos-arm64-shared")
 endif()
 
-if(BACKENDS_ENGINE STREQUAL "litert")
+if(BACKENDS_ENGINE STREQUAL "tflite")
   project(anira-backends LANGUAGES C CXX)
-  add_subdirectory(engines/litert)
-elseif(BACKENDS_ENGINE STREQUAL "onnxruntime" OR BACKENDS_ENGINE STREQUAL "libtorch")
+  add_subdirectory(engines/tflite)
+elseif(BACKENDS_ENGINE STREQUAL "onnxruntime" OR BACKENDS_ENGINE STREQUAL "libtorch" OR BACKENDS_ENGINE STREQUAL "litert")
   project(anira-backends NONE)
   include(cmake/ExternalEngine.cmake)
 else()
   project(anira-backends NONE)
-  message(FATAL_ERROR "Unknown BACKENDS_ENGINE='${BACKENDS_ENGINE}' (expected litert|onnxruntime|libtorch)")
+  message(FATAL_ERROR "Unknown BACKENDS_ENGINE='${BACKENDS_ENGINE}' (expected tflite|onnxruntime|libtorch|litert)")
 endif()

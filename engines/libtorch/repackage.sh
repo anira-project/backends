@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Repackage an UPSTREAM libtorch prebuilt (download.pytorch.org) into our archive
-# layout. Unlike LiteRT/ONNXRuntime (flat include/ + lib/), libtorch is consumed by
+# layout. Unlike TFLite/ONNXRuntime (flat include/ + lib/), libtorch is consumed by
 # anira via `find_package(Torch)`, so we must preserve the WHOLE package tree:
 #   include/  lib/  share/cmake/Torch/   (+ bin/ on Windows, if present)
 # Dropping share/ would break find_package (no TorchConfig.cmake) — so we keep it.

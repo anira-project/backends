@@ -3,7 +3,7 @@ description: >
   Zip a staged install tree into <name>.zip via `cmake -E tar` (works on every runner,
   incl. git-bash with no `unzip`). include/ and lib/ are required; share/ and bin/ are
   optional (packaged when present) — so libtorch's full package tree and the flat
-  litert/onnx layout both work with one fixed `dirs`.
+  tflite/onnx layout both work with one fixed `dirs`.
 
 inputs:
   staging: { description: "Staged install prefix (contains include/ lib/ ...)", required: true }

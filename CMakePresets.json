@@ -8,7 +8,7 @@
     }
   },
 
-  "include": ["engines/litert/presets-base.json"],
+  "include": ["engines/tflite/presets-base.json"],
 
   "configurePresets": [
     {
@@ -21,93 +21,93 @@
     },
 
     {
-      "name": "litert-macos-x86_64-shared", "inherits": ["macos-x64", "shared"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-macos-x86_64-shared", "inherits": ["macos-x64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "macOS-x86_64", "runner": "macos-15", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
     },
     {
-      "name": "litert-macos-x86_64-static", "inherits": ["macos-x64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-macos-x86_64-static", "inherits": ["macos-x64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "macOS-x86_64", "runner": "macos-15", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
     },
     {
-      "name": "litert-macos-arm64-shared", "inherits": ["macos-arm64", "shared"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-macos-arm64-shared", "inherits": ["macos-arm64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "macOS-arm64", "runner": "macos-15", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
     },
     {
-      "name": "litert-macos-arm64-static", "inherits": ["macos-arm64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-macos-arm64-static", "inherits": ["macos-arm64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "macOS-arm64", "runner": "macos-15", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
     },
     {
-      "name": "litert-linux-x86_64-shared", "inherits": ["linux-x64", "shared"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-linux-x86_64-shared", "inherits": ["linux-x64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Linux-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
     },
     {
-      "name": "litert-linux-x86_64-static", "inherits": ["linux-x64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-linux-x86_64-static", "inherits": ["linux-x64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Linux-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
     },
     {
-      "name": "litert-linux-aarch64-shared", "inherits": ["linux-arm64", "shared"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-linux-aarch64-shared", "inherits": ["linux-arm64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Linux-aarch64", "runner": "ubuntu-24.04-arm", "arch": "aarch64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
     },
     {
-      "name": "litert-linux-aarch64-static", "inherits": ["linux-arm64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-linux-aarch64-static", "inherits": ["linux-arm64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Linux-aarch64", "runner": "ubuntu-24.04-arm", "arch": "aarch64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
     },
     {
-      "name": "litert-windows-x86_64-shared", "inherits": ["windows-x64", "shared"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-windows-x86_64-shared", "inherits": ["windows-x64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
     },
     {
-      "name": "litert-windows-x86_64-static", "inherits": ["windows-x64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-windows-x86_64-static", "inherits": ["windows-x64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
     },
     {
-      "name": "litert-windows-x86_64-static-debug", "inherits": ["windows-x64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert", "CMAKE_BUILD_TYPE": "Debug" },
+      "name": "tflite-windows-x86_64-static-debug", "inherits": ["windows-x64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite", "CMAKE_BUILD_TYPE": "Debug" },
       "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "static", "config": "Debug", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
     },
     {
-      "name": "litert-windows-arm64-shared", "inherits": ["windows-arm64", "shared"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-windows-arm64-shared", "inherits": ["windows-arm64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
     },
     {
-      "name": "litert-windows-arm64-static", "inherits": ["windows-arm64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-windows-arm64-static", "inherits": ["windows-arm64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
     },
     {
-      "name": "litert-windows-arm64-static-debug", "inherits": ["windows-arm64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert", "CMAKE_BUILD_TYPE": "Debug" },
+      "name": "tflite-windows-arm64-static-debug", "inherits": ["windows-arm64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite", "CMAKE_BUILD_TYPE": "Debug" },
       "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Debug", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
     },
     {
-      "name": "litert-android-arm64-v8a-shared", "inherits": ["android-arm64", "shared"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-android-arm64-v8a-shared", "inherits": ["android-arm64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Android-arm64-v8a", "runner": "ubuntu-24.04", "arch": "arm64-v8a", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "android", "source": "build" } }
     },
     {
-      "name": "litert-android-arm64-v8a-static", "inherits": ["android-arm64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-android-arm64-v8a-static", "inherits": ["android-arm64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Android-arm64-v8a", "runner": "ubuntu-24.04", "arch": "arm64-v8a", "kind": "static", "config": "Release", "canRun": "0", "toolchain": "android", "source": "build" } }
     },
     {
-      "name": "litert-android-x86_64-shared", "inherits": ["android-x64", "shared"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-android-x86_64-shared", "inherits": ["android-x64", "shared"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Android-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "android", "source": "build" } }
     },
     {
-      "name": "litert-android-x86_64-static", "inherits": ["android-x64", "static"],
-      "cacheVariables": { "BACKENDS_ENGINE": "litert" },
+      "name": "tflite-android-x86_64-static", "inherits": ["android-x64", "static"],
+      "cacheVariables": { "BACKENDS_ENGINE": "tflite" },
       "vendor": { "anira": { "name": "Android-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "0", "toolchain": "android", "source": "build" } }
     },
 
@@ -226,6 +226,72 @@
       "name": "libtorch-windows-arm64-shared", "inherits": "orch-base",
       "cacheVariables": { "BACKENDS_ENGINE": "libtorch", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "build" },
       "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
+    },
+
+    {
+      "name": "litert-macos-x86_64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "macOS-x86_64", "runner": "macos-15", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-macos-arm64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "macOS-arm64", "runner": "macos-15", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "prebuilt" } }
+    },
+    {
+      "name": "litert-linux-x86_64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Linux-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "prebuilt" } }
+    },
+    {
+      "name": "litert-linux-aarch64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "aarch64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Linux-aarch64", "runner": "ubuntu-24.04-arm", "arch": "aarch64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "prebuilt" } }
+    },
+    {
+      "name": "litert-windows-x86_64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "prebuilt" } }
+    },
+    {
+      "name": "litert-android-arm64-v8a-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "android", "BACKENDS_ARCH": "arm64-v8a", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Android-arm64-v8a", "runner": "ubuntu-24.04", "arch": "arm64-v8a", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "android", "source": "prebuilt" } }
+    },
+    {
+      "name": "litert-android-x86_64-shared", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "android", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt" },
+      "vendor": { "anira": { "name": "Android-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "android", "source": "prebuilt" } }
+    },
+    {
+      "name": "litert-macos-x86_64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "macOS-x86_64", "runner": "macos-15", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-macos-arm64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "macOS-arm64", "runner": "macos-15", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-linux-x86_64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Linux-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-linux-aarch64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "aarch64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Linux-aarch64", "runner": "ubuntu-24.04-arm", "arch": "aarch64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-x86_64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-arm64-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
     }
   ]
 }
