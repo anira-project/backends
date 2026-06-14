@@ -1,29 +1,47 @@
 name: sign-macos
 description: >
-  Code-sign macOS/iOS dynamic libraries with a Developer ID Application identity so the
-  lib loads into Hardened-Runtime / Library-Validation hosts (DAWs, notarized apps). The
-  consuming app re-signs on embed; this does NOT notarize. Currently UNUSED — wired for
-  when Developer ID signing is enabled (the workflow must import the cert into a keychain
-  first; secrets APPLE_SIGN_IDENTITY / APPLE_CERT_P12_BASE64 / APPLE_CERT_PASSWORD).
+  Code-sign macOS/iOS dynamic libs with a Developer ID Application identity so they load into
+  Hardened-Runtime / Library-Validation hosts (DAWs, notarized apps). Mirrors anira's own signing
+  (.github/actions/install): import the .p12 into a keychain via apple-actions/import-codesign-certs,
+  then `codesign --options runtime --timestamp`. No notarization (the consuming app re-signs/notarizes
+  on embed). Uses the org secrets DEV_ID_APP_CERT (.p12 base64) / DEV_ID_APP_PWD / DEV_ID_APP. No-ops
+  when the cert isn't available (forks / PRs without secrets) so those builds still succeed unsigned.
 
 inputs:
-  dir:      { description: "Directory to scan for .dylib/.framework", required: true }
-  identity: { description: "Developer ID Application identity (APPLE_SIGN_IDENTITY)", required: true }
+  dir:           { description: "Directory to scan for .dylib/.framework", required: true }
+  cert_base64:   { description: "Developer ID Application .p12, base64 (secrets.DEV_ID_APP_CERT)", required: true }
+  cert_password: { description: "p12 password (secrets.DEV_ID_APP_PWD)", required: true }
+  identity:      { description: "Signing identity, e.g. 'Developer ID Application: … (TEAMID)' (secrets.DEV_ID_APP)", required: true }
 
 runs:
   using: composite
   steps:
-    - shell: bash
+    - name: import Developer ID cert
+      if: ${{ inputs.cert_base64 != '' }}
+      uses: apple-actions/import-codesign-certs@v3
+      with:
+        p12-file-base64: ${{ inputs.cert_base64 }}
+        p12-password: ${{ inputs.cert_password }}
+
+    - name: codesign dylibs/frameworks
+      if: ${{ inputs.cert_base64 != '' }}
+      shell: bash
       env:
-        APPLE_SIGN_IDENTITY: ${{ inputs.identity }}
+        IDENTITY: ${{ inputs.identity }}
       run: |
         set -euo pipefail
-        : "${APPLE_SIGN_IDENTITY:?set APPLE_SIGN_IDENTITY}"
+        : "${IDENTITY:?DEV_ID_APP identity is empty}"
         found=0
         while IFS= read -r -d '' f; do
           found=1
-          codesign --force --timestamp --options runtime --sign "$APPLE_SIGN_IDENTITY" "$f"
+          codesign --force --timestamp --options runtime --deep --strict -s "$IDENTITY" "$f"
           codesign --verify --strict --verbose=2 "$f"
           echo "signed: $f"
         done < <(find "${{ inputs.dir }}" \( -name '*.dylib' -o -name '*.framework' \) -print0)
-        [ "$found" -eq 1 ] || echo "WARN: no .dylib/.framework under ${{ inputs.dir }} (static build?)"
+        [ "$found" -eq 1 ] || echo "sign-macos: no .dylib/.framework under ${{ inputs.dir }} (static build?)"
+
+    - name: signing skipped (no cert)
+      if: ${{ inputs.cert_base64 == '' }}
+      shell: bash
+      run: |
+        echo "sign-macos: DEV_ID_APP_CERT not available — leaving libs unsigned."

@@ -26,9 +26,10 @@ on:
       android_bundle_kinds:  { description: "JSON array of kinds to combine into a multi-ABI Android archive", required: false, type: string, default: "[]" }
       has_ios:     { description: "Run the iOS xcframework job (engines/<engine>/ios.sh)", required: false, type: boolean, default: false }
     secrets:
-      APPLE_SIGN_IDENTITY:   { required: false }
-      APPLE_CERT_P12_BASE64: { required: false }
-      APPLE_CERT_PASSWORD:   { required: false }
+      # macOS Developer ID signing (org secrets; passed via the callers' `secrets: inherit`).
+      DEV_ID_APP_CERT: { required: false }   # Developer ID Application .p12, base64
+      DEV_ID_APP_PWD:  { required: false }   # .p12 password
+      DEV_ID_APP:      { required: false }   # signing identity ("Developer ID Application: … (TEAMID)")
 
 jobs:
   build:
@@ -71,6 +72,16 @@ jobs:
           ext:        ${{ matrix.ext }}
           cpu_suffix: ${{ matrix.cpuSuffix }}
           flavor:     ${{ matrix.flavor }}
+
+      # Developer ID sign the macOS shared dylibs before packaging (no-op without the org cert).
+      - name: sign macOS dylibs
+        if: ${{ runner.os == 'macOS' && matrix.kind == 'shared' }}
+        uses: ./.github/actions/sign-macos
+        with:
+          dir: ${{ steps.b.outputs.staging }}/lib
+          cert_base64: ${{ secrets.DEV_ID_APP_CERT }}
+          cert_password: ${{ secrets.DEV_ID_APP_PWD }}
+          identity: ${{ secrets.DEV_ID_APP }}
 
       - name: package
         uses: ./.github/actions/package
@@ -205,6 +216,16 @@ jobs:
             lipo -create "ex/x64/lib/$libf" "ex/arm/lib/$libf" -output "$stage/lib/$libf"
             lipo -info "$stage/lib/$libf"
           fi
+
+      # Re-sign after lipo (combining the per-arch dylibs invalidates their signatures).
+      - name: sign universal dylib
+        if: ${{ matrix.kind == 'shared' }}
+        uses: ./.github/actions/sign-macos
+        with:
+          dir: staging/${{ steps.n.outputs.uni }}/lib
+          cert_base64: ${{ secrets.DEV_ID_APP_CERT }}
+          cert_password: ${{ secrets.DEV_ID_APP_PWD }}
+          identity: ${{ secrets.DEV_ID_APP }}
 
       - name: package
         uses: ./.github/actions/package
