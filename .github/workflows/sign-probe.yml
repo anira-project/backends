@@ -1,0 +1,32 @@
+name: sign-probe
+# Throwaway: verify the org Developer ID secrets import + sign a real engine shared dylib.
+on:
+  push:
+    branches: ['probe/sign**']
+  workflow_dispatch:
+
+jobs:
+  sign:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: fetch a real engine shared dylib (litert macOS-arm64 prebuilt)
+        run: |
+          set -euxo pipefail
+          mkdir -p staging/lib
+          curl -fsSL -o staging/lib/libLiteRt.dylib \
+            "https://media.githubusercontent.com/media/google-ai-edge/LiteRT/89c838788bba9c2ec6bbefd52971daf39d8e2856/litert/prebuilt/macos_arm64/libLiteRt.dylib.lfs"
+          file staging/lib/libLiteRt.dylib
+          echo "secret present? $([ -n "${{ secrets.DEV_ID_APP_CERT }}" ] && echo yes || echo NO)"
+      - name: sign
+        uses: ./.github/actions/sign-macos
+        with:
+          dir: staging/lib
+          cert_base64: ${{ secrets.DEV_ID_APP_CERT }}
+          cert_password: ${{ secrets.DEV_ID_APP_PWD }}
+          identity: ${{ secrets.DEV_ID_APP }}
+      - name: verify signature
+        run: |
+          set -x
+          codesign -dvvv staging/lib/libLiteRt.dylib 2>&1 | grep -iE 'Authority|TeamIdentifier|Identifier=|flags=|Timestamp' || true
+          codesign --verify --strict --verbose=2 staging/lib/libLiteRt.dylib && echo "VERIFY OK"
