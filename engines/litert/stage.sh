@@ -100,6 +100,41 @@ defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 # into one libLiteRt.a. Building the top cc_library only COMPILES the deps (to .o); each dep's .a is
 # materialised on disk only when that library is explicitly requested — so we cquery the transitive
 # cc_library labels and `bazel build` them all first, then collect the archives from CcInfo.
+# ---- source=build, kind=shared, Windows arm64: no prebuilt exists, so build the DLL from source.
+# Same clang-cl + dep-override setup as the static leg, but build the libLiteRt.dll cc_binary and
+# synthesize its import lib. Self-contained (kept out of the static path it mirrors).
+if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ] && [ "$KIND" = "shared" ]; then
+  export USE_CLANG_CL=1 MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1
+  cfg+=(--cpu=arm64_windows)
+  llvm_dir='C:/LLVM20'   # native arm64 LLVM (the runner's default x64 LLVM trips bazel#17863)
+  if [ ! -x "$llvm_dir/bin/clang-cl.exe" ]; then
+    curl -fsSL -o "$HERE/llvm20.exe" \
+      "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe"
+    MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "$HERE/llvm20.exe" /S /D=C:\\LLVM20
+    [ -x "$llvm_dir/bin/clang-cl.exe" ] || { echo "::error::LLVM 20 install failed"; exit 1; }
+  fi
+  export BAZEL_LLVM="$llvm_dir"
+  defines+=(--define=tflite_with_xnnpack=false)   # XNNPACK has no arm64_windows microkernels
+  cpu="$HERE/cpuinfo-fixed"                        # pinned cpuinfo's arm64-Windows source is buggy
+  [ -d "$cpu/.git" ] || git clone --depth 1 https://github.com/pytorch/cpuinfo "$cpu"
+  cpuw="$cpu"; command -v cygpath >/dev/null 2>&1 && cpuw="$(cygpath -w "$cpu")"
+  cfg+=("--override_repository=cpuinfo=$cpuw")
+  # The windows DLL target (cc_binary linkshared=1 + windows_exported_symbols.def).
+  ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" //litert/c:libLiteRt )
+  dll="$(find -L "$SRC/bazel-bin" -maxdepth 6 -name 'libLiteRt.dll' 2>/dev/null | head -1)"
+  [ -n "$dll" ] || { echo "ERROR: libLiteRt.dll not found under bazel-bin"; exit 1; }
+  cp -L "$dll" "$ST/lib/libLiteRt.dll"
+  # Synthesize the import lib (LiteRt.lib) from the DLL exports — same as the prebuilt windows path.
+  ( cd "$ST/lib"
+    { echo "LIBRARY libLiteRt.dll"; echo "EXPORTS"
+      MSYS_NO_PATHCONV=1 dumpbin /nologo /exports libLiteRt.dll \
+        | awk '/^[[:space:]]+[0-9]+[[:space:]]+[0-9A-Fa-f]+[[:space:]]+[0-9A-Fa-f]+[[:space:]]+[A-Za-z_]/{print $4}'
+    } > LiteRt.def
+    MSYS_NO_PATHCONV=1 lib /nologo /def:LiteRt.def /out:LiteRt.lib /machine:arm64 )
+  echo "staged litert (windows/arm64/shared, from source) -> $ST"
+  exit 0
+fi
+
 if [ "$KIND" = "static" ]; then
   target=//litert/c:litert_runtime_c_api_so_shim
   # macOS x86_64: a plain cc_library needs the Apple platform transition that the shared dylib rule
