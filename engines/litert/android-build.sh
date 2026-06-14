@@ -26,9 +26,10 @@ if ! ls "$ANDROID_DEV_HOME"/android-ndk-*/toolchains >/dev/null 2>&1; then
     wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
     unzip -q android-ndk-r25b-linux.zip )
 fi
-# Point ANDROID_NDK_HOME directly at the extracted dir (no symlink — the glob is the dir).
-export ANDROID_NDK_HOME="$(echo "$ANDROID_DEV_HOME"/android-ndk-*)"
-[ -d "$ANDROID_NDK_HOME/toolchains" ] || { echo "ERROR: NDK missing at $ANDROID_NDK_HOME"; ls -la "$ANDROID_DEV_HOME"; exit 1; }
+# Point ANDROID_NDK_HOME at the extracted dir — match the DIRECTORY only (a bare android-ndk-*
+# glob also matches the downloaded .zip, yielding two paths).
+export ANDROID_NDK_HOME="$(find "$ANDROID_DEV_HOME" -maxdepth 1 -type d -name 'android-ndk-*' | head -1)"
+[ -d "$ANDROID_NDK_HOME/toolchains" ] || { echo "ERROR: NDK missing at '$ANDROID_NDK_HOME'"; ls -la "$ANDROID_DEV_HOME"; exit 1; }
 
 cd /src
 
