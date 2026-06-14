@@ -82,10 +82,13 @@ fi
 # archive-merge in it (configure + NDK happen inside, via android-build.sh), emitting libLiteRt.a.
 if [ "$PLATFORM" = "android" ] && [ "$KIND" = "static" ]; then
   img=us-docker.pkg.dev/ml-oss-artifacts-published/ml-public-container/ml-build:latest
-  docker pull -q "$img"
-  docker run --rm \
+  docker --version; ls -l "$HERE/android-build.sh"
+  docker pull "$img"
+  # --entrypoint bash: the ml-build image sets its own ENTRYPOINT, which otherwise swallows our
+  # command (docker run exited 2 with no output). Override it and pass the script as the arg.
+  docker run --rm --entrypoint bash \
     -v "$SRC:/src" -v "$ST:/out" -v "$HERE/android-build.sh:/android-build.sh:ro" \
-    "$img" bash /android-build.sh "$ARCH"
+    "$img" /android-build.sh "$ARCH"
   echo "staged litert (android/$ARCH/static, ml-build container) -> $ST"
   exit 0
 fi
