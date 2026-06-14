@@ -67,6 +67,6 @@ jobs:
       release_tag: ${{ needs.meta.outputs.release_tag }}
       matrix: ${{ needs.meta.outputs.matrix }}
       macos_universal_kinds: '["shared", "static"]'
-      android_bundle_kinds: '["shared"]'
+      android_bundle_kinds: '["shared", "static"]'
       has_ios: true
     secrets: inherit

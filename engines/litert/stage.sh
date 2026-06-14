@@ -75,6 +75,23 @@ SRC="$HERE/litert-src"
 if [ ! -d "$SRC/.git" ]; then
   git clone --depth 1 --branch "v${VER}" https://github.com/google-ai-edge/LiteRT "$SRC"
 fi
+
+# ---- source=build, kind=static, Android: build inside LiteRT's ml-build container --------------
+# A bare-runner Android Bazel build fails at the TF-workspace cuda_redist / rules_ml_toolchain
+# external-load; LiteRT's public ml-build container provisions those. Run the whole Bazel build +
+# archive-merge in it (configure + NDK happen inside, via android-build.sh), emitting libLiteRt.a.
+if [ "$PLATFORM" = "android" ] && [ "$KIND" = "static" ]; then
+  img=us-docker.pkg.dev/ml-oss-artifacts-published/ml-public-container/ml-build:latest
+  docker pull "$img"
+  # Image has no ENTRYPOINT (CMD=/bin/bash); run the script directly. android-build.sh installs
+  # clang + Android NDK/SDK inside (the base image lacks them) and does the full Bazel build + merge.
+  docker run --rm \
+    -v "$SRC:/src" -v "$ST:/out" -v "$HERE/android-build.sh:/android-build.sh:ro" \
+    "$img" bash /android-build.sh "$ARCH"
+  echo "staged litert (android/$ARCH/static, ml-build container) -> $ST"
+  exit 0
+fi
+
 # configure.py generates the host CC toolchain (else "@@local_config_cc//:toolchain ... cpu").
 export PYTHON_BIN_PATH="$(python3 -c 'import sys; print(sys.executable)')"
 export PYTHON_LIB_PATH="$(python3 -c 'import site; print(site.getsitepackages()[0])')"
@@ -92,6 +109,10 @@ case "$PLATFORM" in
   *) echo "ERROR: no from-source litert recipe for '$PLATFORM' (use a prebuilt leg)"; exit 1 ;;
 esac
 defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
+# Debug legs (Windows static-debug): override LiteRT's .bazelrc `build -c opt` with dbg so the
+# objects link against the debug CRT (/MDd) — matching Debug consumers. -c is config-wide, so it
+# applies to the so_shim build, the per-label materialisation, and cquery alike.
+[ "$CONFIG" = "Debug" ] && defines+=(--compilation_mode=dbg)
 
 # ---- source=build, kind=static: no static prebuilt ships upstream, so build it ----------------
 # litert_runtime_c_api_so_shim is the cc_library that pulls in LITERT_C_API_COMMON_DEPS (the real
@@ -100,6 +121,45 @@ defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 # into one libLiteRt.a. Building the top cc_library only COMPILES the deps (to .o); each dep's .a is
 # materialised on disk only when that library is explicitly requested — so we cquery the transitive
 # cc_library labels and `bazel build` them all first, then collect the archives from CcInfo.
+# ---- source=build, kind=shared, Windows arm64: no prebuilt exists, so build the DLL from source.
+# Same clang-cl + dep-override setup as the static leg, but build the libLiteRt.dll cc_binary and
+# synthesize its import lib. Self-contained (kept out of the static path it mirrors).
+if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ] && [ "$KIND" = "shared" ]; then
+  export USE_CLANG_CL=1   # NB: set MSYS2_ARG_CONV_EXCL only just before bazel — it mangles git/cygpath paths
+  cfg+=(--cpu=arm64_windows)
+  llvm_dir='C:/LLVM20'   # native arm64 LLVM (the runner's default x64 LLVM trips bazel#17863)
+  if [ ! -x "$llvm_dir/bin/clang-cl.exe" ]; then
+    # Download via native PowerShell — curl(23) "error on write" flakes on WoA runners regardless
+    # of file extension/retries; Invoke-WebRequest writes reliably.
+    MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 powershell -NoProfile -Command \
+      "Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe' -OutFile 'C:/llvm20.exe'"
+    MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "C:/llvm20.exe" /S /D=C:\\LLVM20
+    [ -x "$llvm_dir/bin/clang-cl.exe" ] || { echo "::error::LLVM 20 install failed"; exit 1; }
+  fi
+  export BAZEL_LLVM="$llvm_dir"
+  defines+=(--define=tflite_with_xnnpack=false)   # XNNPACK has no arm64_windows microkernels
+  cpu="$HERE/cpuinfo-fixed"                        # pinned cpuinfo's arm64-Windows source is buggy
+  [ -d "$cpu/.git" ] || git clone --depth 1 https://github.com/pytorch/cpuinfo "$cpu"
+  cpuw="$cpu"; command -v cygpath >/dev/null 2>&1 && cpuw="$(cygpath -w "$cpu")"
+  cfg+=("--override_repository=cpuinfo=$cpuw")
+  # Now safe to disable MSYS arg conversion (keeps //bazel:labels intact for the build below).
+  export MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1
+  # The windows DLL target (cc_binary linkshared=1 + windows_exported_symbols.def).
+  ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" //litert/c:libLiteRt )
+  dll="$(find -L "$SRC/bazel-bin" -maxdepth 6 -name 'libLiteRt.dll' 2>/dev/null | head -1)"
+  [ -n "$dll" ] || { echo "ERROR: libLiteRt.dll not found under bazel-bin"; exit 1; }
+  cp -L "$dll" "$ST/lib/libLiteRt.dll"
+  # Synthesize the import lib (LiteRt.lib) from the DLL exports — same as the prebuilt windows path.
+  ( cd "$ST/lib"
+    { echo "LIBRARY libLiteRt.dll"; echo "EXPORTS"
+      MSYS_NO_PATHCONV=1 dumpbin /nologo /exports libLiteRt.dll \
+        | awk '/^[[:space:]]+[0-9]+[[:space:]]+[0-9A-Fa-f]+[[:space:]]+[0-9A-Fa-f]+[[:space:]]+[A-Za-z_]/{print $4}'
+    } > LiteRt.def
+    MSYS_NO_PATHCONV=1 lib /nologo /def:LiteRt.def /out:LiteRt.lib /machine:arm64 )
+  echo "staged litert (windows/arm64/shared, from source) -> $ST"
+  exit 0
+fi
+
 if [ "$KIND" = "static" ]; then
   target=//litert/c:litert_runtime_c_api_so_shim
   # macOS x86_64: a plain cc_library needs the Apple platform transition that the shared dylib rule
@@ -135,10 +195,11 @@ if [ "$KIND" = "static" ]; then
     # version the x64 leg uses (20.1.x, woa64 = native arm64) and point Bazel at it.
     llvm_dir='C:/LLVM20'
     if [ ! -x "$llvm_dir/bin/clang-cl.exe" ]; then
-      curl -fsSL -o "$HERE/llvm20.exe" \
-        "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe"
+      # Download via native PowerShell — curl(23) write-errors flake on WoA runners.
+      MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 powershell -NoProfile -Command \
+        "Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe' -OutFile 'C:/llvm20.exe'"
       # NSIS silent install; /D (install dir) must be last and unquoted, and a space-free path.
-      MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "$HERE/llvm20.exe" /S /D=C:\\LLVM20
+      MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "C:/llvm20.exe" /S /D=C:\\LLVM20
       [ -x "$llvm_dir/bin/clang-cl.exe" ] || { echo "::error::LLVM 20 install failed"; exit 1; }
     fi
     export BAZEL_LLVM="$llvm_dir"
