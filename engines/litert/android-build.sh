@@ -34,8 +34,11 @@ export ANDROID_NDK_HOME="$(find "$ANDROID_DEV_HOME" -maxdepth 1 -type d -name 'a
 cd /src
 
 # --- configure.py: host CC toolchain + Android workspace ----------------------------------------
+# The ml-build container builds with clang; configure.py prompts for CLANG_COMPILER_PATH and errors
+# ("Invalid CLANG_COMPILER_PATH ... 10 times") if `yes ""` just feeds blanks — set it from env.
 export PYTHON_BIN_PATH="$(python3 -c 'import sys; print(sys.executable)')"
 export TF_NEED_ROCM=0 TF_NEED_CUDA=0 CC_OPT_FLAGS='-Wno-sign-compare'
+export TF_NEED_CLANG=1 CLANG_COMPILER_PATH="$(command -v clang || echo /usr/lib/llvm-18/bin/clang)"
 export TF_SET_ANDROID_WORKSPACE=1
 { set +o pipefail; yes "" | python3 configure.py; }   # yes SIGPIPEs (141) under pipefail
 

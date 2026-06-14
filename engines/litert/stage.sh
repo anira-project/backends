@@ -127,12 +127,11 @@ if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ] && [ "$KIND" = "shared" 
   cfg+=(--cpu=arm64_windows)
   llvm_dir='C:/LLVM20'   # native arm64 LLVM (the runner's default x64 LLVM trips bazel#17863)
   if [ ! -x "$llvm_dir/bin/clang-cl.exe" ]; then
-    # Download to .pkg then rename: Defender real-time-scans .exe writes and races curl's streaming
-    # write (curl(23) "error on write"); a non-.exe download dodges it, the rename is atomic.
-    curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$HERE/llvm20.pkg" \
-      "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe"
-    mv -f "$HERE/llvm20.pkg" "$HERE/llvm20.exe"
-    MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "$HERE/llvm20.exe" /S /D=C:\\LLVM20
+    # Download via native PowerShell — curl(23) "error on write" flakes on WoA runners regardless
+    # of file extension/retries; Invoke-WebRequest writes reliably.
+    MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 powershell -NoProfile -Command \
+      "Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe' -OutFile 'C:/llvm20.exe'"
+    MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "C:/llvm20.exe" /S /D=C:\\LLVM20
     [ -x "$llvm_dir/bin/clang-cl.exe" ] || { echo "::error::LLVM 20 install failed"; exit 1; }
   fi
   export BAZEL_LLVM="$llvm_dir"
@@ -192,12 +191,11 @@ if [ "$KIND" = "static" ]; then
     # version the x64 leg uses (20.1.x, woa64 = native arm64) and point Bazel at it.
     llvm_dir='C:/LLVM20'
     if [ ! -x "$llvm_dir/bin/clang-cl.exe" ]; then
-      # Download to .pkg then rename — Defender races the streaming .exe write (curl(23)).
-      curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$HERE/llvm20.pkg" \
-        "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe"
-      mv -f "$HERE/llvm20.pkg" "$HERE/llvm20.exe"
+      # Download via native PowerShell — curl(23) write-errors flake on WoA runners.
+      MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 powershell -NoProfile -Command \
+        "Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe' -OutFile 'C:/llvm20.exe'"
       # NSIS silent install; /D (install dir) must be last and unquoted, and a space-free path.
-      MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "$HERE/llvm20.exe" /S /D=C:\\LLVM20
+      MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "C:/llvm20.exe" /S /D=C:\\LLVM20
       [ -x "$llvm_dir/bin/clang-cl.exe" ] || { echo "::error::LLVM 20 install failed"; exit 1; }
     fi
     export BAZEL_LLVM="$llvm_dir"
