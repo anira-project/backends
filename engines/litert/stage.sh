@@ -75,6 +75,21 @@ SRC="$HERE/litert-src"
 if [ ! -d "$SRC/.git" ]; then
   git clone --depth 1 --branch "v${VER}" https://github.com/google-ai-edge/LiteRT "$SRC"
 fi
+
+# ---- source=build, kind=static, Android: build inside LiteRT's ml-build container --------------
+# A bare-runner Android Bazel build fails at the TF-workspace cuda_redist / rules_ml_toolchain
+# external-load; LiteRT's public ml-build container provisions those. Run the whole Bazel build +
+# archive-merge in it (configure + NDK happen inside, via android-build.sh), emitting libLiteRt.a.
+if [ "$PLATFORM" = "android" ] && [ "$KIND" = "static" ]; then
+  img=us-docker.pkg.dev/ml-oss-artifacts-published/ml-public-container/ml-build:latest
+  docker pull -q "$img"
+  docker run --rm \
+    -v "$SRC:/src" -v "$ST:/out" -v "$HERE/android-build.sh:/android-build.sh:ro" \
+    "$img" bash /android-build.sh "$ARCH"
+  echo "staged litert (android/$ARCH/static, ml-build container) -> $ST"
+  exit 0
+fi
+
 # configure.py generates the host CC toolchain (else "@@local_config_cc//:toolchain ... cpu").
 export PYTHON_BIN_PATH="$(python3 -c 'import sys; print(sys.executable)')"
 export PYTHON_LIB_PATH="$(python3 -c 'import site; print(site.getsitepackages()[0])')"

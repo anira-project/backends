@@ -264,6 +264,11 @@
       "vendor": { "anira": { "name": "Android-x86_64", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "android", "source": "prebuilt" } }
     },
     {
+      "name": "litert-android-arm64-v8a-static", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "android", "BACKENDS_ARCH": "arm64-v8a", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Android-arm64-v8a", "runner": "ubuntu-24.04", "arch": "arm64-v8a", "kind": "static", "config": "Release", "canRun": "0", "toolchain": "none", "source": "build" } }
+    },
+    {
       "name": "litert-macos-x86_64-static", "inherits": "orch-base",
       "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "macos", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
       "vendor": { "anira": { "name": "macOS-x86_64", "runner": "macos-15", "arch": "x86_64", "kind": "static", "config": "Release", "canRun": "1", "toolchain": "none", "source": "build" } }
