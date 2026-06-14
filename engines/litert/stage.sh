@@ -123,7 +123,7 @@ defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 # Same clang-cl + dep-override setup as the static leg, but build the libLiteRt.dll cc_binary and
 # synthesize its import lib. Self-contained (kept out of the static path it mirrors).
 if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ] && [ "$KIND" = "shared" ]; then
-  export USE_CLANG_CL=1 MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1
+  export USE_CLANG_CL=1   # NB: set MSYS2_ARG_CONV_EXCL only just before bazel — it mangles git/cygpath paths
   cfg+=(--cpu=arm64_windows)
   llvm_dir='C:/LLVM20'   # native arm64 LLVM (the runner's default x64 LLVM trips bazel#17863)
   if [ ! -x "$llvm_dir/bin/clang-cl.exe" ]; then
@@ -140,6 +140,8 @@ if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ] && [ "$KIND" = "shared" 
   [ -d "$cpu/.git" ] || git clone --depth 1 https://github.com/pytorch/cpuinfo "$cpu"
   cpuw="$cpu"; command -v cygpath >/dev/null 2>&1 && cpuw="$(cygpath -w "$cpu")"
   cfg+=("--override_repository=cpuinfo=$cpuw")
+  # Now safe to disable MSYS arg conversion (keeps //bazel:labels intact for the build below).
+  export MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1
   # The windows DLL target (cc_binary linkshared=1 + windows_exported_symbols.def).
   ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" //litert/c:libLiteRt )
   dll="$(find -L "$SRC/bazel-bin" -maxdepth 6 -name 'libLiteRt.dll' 2>/dev/null | head -1)"

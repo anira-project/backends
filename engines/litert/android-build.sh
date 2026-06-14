@@ -38,8 +38,15 @@ cd /src
 # ("Invalid CLANG_COMPILER_PATH ... 10 times") if `yes ""` just feeds blanks — set it from env.
 export PYTHON_BIN_PATH="$(python3 -c 'import sys; print(sys.executable)')"
 export TF_NEED_ROCM=0 TF_NEED_CUDA=0 CC_OPT_FLAGS='-Wno-sign-compare'
-export TF_NEED_CLANG=1 CLANG_COMPILER_PATH="$(command -v clang || echo /usr/lib/llvm-18/bin/clang)"
 export TF_SET_ANDROID_WORKSPACE=1
+export TF_NEED_CLANG=1
+# Locate clang robustly (path varies across ml-build image versions); install as a last resort.
+clang_path="$(command -v clang || command -v clang-18 || command -v clang-17 || true)"
+[ -x "$clang_path" ] || clang_path="$(ls /usr/lib/llvm-*/bin/clang 2>/dev/null | sort -V | tail -1)"
+[ -x "$clang_path" ] || { apt-get update -qq && apt-get install -y -qq clang; clang_path="$(command -v clang)"; }
+[ -x "$clang_path" ] || { echo "ERROR: no clang in container"; exit 1; }
+export CLANG_COMPILER_PATH="$clang_path"
+echo "using CLANG_COMPILER_PATH=$CLANG_COMPILER_PATH"
 { set +o pipefail; yes "" | python3 configure.py; }   # yes SIGPIPEs (141) under pipefail
 
 defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
