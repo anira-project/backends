@@ -16,18 +16,19 @@ case "$ABI" in
   *) echo "ERROR: unsupported ABI '$ABI'"; exit 1 ;;
 esac
 
-# --- Android NDK r25b + SDK cmdline-tools (mirrors ci/tflite-android.Dockerfile) ----------------
+# --- Android NDK r25b (matches ci/tflite-android.Dockerfile) ------------------------------------
 export ANDROID_DEV_HOME=/android
-export ANDROID_NDK_HOME="$ANDROID_DEV_HOME/ndk"
 export ANDROID_SDK_HOME="$ANDROID_DEV_HOME/sdk"
 export ANDROID_NDK_API_LEVEL=21 ANDROID_API_LEVEL=35 ANDROID_SDK_API_LEVEL=35 ANDROID_BUILD_TOOLS_VERSION=35.0.1
-if [ ! -d "$ANDROID_NDK_HOME/toolchains" ]; then
-  mkdir -p "$ANDROID_DEV_HOME"
+mkdir -p "$ANDROID_DEV_HOME" "$ANDROID_SDK_HOME"
+if ! ls "$ANDROID_DEV_HOME"/android-ndk-*/toolchains >/dev/null 2>&1; then
   ( cd "$ANDROID_DEV_HOME"
     wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
-    unzip -q android-ndk-r25b-linux.zip && ln -s "$ANDROID_DEV_HOME"/android-ndk-* "$ANDROID_NDK_HOME" )
+    unzip -q android-ndk-r25b-linux.zip )
 fi
-mkdir -p "$ANDROID_SDK_HOME"
+# Point ANDROID_NDK_HOME directly at the extracted dir (no symlink — the glob is the dir).
+export ANDROID_NDK_HOME="$(echo "$ANDROID_DEV_HOME"/android-ndk-*)"
+[ -d "$ANDROID_NDK_HOME/toolchains" ] || { echo "ERROR: NDK missing at $ANDROID_NDK_HOME"; ls -la "$ANDROID_DEV_HOME"; exit 1; }
 
 cd /src
 

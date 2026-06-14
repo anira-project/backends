@@ -127,7 +127,7 @@ if [ "$PLATFORM" = "windows" ] && [ "$ARCH" = "arm64" ] && [ "$KIND" = "shared" 
   cfg+=(--cpu=arm64_windows)
   llvm_dir='C:/LLVM20'   # native arm64 LLVM (the runner's default x64 LLVM trips bazel#17863)
   if [ ! -x "$llvm_dir/bin/clang-cl.exe" ]; then
-    curl -fsSL -o "$HERE/llvm20.exe" \
+    curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$HERE/llvm20.exe" \
       "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-woa64.exe"
     MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 "$HERE/llvm20.exe" /S /D=C:\\LLVM20
     [ -x "$llvm_dir/bin/clang-cl.exe" ] || { echo "::error::LLVM 20 install failed"; exit 1; }
