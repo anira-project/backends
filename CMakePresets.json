@@ -297,6 +297,16 @@
       "name": "litert-windows-arm64-shared", "inherits": "orch-base",
       "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "build" },
       "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-x86_64-static-debug", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Debug", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Windows-x86_64", "runner": "windows-2025", "arch": "x86_64", "kind": "static", "config": "Debug", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "build" } }
+    },
+    {
+      "name": "litert-windows-arm64-static-debug", "inherits": "orch-base",
+      "cacheVariables": { "BACKENDS_ENGINE": "litert", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "arm64", "BACKENDS_CONFIG": "Debug", "BACKENDS_KIND": "static", "BACKENDS_SOURCE": "build" },
+      "vendor": { "anira": { "name": "Windows-arm64", "runner": "windows-11-arm", "arch": "arm64", "kind": "static", "config": "Debug", "canRun": "1", "toolchain": "none", "msvcArch": "arm64", "source": "build" } }
     }
   ]
 }

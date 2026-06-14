@@ -92,6 +92,10 @@ case "$PLATFORM" in
   *) echo "ERROR: no from-source litert recipe for '$PLATFORM' (use a prebuilt leg)"; exit 1 ;;
 esac
 defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
+# Debug legs (Windows static-debug): override LiteRT's .bazelrc `build -c opt` with dbg so the
+# objects link against the debug CRT (/MDd) — matching Debug consumers. -c is config-wide, so it
+# applies to the so_shim build, the per-label materialisation, and cquery alike.
+[ "$CONFIG" = "Debug" ] && defines+=(--compilation_mode=dbg)
 
 # ---- source=build, kind=static: no static prebuilt ships upstream, so build it ----------------
 # litert_runtime_c_api_so_shim is the cc_library that pulls in LITERT_C_API_COMMON_DEPS (the real
