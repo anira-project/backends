@@ -31,6 +31,24 @@ fi
 export ANDROID_NDK_HOME="$(find "$ANDROID_DEV_HOME" -maxdepth 1 -type d -name 'android-ndk-*' | head -1)"
 [ -d "$ANDROID_NDK_HOME/toolchains" ] || { echo "ERROR: NDK missing at '$ANDROID_NDK_HOME'"; ls -la "$ANDROID_DEV_HOME"; exit 1; }
 
+# --- Android SDK: configure.py's TF_SET_ANDROID_WORKSPACE sets up the android_sdk_repository too,
+# and prompts (fatally) for a build-tools/platform it can't find. Install cmdline-tools + the
+# platform + build-tools (needs a JDK for sdkmanager). ANDROID_HOME/SDK_HOME + the version env
+# vars then make configure.py non-interactive.
+command -v java >/dev/null 2>&1 || { apt-get update -y && apt-get install -y default-jdk; }
+if [ ! -d "$ANDROID_SDK_HOME/cmdline-tools/latest/bin" ]; then
+  ( cd /tmp
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip -O cmdtools.zip
+    unzip -q cmdtools.zip
+    mkdir -p "$ANDROID_SDK_HOME/cmdline-tools"
+    mv cmdline-tools "$ANDROID_SDK_HOME/cmdline-tools/latest" )
+fi
+export ANDROID_HOME="$ANDROID_SDK_HOME"
+sdkmgr="$ANDROID_SDK_HOME/cmdline-tools/latest/bin/sdkmanager"
+yes | "$sdkmgr" --sdk_root="$ANDROID_SDK_HOME" --licenses >/dev/null 2>&1 || true
+"$sdkmgr" --sdk_root="$ANDROID_SDK_HOME" "platform-tools" \
+  "platforms;android-${ANDROID_API_LEVEL}" "build-tools;${ANDROID_BUILD_TOOLS_VERSION}" >/dev/null
+
 cd /src
 
 # --- configure.py: host CC toolchain + Android workspace ----------------------------------------
@@ -40,11 +58,16 @@ export PYTHON_BIN_PATH="$(python3 -c 'import sys; print(sys.executable)')"
 export TF_NEED_ROCM=0 TF_NEED_CUDA=0 CC_OPT_FLAGS='-Wno-sign-compare'
 export TF_SET_ANDROID_WORKSPACE=1
 export TF_NEED_CLANG=1
-# Locate clang robustly (path varies across ml-build image versions); install as a last resort.
-clang_path="$(command -v clang || command -v clang-18 || command -v clang-17 || true)"
-[ -x "$clang_path" ] || clang_path="$(ls /usr/lib/llvm-*/bin/clang 2>/dev/null | sort -V | tail -1)"
-[ -x "$clang_path" ] || { apt-get update -qq && apt-get install -y -qq clang; clang_path="$(command -v clang)"; }
-[ -x "$clang_path" ] || { echo "ERROR: no clang in container"; exit 1; }
+# The base ml-build image has no clang (verified) — install it. (NB: a bare `ls glob | sort | tail`
+# here exits 2 when the glob doesn't match and, under set -e + pipefail, kills the script with no
+# output — guard every such lookup with `|| true`.)
+clang_path="$(command -v clang clang-18 clang-17 2>/dev/null | head -1 || true)"
+if [ ! -x "$clang_path" ]; then
+  echo "clang not in image — installing via apt"
+  apt-get update -y && apt-get install -y clang
+  clang_path="$(command -v clang || true)"
+fi
+[ -x "$clang_path" ] || { echo "ERROR: no clang available in container"; exit 1; }
 export CLANG_COMPILER_PATH="$clang_path"
 echo "using CLANG_COMPILER_PATH=$CLANG_COMPILER_PATH"
 { set +o pipefail; yes "" | python3 configure.py; }   # yes SIGPIPEs (141) under pipefail
