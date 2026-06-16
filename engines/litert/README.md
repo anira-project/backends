@@ -12,11 +12,11 @@ Builds LiteRT's **native C API** — `libLiteRt` (`LiteRt*` symbols) — from
 ## What ships
 
 - **shared** (`libLiteRt.{so,dylib,dll}`): macOS (x86_64/arm64/universal), Linux (x86_64/aarch64),
-  Windows (x86_64 **and arm64**), Android (arm64-v8a/x86_64), iOS (xcframework). macOS dylibs are
-  Developer ID code-signed.
+  Windows (x86_64 **and arm64**), Android (arm64-v8a/x86_64). macOS dylibs are Developer ID
+  code-signed.
 - **static** (one merged `libLiteRt.a` / `LiteRt.lib`): macOS (x86_64/arm64/universal), Linux
-  (x86_64/aarch64), Windows (x86_64 **and arm64**), Android (arm64-v8a/x86_64, multi-ABI bundle).
-- Only iOS `static` isn't provided (iOS ships the prebuilt xcframework).
+  (x86_64/aarch64), Windows (x86_64 **and arm64**), Android (arm64-v8a/x86_64, multi-ABI bundle),
+  **iOS (xcframework, device + simulator)** — built from source (no static prebuilt upstream).
 
 ## Build
 
@@ -33,9 +33,10 @@ Headers (all legs) come from the `litert_cc_sdk.zip` release asset + a synthesiz
 
 - **`source=prebuilt`** — fetch the official `libLiteRt` from `litert/prebuilt/<platform>/` (Git-LFS,
   via the `media.githubusercontent.com` endpoint), pinned to a `main` SHA. Used for `shared` where a
-  prebuilt exists (everything but macOS x86_64), and for the iOS xcframework (device + simulator).
+  prebuilt exists (everything but macOS x86_64).
 - **`source=build`** — Bazel build (`bazelisk` + Python, set up by `setup-toolchain`). Used for
-  macOS x86_64 `shared` and for **all `static`** (upstream ships no static lib).
+  macOS x86_64 `shared`, for **all `static`** (upstream ships no static lib), and for the **iOS
+  static xcframework** (`ios.sh` builds device + simulator slices and merges each — see below).
 
 ### Static build
 
@@ -68,6 +69,6 @@ macOS, GNU `ar` on Linux, `lib.exe`/`llvm-lib` on Windows. Per-leg specifics:
 | --------------------- | -------------------------------------------------------------------- |
 | `VERSION`             | Pinned LiteRT **release** tag (not `main`)                           |
 | `stage.sh`            | Prebuilt repackage or Bazel build of `libLiteRt`; shared + static    |
-| `ios.sh`              | Repackage the prebuilt device + simulator dylibs into an xcframework |
+| `ios.sh`              | Build device + simulator **static** libs from source, merge each, → static xcframework |
 | `test/CMakeLists.txt` | CMake smoke (link `libLiteRt`; run via the smoke action/ctest)       |
 | `test/smoke.cpp`      | Link + load: `LiteRtCreateEnvironment` / `…Destroy…`                 |
