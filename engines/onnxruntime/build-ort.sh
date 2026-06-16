@@ -95,6 +95,17 @@ case "$PLATFORM" in
   ios-sim)
     ARGS+=(--ios --use_xcode --apple_sysroot iphonesimulator --osx_arch "$ARCH" --apple_deploy_target 13.0 --build_apple_framework)
     ;;
+  wasm)
+    # --build_wasm_static_lib bundles EVERY transitive dep (onnx/protobuf/re2/mlas/xnnpack)
+    # into one self-contained libonnxruntime_webassembly.a via emar (onnxruntime_webassembly.cmake
+    # bundle_static_library) — so the wasm leg needs neither the re2 force-build nor
+    # scripts/bundle-static.sh below. build.py installs+activates its OWN pinned emsdk (4.0.23)
+    # from the cmake/external/emsdk submodule (hardcoded toolchain path), so init it first —
+    # the shallow clone above fetches no submodules. simd + threads (the ort-builder recipe);
+    # threads => the consumer must link -pthread on a cross-origin-isolated (COOP/COEP) page.
+    git -C "$SRC" submodule update --init --depth 1 cmake/external/emsdk
+    ARGS+=(--build_wasm_static_lib --enable_wasm_simd --enable_wasm_threads --disable_rtti)
+    ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
 
@@ -109,6 +120,11 @@ echo "+ build.py ${ARGS[*]}"
 # which collects component .a and would otherwise miss libre2.a.
 if [ "$KIND" = "shared" ]; then
   echo "onnxruntime $VER ($PLATFORM/$ARCH/$CONFIG, shared) built -> $OUT/$CONFIG"
+  exit 0
+fi
+if [ "$PLATFORM" = "wasm" ]; then
+  # --build_wasm_static_lib already produced a self-contained libonnxruntime_webassembly.a.
+  echo "onnxruntime $VER (wasm static lib) built -> $OUT/$CONFIG"
   exit 0
 fi
 echo "+ force-build re2 (static bundle needs libre2.a / re2.lib)"

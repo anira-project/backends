@@ -34,11 +34,15 @@ What ships per target — `shared` and/or `static`:
 | Windows arm64                   | shared · static ¹ | shared · static ¹   | shared · static ¹ | shared   |
 | Android (`arm64-v8a` + `x86_64`)| shared · static   | shared · static     | shared · static   | —        |
 | iOS (xcframework)               | static            | shared              | static            | —        |
+| WASM (Emscripten)               | —                 | —                   | static ²          | —        |
 
 macOS `shared` dylibs are **Developer ID code-signed** (Hardened Runtime, timestamped); the
 consuming app re-signs/notarizes on embed.
 
 > ¹ Windows `static` also ships a `Debug` variant.
+
+> ² WASM is a single Emscripten static archive built with SIMD + pthreads (`--disable_rtti`);
+> link it into an anira-on-WASM build with `-pthread` on a cross-origin-isolated (COOP/COEP) page.
 
 > `—` = not provided.
 

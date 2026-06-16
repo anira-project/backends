@@ -35,6 +35,18 @@ fi
 # ---- build from source --------------------------------------------------------------------
 cp "$HERE"/include/*.h "$ST/include/"
 
+if [ "$PLATFORM" = "wasm" ]; then
+  # Emscripten static lib: build-ort.sh emits ONE self-contained libonnxruntime_webassembly.a
+  # (deps bundled by --build_wasm_static_lib) — no re2 force-build / bundle-static.sh. Ship it
+  # as libonnxruntime.a so consumers link the same name as every other static target.
+  bash "$HERE/build-ort.sh" wasm wasm32 "$CONFIG" "$HERE/build" static
+  a="$(find "$HERE/build/$CONFIG" -maxdepth 2 -name 'libonnxruntime_webassembly.a' | head -1)"
+  [ -n "$a" ] || { echo "ERROR: no wasm static lib under $HERE/build/$CONFIG"; exit 1; }
+  cp "$a" "$ST/lib/libonnxruntime.a"
+  echo "staged onnxruntime (wasm/wasm32/static) -> $ST"
+  exit 0
+fi
+
 if [ "$KIND" = "shared" ]; then
   # macOS only (Linux/Windows/Android shared come from prebuilt). Builds libonnxruntime.dylib
   # directly — one self-contained lib, no re2 force-build / no bundling.
