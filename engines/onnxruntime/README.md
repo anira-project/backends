@@ -51,8 +51,10 @@ compiled to WebAssembly.
   (the ort-builder recipe). `build.py` installs+activates its own pinned **emsdk 4.0.23** from
   the `cmake/external/emsdk` submodule (init'd in `build-ort.sh`) — no external emsdk needed.
   **Threads** ⇒ the consuming wasm app must link `-pthread` and be served cross-origin-isolated
-  (COOP/COEP). The CI smoke links + runs the forward pass under emsdk's Node (`NODERAWFS` +
-  `PROXY_TO_PTHREAD`).
+  (COOP/COEP). The CI smoke **links** the test against the `.a` with `em++` (proving the archive
+  is symbol-complete — the Android arm64 compile+link gate). A forward-pass *run* belongs in a
+  cross-origin-isolated browser, not headless Node (the threaded module aborts at `Env` init in
+  Node's proxy worker), so it isn't part of the gate.
 
 ## Local build
 
