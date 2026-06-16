@@ -4,7 +4,8 @@ Builds `onnxruntime` (C API, **full operator set** — any model works, CPU prov
 for [anira](https://github.com/anira-project/anira). ONNX Runtime ships only *shared*
 libs upstream, so **static is built from source** (no op-reduction — every operator
 ships); **shared** is built for macOS but **repackaged** from Microsoft's prebuilts
-elsewhere.
+elsewhere. A **WASM** (Emscripten) static lib is built from source too — for anira
+compiled to WebAssembly.
 
 ## Files
 
@@ -43,6 +44,15 @@ elsewhere.
   DLLs next to the exe; macOS needs `-framework Foundation -framework CoreFoundation`; Linux
   needs `rt`/`dl`/`m`.
 - **iOS** `build.py` flag is `--apple_sysroot` (renamed from `--ios_sysroot` in 1.26).
+- **WASM** (`build-ort.sh wasm`): `--build_wasm_static_lib` builds one **self-contained**
+  `libonnxruntime_webassembly.a` (all deps bundled by `bundle_static_library` via `emar`) —
+  so the wasm leg skips the re2 force-build *and* `bundle-static.sh`; `stage.sh` just renames
+  it to `libonnxruntime.a`. Built with `--enable_wasm_simd --enable_wasm_threads --disable_rtti`
+  (the ort-builder recipe). `build.py` installs+activates its own pinned **emsdk 4.0.23** from
+  the `cmake/external/emsdk` submodule (init'd in `build-ort.sh`) — no external emsdk needed.
+  **Threads** ⇒ the consuming wasm app must link `-pthread` and be served cross-origin-isolated
+  (COOP/COEP). The CI smoke links + runs the forward pass under emsdk's Node (`NODERAWFS` +
+  `PROXY_TO_PTHREAD`).
 
 ## Local build
 
@@ -50,5 +60,6 @@ elsewhere.
 # from this directory
 bash build-ort.sh macos arm64 Release build           # <platform> <arch> <config> <build-dir> [kind]
 bash build-ort.sh macos arm64 Release build shared    # shared variant (libonnxruntime.dylib)
-bash ../../scripts/bundle-static.sh build/Release /tmp/out/lib/libonnxruntime.a   # static only
+bash build-ort.sh wasm wasm32 Release build           # WASM static lib (needs emsdk submodule)
+bash ../../scripts/bundle-static.sh build/Release /tmp/out/lib/libonnxruntime.a   # static only (not wasm)
 ```
