@@ -58,15 +58,22 @@ target=//litert/c:litert_runtime_c_api_so_shim
 defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 
 # Build one Apple slice and merge its transitive static-archive closure into <outdir>/libLiteRt.a.
-build_slice() {  # <bazel config: ios_arm64 | ios_sim_arm64> <min-ios> <outdir>
-  local bcfg="$1" minos="$2" out="$3"
+build_slice() {  # <cpu: ios_arm64|ios_sim_arm64> <apple-support platform> <min-ios> <outdir>
+  local cpuv="$1" platv="$2" minos="$3" out="$4"
   rm -rf "$out"; mkdir -p "$out"
-  # Use LiteRT's own .bazelrc apple configs: `--config=ios_arm64` / `--config=ios_sim_arm64` expand
-  # to --config=ios (apple-toolchain) + --cpu=<slice> + the apple_support iOS platform. The --cpu is
-  # the key bit: cpuinfo/XNNPACK/… select() their iOS sources on the legacy --cpu value, so a plain
-  # --platforms transition (no --cpu) leaves those configurable attrs unmatched. bulk_test_cpu adds
-  # the CPU-only kernel config (same pairing the macOS static leg uses).
-  local cfg=(--config="$bcfg" --config=bulk_test_cpu --ios_minimum_os="${minos}")
+  # Replicate LiteRT's build:ios_arm64 / build:ios_sim_arm64 — apple-toolchain + --cpu=<slice> + the
+  # apple_support iOS platform — but WITHOUT the `--copt=-fembed-bitcode` that build:ios injects. The
+  # --cpu is essential: cpuinfo/XNNPACK/… select() their iOS sources on the legacy --cpu value, so a
+  # bare --platforms transition leaves those configurable attrs unmatched. Bitcode is dropped because
+  # Xcode 16 removed it: the embedded bitcode bloats the archive (~44M vs ~15M) and hides the Mach-O
+  # symbols from nm. bulk_test_cpu adds the CPU-only kernel config (same pairing the macOS leg uses).
+  local cfg=(--config=apple-toolchain
+             --apple_platform_type=ios
+             --cpu="$cpuv"
+             --platforms="@build_bazel_apple_support//platforms:${platv}"
+             --copt=-Wno-c++11-narrowing
+             --ios_minimum_os="${minos}"
+             --config=bulk_test_cpu)
   ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "$target" )
   # Materialise every transitive cc_library archive (the top build leaves them as .o only).
   # cquery --output=label appends the config hash as " (abcdef0)" — keep only the bare label.
@@ -96,19 +103,24 @@ STAR
   : > "$out/archives.txt"
   while IFS= read -r a; do [ -f "$execroot/$a" ] && printf '%s\n' "$a" >> "$out/archives.txt"; done < "$out/all_archives.txt"
   local count; count="$(wc -l < "$out/archives.txt" | tr -d ' ')"
-  [ "$count" -gt 0 ] || { echo "::error::no static archives materialised for iOS $bcfg"; exit 1; }
+  [ "$count" -gt 0 ] || { echo "::error::no static archives materialised for iOS $cpuv"; exit 1; }
   # BSD libtool merges the absolute archive paths via -filelist (dodges ARG_MAX, tolerates dup names).
   awk -v r="$execroot" '{print r"/"$0}' "$out/archives.txt" > "$out/filelist.txt"
   libtool -static -no_warning_for_no_symbols -filelist "$out/filelist.txt" -o "$out/libLiteRt.a"
-  echo "iOS $bcfg static: merged $count archives -> $(du -h "$out/libLiteRt.a" | cut -f1)"
+  echo "iOS $cpuv static: merged $count archives -> $(du -h "$out/libLiteRt.a" | cut -f1)"
 }
 
-build_slice ios_arm64     13.0 "$HERE/ios-dev"
-build_slice ios_sim_arm64 13.0 "$HERE/ios-sim"
+build_slice ios_arm64     ios_arm64     13.0 "$HERE/ios-dev"
+build_slice ios_sim_arm64 ios_sim_arm64 13.0 "$HERE/ios-sim"
 
-# Symbol sanity: the device slice must export the native C API entry point (not a stub).
-nm -gU "$HERE/ios-dev/libLiteRt.a" 2>/dev/null | grep -q LiteRtCreateEnvironment \
-  || { echo "::error::libLiteRt.a missing LiteRtCreateEnvironment"; exit 1; }
+# Symbol sanity: the device slice must export the native C API entry point (not a stub). Apple nm
+# prefixes a leading underscore (_LiteRtCreateEnvironment) and may emit per-object warnings — don't
+# mask them, and log the symbol count so a miss is debuggable rather than silent.
+syms="$(nm -gjU "$HERE/ios-dev/libLiteRt.a" 2>/dev/null || true)"
+total="$(printf '%s\n' "$syms" | grep -c . || true)"
+hit="$(printf '%s\n' "$syms" | grep -c 'LiteRtCreateEnvironment' || true)"
+echo "device slice: $total global defined syms; LiteRtCreateEnvironment matches=$hit"
+[ "$hit" -gt 0 ] || { echo "::error::libLiteRt.a missing LiteRtCreateEnvironment (total syms=$total)"; exit 1; }
 
 rm -rf LiteRt.xcframework
 xcodebuild -create-xcframework \
