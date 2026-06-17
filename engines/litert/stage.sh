@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Stage LiteRT's NATIVE C API (libLiteRt — LiteRt* symbols) into <staging> as
 # include/litert/c + lib/libLiteRt.{so,dylib,dll}. Distinct from the `tflite` engine (legacy
-# TfLite* C API). Headers (both modes) come from the litert_cc_sdk.zip release + a synthesized
-# CPU-only build_config.h. Two lib modes:
+# TfLite* C API). Headers AND lib both come from the same pinned commit ($PREBUILT_SHA) + a
+# synthesized CPU-only build_config.h, so the C ABI never skews across legs. Two lib modes:
 #   source=prebuilt — fetch the official prebuilt libLiteRt from google-ai-edge/LiteRT's
 #                     litert/prebuilt/<platform>/ (Git-LFS, via the media endpoint), pinned to a
 #                     main commit (upstream ships these mobile/desktop prebuilts UNVERSIONED).
-#   source=build    — build from source via Bazel, CPU-only. Used where no prebuilt exists:
+#   source=build    — build from source via Bazel at that SAME commit, CPU-only. Used where no
+#                     prebuilt exists:
 #                     macOS x86_64 (shared), and ALL static legs (upstream ships no static lib —
 #                     we build the C API impl and merge its transitive .a closure into libLiteRt.a).
 #
@@ -21,12 +22,17 @@ VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 # upstream). Bump deliberately and re-verify the LiteRt* symbols after.
 PREBUILT_SHA="89c838788bba9c2ec6bbefd52971daf39d8e2856"
 
-# ---- Headers (both modes): SDK litert/c/*.h + synthesized CPU-only build_config.h --------------
+# ---- Headers: from the pinned LiteRT commit ($PREBUILT_SHA) — the SAME ref BOTH modes use for the
+# lib (prebuilt binary AND from-source Bazel build, below), so headers and binary never skew. A
+# leading LiteRtEnvironment param was added to LiteRtCreateModelFrom{File,Buffer} after the v2.1.5
+# tag; sourcing headers (or the lib) from any other ref mis-shifts the args by a register — model
+# load then reads the path from &model (empty -> "Could not open ''", status 500) and the buffer
+# ptr from the size (-> segfault). Upstream ships prebuilts only off main, so main is the ref.
 mkdir -p "$ST/include/litert/build_common" "$ST/lib"
-sdk="$HERE/litert_cc_sdk"
+sdk="$HERE/LiteRT-${PREBUILT_SHA}"
 if [ ! -d "$sdk/litert/c" ]; then
-  curl -fsSL "https://github.com/google-ai-edge/LiteRT/releases/download/v${VER}/litert_cc_sdk.zip" -o "$HERE/litert_cc_sdk.zip"
-  ( cd "$HERE" && cmake -E tar xf litert_cc_sdk.zip )   # -> $HERE/litert_cc_sdk/
+  curl -fsSL "https://github.com/google-ai-edge/LiteRT/archive/${PREBUILT_SHA}.tar.gz" -o "$HERE/litert-src.tar.gz"
+  ( cd "$HERE" && cmake -E tar xzf litert-src.tar.gz )   # -> $HERE/LiteRT-${PREBUILT_SHA}/
 fi
 ( cd "$sdk" && find litert/c -name '*.h' | while IFS= read -r h; do
     mkdir -p "$ST/include/$(dirname "$h")"; cp "$h" "$ST/include/$h"; done )
@@ -70,10 +76,17 @@ if [ "$SOURCE" = "prebuilt" ]; then
   exit 0
 fi
 
-# ---- source=build: Bazel (CPU-only) — for platforms with no prebuilt (macOS x86_64) ------------
+# ---- source=build: Bazel (CPU-only) — for platforms with no prebuilt (macOS x86_64) + all static.
+# Build from the SAME commit as the prebuilts ($PREBUILT_SHA), NOT the v${VER} tag: upstream ships
+# prebuilts only off main, and the model-load ABI (env-leading LiteRtCreateModelFrom*) must be
+# identical on every leg or a single consumer can't link both. Shallow-fetch the exact SHA
+# (GitHub allows fetch-by-sha via allowAnySHA1InWant).
 SRC="$HERE/litert-src"
 if [ ! -d "$SRC/.git" ]; then
-  git clone --depth 1 --branch "v${VER}" https://github.com/google-ai-edge/LiteRT "$SRC"
+  git init -q "$SRC"
+  git -C "$SRC" remote add origin https://github.com/google-ai-edge/LiteRT
+  git -C "$SRC" fetch -q --depth 1 origin "$PREBUILT_SHA"
+  git -C "$SRC" checkout -q --detach FETCH_HEAD
 fi
 
 # ---- source=build, kind=static, Android: build inside LiteRT's ml-build container --------------

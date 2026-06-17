@@ -40,5 +40,18 @@ endif()
 # Shared lib loads from the staging lib dir at runtime (rpath on unix; Windows copies the DLL).
 set_target_properties(smoke PROPERTIES BUILD_WITH_INSTALL_RPATH TRUE INSTALL_RPATH "${LITERT_LIBDIR}")
 
+# A tiny .tflite model for the load+compile smoke (LiteRT loads the .tflite flatbuffer like
+# TFLite). Reuse TFLite's pinned add.bin test model — the LiteRt archive ships no model.
+set(MODEL "${CMAKE_BINARY_DIR}/add.bin")
+if(NOT EXISTS "${MODEL}")
+  file(DOWNLOAD
+    "https://raw.githubusercontent.com/tensorflow/tensorflow/v2.17.0/tensorflow/lite/testdata/add.bin"
+    "${MODEL}" STATUS _dl)
+  list(GET _dl 0 _code)
+  if(NOT _code EQUAL 0)
+    message(FATAL_ERROR "add.bin download failed: ${_dl}")
+  endif()
+endif()
+
 enable_testing()
-add_test(NAME smoke COMMAND smoke)
+add_test(NAME smoke COMMAND smoke "${MODEL}")
