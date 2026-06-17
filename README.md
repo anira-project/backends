@@ -41,8 +41,8 @@ consuming app re-signs/notarizes on embed.
 
 > ¹ Windows `static` also ships a `Debug` variant.
 
-> ² WASM is a single Emscripten static archive built with SIMD + pthreads (`--disable_rtti`);
-> link it into an anira-on-WASM build with `-pthread` on a cross-origin-isolated (COOP/COEP) page.
+> ² Emscripten static archive — build flags and consumer requirements in
+> [`engines/onnxruntime`](./engines/onnxruntime).
 
 > `—` = not provided.
 
@@ -53,8 +53,8 @@ from-source toolchain, Android `static`) live in each engine's README under
 ## Releases
 
 Backends are versioned independently but **released together, keyed to the anira
-version**: tag `v2.1.0` builds every backend at its pinned `engines/<backend>/VERSION`
-and publishes all archives to a single release `v2.1.0`.
+version**: tag `v2.1.1` builds every backend at its pinned `engines/<backend>/VERSION`
+and publishes all archives to a single release `v2.1.1`.
 
 ## Sponsor
 <img src="https://raw.githubusercontent.com/anira-project/anira/main/docs/img/bmftr-funding.png" alt="Funded by the German Federal Ministry of Research, Technology and Space (BMFTR)" width="200">

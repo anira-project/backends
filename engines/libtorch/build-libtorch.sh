@@ -15,8 +15,8 @@
 #   <staging>   output prefix; gets include/ lib/ share/ [bin/]
 #
 # NOTE: this is the from-source recipe; like the ONNXRuntime/TFLite builders it is
-# expected to need a few CI rounds to converge per platform (see ../../TODO.md for
-# how those settled). Flags below follow PyTorch's official CPU libtorch config.
+# expected to need a few CI rounds to converge per platform. Flags below follow
+# PyTorch's official CPU libtorch config.
 set -euo pipefail
 
 PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; ST="${3:?staging dir}"
