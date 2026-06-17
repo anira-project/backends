@@ -71,4 +71,4 @@ macOS, GNU `ar` on Linux, `lib.exe`/`llvm-lib` on Windows. Per-leg specifics:
 | `stage.sh`            | Prebuilt repackage or Bazel build of `libLiteRt`; shared + static    |
 | `ios.sh`              | Build device + simulator **static** libs from source, merge each, → static xcframework |
 | `test/CMakeLists.txt` | CMake smoke (link `libLiteRt`; run via the smoke action/ctest)       |
-| `test/smoke.cpp`      | Link + load: `LiteRtCreateEnvironment` / `…Destroy…`                 |
+| `test/smoke.cpp`      | Link + env + load a `.tflite` (file & buffer) + CPU compile           |

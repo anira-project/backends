@@ -10,3 +10,9 @@ emsdk-cache-*/
 
 # onnxruntime build
 engines/onnxruntime/onnxruntime-src/
+
+# litert stage.sh header-source scratch (fetched per-mode: SDK zip for build, repo tarball for prebuilt)
+engines/litert/litert_cc_sdk/
+engines/litert/litert_cc_sdk.zip
+engines/litert/litert-src.tar.gz
+engines/litert/LiteRT-*/

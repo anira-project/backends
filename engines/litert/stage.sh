@@ -21,12 +21,28 @@ VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 # upstream). Bump deliberately and re-verify the LiteRt* symbols after.
 PREBUILT_SHA="89c838788bba9c2ec6bbefd52971daf39d8e2856"
 
-# ---- Headers (both modes): SDK litert/c/*.h + synthesized CPU-only build_config.h --------------
+# ---- Headers: MUST come from the SAME commit as the staged lib, or the C ABI skews ------------
+# The prebuilt binary is built at $PREBUILT_SHA (main); build-from-source uses the v${VER} tag.
+# A leading LiteRtEnvironment param was added to LiteRtCreateModelFrom{File,Buffer} between v2.1.5
+# and main, so pairing v2.1.5 headers with the main prebuilt mis-shifts the args by a register —
+# model load then reads the path from &model (empty -> "Could not open ''", status 500) and the
+# buffer ptr from the size (-> segfault). Source headers per-mode to keep them in lockstep.
 mkdir -p "$ST/include/litert/build_common" "$ST/lib"
-sdk="$HERE/litert_cc_sdk"
-if [ ! -d "$sdk/litert/c" ]; then
-  curl -fsSL "https://github.com/google-ai-edge/LiteRT/releases/download/v${VER}/litert_cc_sdk.zip" -o "$HERE/litert_cc_sdk.zip"
-  ( cd "$HERE" && cmake -E tar xf litert_cc_sdk.zip )   # -> $HERE/litert_cc_sdk/
+if [ "$SOURCE" = "prebuilt" ]; then
+  # No release SDK zip exists for an arbitrary main commit — take litert/c/*.h from the repo
+  # source tree at the prebuilt's pinned commit.
+  sdk="$HERE/LiteRT-${PREBUILT_SHA}"
+  if [ ! -d "$sdk/litert/c" ]; then
+    curl -fsSL "https://github.com/google-ai-edge/LiteRT/archive/${PREBUILT_SHA}.tar.gz" -o "$HERE/litert-src.tar.gz"
+    ( cd "$HERE" && cmake -E tar xzf litert-src.tar.gz )   # -> $HERE/LiteRT-${PREBUILT_SHA}/
+  fi
+else
+  # build-from-source clones the v${VER} tag (below) — match it with the v${VER} release SDK.
+  sdk="$HERE/litert_cc_sdk"
+  if [ ! -d "$sdk/litert/c" ]; then
+    curl -fsSL "https://github.com/google-ai-edge/LiteRT/releases/download/v${VER}/litert_cc_sdk.zip" -o "$HERE/litert_cc_sdk.zip"
+    ( cd "$HERE" && cmake -E tar xf litert_cc_sdk.zip )   # -> $HERE/litert_cc_sdk/
+  fi
 fi
 ( cd "$sdk" && find litert/c -name '*.h' | while IFS= read -r h; do
     mkdir -p "$ST/include/$(dirname "$h")"; cp "$h" "$ST/include/$h"; done )
