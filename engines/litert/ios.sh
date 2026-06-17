@@ -96,11 +96,11 @@ STAR
   : > "$out/archives.txt"
   while IFS= read -r a; do [ -f "$execroot/$a" ] && printf '%s\n' "$a" >> "$out/archives.txt"; done < "$out/all_archives.txt"
   local count; count="$(wc -l < "$out/archives.txt" | tr -d ' ')"
-  [ "$count" -gt 0 ] || { echo "::error::no static archives materialised for iOS $plat"; exit 1; }
+  [ "$count" -gt 0 ] || { echo "::error::no static archives materialised for iOS $bcfg"; exit 1; }
   # BSD libtool merges the absolute archive paths via -filelist (dodges ARG_MAX, tolerates dup names).
   awk -v r="$execroot" '{print r"/"$0}' "$out/archives.txt" > "$out/filelist.txt"
   libtool -static -no_warning_for_no_symbols -filelist "$out/filelist.txt" -o "$out/libLiteRt.a"
-  echo "iOS $plat static: merged $count archives -> $(du -h "$out/libLiteRt.a" | cut -f1)"
+  echo "iOS $bcfg static: merged $count archives -> $(du -h "$out/libLiteRt.a" | cut -f1)"
 }
 
 build_slice ios_arm64     13.0 "$HERE/ios-dev"
