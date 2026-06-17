@@ -58,17 +58,15 @@ target=//litert/c:litert_runtime_c_api_so_shim
 defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
 
 # Build one Apple slice and merge its transitive static-archive closure into <outdir>/libLiteRt.a.
-build_slice() {  # <apple-support platform label> <min-ios> <outdir>
-  local plat="$1" minos="$2" out="$3"
+build_slice() {  # <bazel config: ios_arm64 | ios_sim_arm64> <min-ios> <outdir>
+  local bcfg="$1" minos="$2" out="$3"
   rm -rf "$out"; mkdir -p "$out"
-  # The Apple platform transition (via --platforms) is what makes the plain cc_library resolve its
-  # NEON/select() sources and emit objects tagged with the iOS platform (so xcodebuild can build a
-  # static xcframework from them). --apple_platform_type=ios + --ios_minimum_os mirror the dylib
-  # rule's internal transition. bulk_test_cpu carries the CPU-only kernel config (as on desktop).
-  local cfg=(--apple_platform_type=ios
-             --platforms="@build_bazel_apple_support//platforms:${plat}"
-             --ios_minimum_os="${minos}"
-             --config=bulk_test_cpu)
+  # Use LiteRT's own .bazelrc apple configs: `--config=ios_arm64` / `--config=ios_sim_arm64` expand
+  # to --config=ios (apple-toolchain) + --cpu=<slice> + the apple_support iOS platform. The --cpu is
+  # the key bit: cpuinfo/XNNPACK/… select() their iOS sources on the legacy --cpu value, so a plain
+  # --platforms transition (no --cpu) leaves those configurable attrs unmatched. bulk_test_cpu adds
+  # the CPU-only kernel config (same pairing the macOS static leg uses).
+  local cfg=(--config="$bcfg" --config=bulk_test_cpu --ios_minimum_os="${minos}")
   ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "$target" )
   # Materialise every transitive cc_library archive (the top build leaves them as .o only).
   # cquery --output=label appends the config hash as " (abcdef0)" — keep only the bare label.
