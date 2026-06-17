@@ -33,7 +33,7 @@ What ships per target — `shared` and/or `static`:
 | Windows x86_64                  | shared · static ¹ | shared · static ¹   | shared · static ¹ | shared   |
 | Windows arm64                   | shared · static ¹ | shared · static ¹   | shared · static ¹ | shared   |
 | Android (`arm64-v8a` + `x86_64`)| shared · static   | shared · static     | shared · static   | —        |
-| iOS (xcframework)               | static            | shared              | static            | —        |
+| iOS (xcframework)               | static            | static              | static            | —        |
 | WASM (Emscripten)               | —                 | —                   | static ²          | —        |
 
 macOS `shared` dylibs are **Developer ID code-signed** (Hardened Runtime, timestamped); the

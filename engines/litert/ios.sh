@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
-# iOS (litert): repackage the official prebuilt libLiteRt.dylib (device + simulator, arm64) from
-# google-ai-edge/LiteRT's litert/prebuilt/ios_* (Git-LFS, via the media endpoint) into an
-# .xcframework — LiteRT's native C API (LiteRt* symbols), CPU-only. Headers from litert_cc_sdk.zip.
-# Produces dist/<archive>.zip.
+# iOS (litert) STATIC: build libLiteRt.a from source via Bazel for device (ios_arm64) +
+# simulator (ios_sim_arm64) and combine into a STATIC .xcframework — LiteRT's native C API
+# (LiteRt* symbols), CPU-only. Upstream ships only a *dynamic* libLiteRt.dylib for iOS; we build
+# static from source so iOS matches the rest of the matrix (static is the preferred iOS linkage —
+# no embedded framework to sign, dead-code-stripped into the app/appex). Same transitive-archive
+# -merge recipe as the desktop/Android static legs in stage.sh, run once per Apple slice.
+# Headers from litert_cc_sdk.zip. Produces dist/<archive>.zip.
+#
+# NOTE: the exact Bazel iOS flags below are best-effort and may need CI iteration on a macOS
+# runner (Apple platform transition + static-xcframework platform metadata are the fiddly bits).
 #
 # Usage: ios.sh <archive-name>
 set -euo pipefail
 ARCHIVE="${1:?archive name}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
-PREBUILT_SHA="89c838788bba9c2ec6bbefd52971daf39d8e2856"
-base="https://media.githubusercontent.com/media/google-ai-edge/LiteRT/${PREBUILT_SHA}/litert/prebuilt"
 
-# Headers: SDK litert/c/*.h + synthesized CPU-only build_config.h (same set as the other legs).
+# ---- Headers: SDK litert/c/*.h + synthesized CPU-only build_config.h (same set as other legs) --
 sdk="$HERE/litert_cc_sdk"
 if [ ! -d "$sdk/litert/c" ]; then
   curl -fsSL "https://github.com/google-ai-edge/LiteRT/releases/download/v${VER}/litert_cc_sdk.zip" -o "$HERE/litert_cc_sdk.zip"
@@ -34,23 +38,84 @@ cat > "$hdr/litert/build_common/build_config.h" <<'EOF'
 #endif  // LITERT_BUILD_COMMON_BUILD_CONFIG_H_
 EOF
 
-# Prebuilt dylibs: device (ios_arm64) + simulator (ios_sim_arm64). @rpath install_name so the
-# consuming app embeds it normally.
-mkdir -p dev sim
-curl -fsSL "$base/ios_arm64/libLiteRt.dylib.lfs"     -o dev/libLiteRt.dylib
-curl -fsSL "$base/ios_sim_arm64/libLiteRt.dylib.lfs" -o sim/libLiteRt.dylib
-install_name_tool -id @rpath/libLiteRt.dylib dev/libLiteRt.dylib
-install_name_tool -id @rpath/libLiteRt.dylib sim/libLiteRt.dylib
-echo "device slices:"; lipo -info dev/libLiteRt.dylib; echo "sim slices:"; lipo -info sim/libLiteRt.dylib
-# Verify the native C API is present (not a stub). Capture nm output to a file first — piping to
-# `grep -q` closes the pipe early, which makes nm SIGPIPE and pipefail flag a false failure.
-nm -gU dev/libLiteRt.dylib > "$HERE/ios_syms.txt" 2>/dev/null || true
-grep -q LiteRtCreateEnvironment "$HERE/ios_syms.txt" || { echo "::error::libLiteRt missing LiteRtCreateEnvironment"; head "$HERE/ios_syms.txt"; exit 1; }
+# ---- Source + host CC toolchain (configure.py), same setup as stage.sh -------------------------
+SRC="$HERE/litert-src"
+if [ ! -d "$SRC/.git" ]; then
+  git clone --depth 1 --branch "v${VER}" https://github.com/google-ai-edge/LiteRT "$SRC"
+fi
+# configure.py generates the host CC toolchain (else "@@local_config_cc//:toolchain ... cpu").
+export PYTHON_BIN_PATH="$(python3 -c 'import sys; print(sys.executable)')"
+export PYTHON_LIB_PATH="$(python3 -c 'import site; print(site.getsitepackages()[0])')"
+export TF_NEED_ROCM=0 TF_NEED_CUDA=0 CC_OPT_FLAGS='-Wno-sign-compare' TF_SET_ANDROID_WORKSPACE=0
+# `yes` SIGPIPEs (141) when configure.py closes the pipe; ignore that under pipefail.
+( cd "$SRC" && chmod +x configure.py && { set +o pipefail; yes "" | python3 configure.py; } )
+
+# litert_runtime_c_api_so_shim is the cc_library that pulls in the real C API impl closure (the
+# same one the .dylib links from). Build it under the iOS Apple platform transition, then merge
+# every transitive static archive into one libLiteRt.a — exactly the macOS static recipe, but
+# targeting an Apple device/simulator platform instead of macOS.
+target=//litert/c:litert_runtime_c_api_so_shim
+defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
+
+# Build one Apple slice and merge its transitive static-archive closure into <outdir>/libLiteRt.a.
+build_slice() {  # <apple-support platform label> <min-ios> <outdir>
+  local plat="$1" minos="$2" out="$3"
+  rm -rf "$out"; mkdir -p "$out"
+  # The Apple platform transition (via --platforms) is what makes the plain cc_library resolve its
+  # NEON/select() sources and emit objects tagged with the iOS platform (so xcodebuild can build a
+  # static xcframework from them). --apple_platform_type=ios + --ios_minimum_os mirror the dylib
+  # rule's internal transition. bulk_test_cpu carries the CPU-only kernel config (as on desktop).
+  local cfg=(--apple_platform_type=ios
+             --platforms="@build_bazel_apple_support//platforms:${plat}"
+             --ios_minimum_os="${minos}"
+             --config=bulk_test_cpu)
+  ( cd "$SRC" && bazel build "${cfg[@]}" "${defines[@]}" "$target" )
+  # Materialise every transitive cc_library archive (the top build leaves them as .o only).
+  # cquery --output=label appends the config hash as " (abcdef0)" — keep only the bare label.
+  ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" \
+      "kind('cc_library rule', deps($target))" --output=label 2>/dev/null ) \
+      | awk 'NF{print $1}' | sort -u > "$out/labels.txt"
+  ( cd "$SRC" && xargs bazel build "${cfg[@]}" "${defines[@]}" < "$out/labels.txt" )
+  cat > "$out/collect.star" <<'STAR'
+def format(target):
+    ps = providers(target)
+    cc = ps.get("CcInfo") if ps else None
+    if cc == None:
+        return ""
+    out = []
+    for li in cc.linking_context.linker_inputs.to_list():
+        for lib in li.libraries:
+            for f in [lib.pic_static_library, lib.static_library]:
+                if f != None:
+                    out.append(f.path)
+    return "\n".join(out)
+STAR
+  ( cd "$SRC" && bazel cquery "${cfg[@]}" "${defines[@]}" "$target" \
+      --output=starlark --starlark:file="$out/collect.star" ) \
+      | grep -v '^$' | sort -u > "$out/all_archives.txt"
+  local execroot; execroot="$( cd "$SRC" && bazel info execution_root )"
+  # Keep only archives that actually exist on disk (the non-pic candidate paths won't).
+  : > "$out/archives.txt"
+  while IFS= read -r a; do [ -f "$execroot/$a" ] && printf '%s\n' "$a" >> "$out/archives.txt"; done < "$out/all_archives.txt"
+  local count; count="$(wc -l < "$out/archives.txt" | tr -d ' ')"
+  [ "$count" -gt 0 ] || { echo "::error::no static archives materialised for iOS $plat"; exit 1; }
+  # BSD libtool merges the absolute archive paths via -filelist (dodges ARG_MAX, tolerates dup names).
+  awk -v r="$execroot" '{print r"/"$0}' "$out/archives.txt" > "$out/filelist.txt"
+  libtool -static -no_warning_for_no_symbols -filelist "$out/filelist.txt" -o "$out/libLiteRt.a"
+  echo "iOS $plat static: merged $count archives -> $(du -h "$out/libLiteRt.a" | cut -f1)"
+}
+
+build_slice ios_arm64     13.0 "$HERE/ios-dev"
+build_slice ios_sim_arm64 13.0 "$HERE/ios-sim"
+
+# Symbol sanity: the device slice must export the native C API entry point (not a stub).
+nm -gU "$HERE/ios-dev/libLiteRt.a" 2>/dev/null | grep -q LiteRtCreateEnvironment \
+  || { echo "::error::libLiteRt.a missing LiteRtCreateEnvironment"; exit 1; }
 
 rm -rf LiteRt.xcframework
 xcodebuild -create-xcframework \
-  -library "$PWD/dev/libLiteRt.dylib" -headers "$hdr" \
-  -library "$PWD/sim/libLiteRt.dylib" -headers "$hdr" \
+  -library "$HERE/ios-dev/libLiteRt.a" -headers "$hdr" \
+  -library "$HERE/ios-sim/libLiteRt.a" -headers "$hdr" \
   -output LiteRt.xcframework
 
 mkdir -p dist "staging/$ARCHIVE"
