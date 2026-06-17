@@ -67,8 +67,8 @@ macOS, GNU `ar` on Linux, `lib.exe`/`llvm-lib` on Windows. Per-leg specifics:
 
 | File                  | Purpose                                                              |
 | --------------------- | -------------------------------------------------------------------- |
-| `VERSION`             | Pinned LiteRT **release** tag (not `main`)                           |
-| `stage.sh`            | Prebuilt repackage or Bazel build of `libLiteRt`; shared + static    |
+| `VERSION`             | LiteRT version label for asset names; actual code pinned by `PREBUILT_SHA` in `stage.sh` |
+| `stage.sh`            | Prebuilt repackage or Bazel build of `libLiteRt` (both @ `PREBUILT_SHA`); shared + static |
 | `ios.sh`              | Build device + simulator **static** libs from source, merge each, → static xcframework |
 | `test/CMakeLists.txt` | CMake smoke (link `libLiteRt`; run via the smoke action/ctest)       |
 | `test/smoke.cpp`      | Link + env + load a `.tflite` (file & buffer) + CPU compile           |

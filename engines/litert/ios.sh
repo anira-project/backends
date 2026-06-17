@@ -5,7 +5,7 @@
 # static from source so iOS matches the rest of the matrix (static is the preferred iOS linkage —
 # no embedded framework to sign, dead-code-stripped into the app/appex). Same transitive-archive
 # -merge recipe as the desktop/Android static legs in stage.sh, run once per Apple slice.
-# Headers from litert_cc_sdk.zip. Produces dist/<archive>.zip.
+# Headers + source both from the pinned PREBUILT_SHA (see stage.sh). Produces dist/<archive>.zip.
 #
 # NOTE: the exact Bazel iOS flags below are best-effort and may need CI iteration on a macOS
 # runner (Apple platform transition + static-xcframework platform metadata are the fiddly bits).
@@ -15,12 +15,16 @@ set -euo pipefail
 ARCHIVE="${1:?archive name}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
+# Pinned LiteRT main commit — MUST match stage.sh's PREBUILT_SHA so the iOS static slice ships the
+# same model-load ABI (env-leading LiteRtCreateModelFrom*) as every other leg. Keep in sync.
+PREBUILT_SHA="89c838788bba9c2ec6bbefd52971daf39d8e2856"
 
-# ---- Headers: SDK litert/c/*.h + synthesized CPU-only build_config.h (same set as other legs) --
-sdk="$HERE/litert_cc_sdk"
+# ---- Headers: litert/c/*.h from $PREBUILT_SHA + synthesized CPU-only build_config.h (same ref as
+# the from-source build below, so headers and lib never skew — see stage.sh for the why) ---------
+sdk="$HERE/LiteRT-${PREBUILT_SHA}"
 if [ ! -d "$sdk/litert/c" ]; then
-  curl -fsSL "https://github.com/google-ai-edge/LiteRT/releases/download/v${VER}/litert_cc_sdk.zip" -o "$HERE/litert_cc_sdk.zip"
-  ( cd "$HERE" && cmake -E tar xf litert_cc_sdk.zip )
+  curl -fsSL "https://github.com/google-ai-edge/LiteRT/archive/${PREBUILT_SHA}.tar.gz" -o "$HERE/litert-src.tar.gz"
+  ( cd "$HERE" && cmake -E tar xzf litert-src.tar.gz )
 fi
 hdr="$HERE/ios_include"; rm -rf "$hdr"; mkdir -p "$hdr/litert/build_common"
 ( cd "$sdk" && find litert/c -name '*.h' | while IFS= read -r h; do mkdir -p "$hdr/$(dirname "$h")"; cp "$h" "$hdr/$h"; done )
@@ -41,7 +45,10 @@ EOF
 # ---- Source + host CC toolchain (configure.py), same setup as stage.sh -------------------------
 SRC="$HERE/litert-src"
 if [ ! -d "$SRC/.git" ]; then
-  git clone --depth 1 --branch "v${VER}" https://github.com/google-ai-edge/LiteRT "$SRC"
+  git init -q "$SRC"
+  git -C "$SRC" remote add origin https://github.com/google-ai-edge/LiteRT
+  git -C "$SRC" fetch -q --depth 1 origin "$PREBUILT_SHA"
+  git -C "$SRC" checkout -q --detach FETCH_HEAD
 fi
 # configure.py generates the host CC toolchain (else "@@local_config_cc//:toolchain ... cpu").
 export PYTHON_BIN_PATH="$(python3 -c 'import sys; print(sys.executable)')"
