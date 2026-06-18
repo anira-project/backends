@@ -122,6 +122,13 @@ case "$PLATFORM" in
   *) echo "ERROR: no from-source litert recipe for '$PLATFORM' (use a prebuilt leg)"; exit 1 ;;
 esac
 defines=(--define=litert_disable_gpu=true --define=litert_disable_npu=true)
+# Deliberately NOT adding //litert/c/options:litert_cpu_options here. It would give consumers the
+# Lrt*CpuOptions C API (e.g. LrtSetCpuOptionsNumThread) — but only on these from-source legs. The
+# prebuilt (download) legs use Google's published libLiteRt, which does not export those symbols and
+# can't be modified, so adding the dep would make Lrt* present on macOS-x86_64/static and absent on
+# macOS-arm64/linux/etc. — cross-leg symbol incoherence (anira would link on one Mac, fail on
+# another). Consumers set CPU threads via the hand-rolled "xnnpack" opaque-options payload instead;
+# the durable fix is upstream exporting cpu_options from the published prebuilt (google-ai-edge/LiteRT).
 # Debug legs (Windows static-debug): override LiteRT's .bazelrc `build -c opt` with dbg so the
 # objects link against the debug CRT (/MDd) — matching Debug consumers. -c is config-wide, so it
 # applies to the so_shim build, the per-label materialisation, and cquery alike.
