@@ -142,5 +142,28 @@ for d in include lib share bin; do
   [ -d "$OUT/$d" ] && cp -R "$OUT/$d" "$ST/"
 done
 
+# On Linux aarch64 libtorch_cpu.so is built against the Arm Compute Library and OpenBLAS
+# (BLAS=OpenBLAS), but build_libtorch.py only installs PyTorch's own libs into torch/lib/ —
+# the ACL .so lives in our ComputeLibrary/build/ and OpenBLAS is a system apt package. The
+# official manylinux aarch64 wheels bundle both into torch/lib/; the from-source tree does
+# not, so consumers hit `undefined reference to arm_compute::…` / `cblas_*` at link time.
+# Bundle them next to libtorch_cpu.so (and point its RPATH at $ORIGIN) so the package is
+# self-contained, matching the upstream layout.
+if [ "$PLATFORM" = "linux" ]; then
+  for acl in "$ACL_DIR/build/"libarm_compute*.so; do
+    [ -e "$acl" ] && cp -L "$acl" "$ST/lib/"
+  done
+  # Copy the actual OpenBLAS shared objects libtorch was linked against (follow symlinks).
+  while IFS= read -r blas; do
+    [ -e "$blas" ] && cp -L "$blas" "$ST/lib/"
+  done < <(ldconfig -p 2>/dev/null | sed -n 's/.* => //p' | grep -E '/libopenblas\.so' | sort -u)
+  # Pin RPATH=$ORIGIN on the bundled libs so libtorch_cpu.so finds its siblings at runtime.
+  if command -v patchelf >/dev/null 2>&1; then
+    for so in "$ST/lib/"*.so; do
+      [ -e "$so" ] && patchelf --set-rpath '$ORIGIN' "$so" 2>/dev/null || true
+    done
+  fi
+fi
+
 echo "built + staged -> $ST"
 ( cd "$ST" && find . -maxdepth 2 -type d | sort | sed 's/^/  /' )
