@@ -58,7 +58,13 @@ fi
 # on PYTHONPATH so `import executorch.codegen...` resolves WITHOUT building the wheel
 # (codegen is pure-python + yaml; no compiled extension needed just to generate op libs).
 python -m pip install --upgrade pip
-[ -f "$SRC/requirements-dev.txt" ]  && python -m pip install -r "$SRC/requirements-dev.txt"
+# requirements-dev.txt pins lintrunner (a Rust/maturin lint tool) which has no win-arm64
+# wheel and fails to build there; it's unused by the codegen, so strip it. Everything else
+# (cmake/pyyaml/zstd/certifi/...) the codegen + resolve_buck need stays.
+if [ -f "$SRC/requirements-dev.txt" ]; then
+  grep -viE 'lintrunner' "$SRC/requirements-dev.txt" > "$SRC/.et-build-reqs.txt"
+  python -m pip install -r "$SRC/.et-build-reqs.txt"
+fi
 python -m pip install pyyaml setuptools wheel
 export PYTHONPATH="$SRC${PYTHONPATH:+:$PYTHONPATH}"
 
@@ -85,8 +91,11 @@ if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "x86_64" ]; then
   # Env scoped to the subshell so PyTorch's BUILD_* / USE_* don't leak into ExecuTorch's
   # own cmake below. CMAKE_POLICY_VERSION_MINIMUM: old vendored protobuf needs the <3.5
   # policy floor under CMake 4.x. USE_NATIVE_ARCH=0: avoid Apple-Clang-rejected -mavx512fp16.
+  # PYTHONPATH="": drop the ExecuTorch source root we exported above — it also has a top-level
+  # `tools/` package that otherwise shadows PyTorch's, breaking `import tools.build_pytorch_libs`.
   ( cd "$PT" \
-    && CMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    && PYTHONPATH="" \
+       CMAKE_POLICY_VERSION_MINIMUM=3.5 \
        USE_CUDA=0 USE_ROCM=0 USE_DISTRIBUTED=0 USE_MPS=0 \
        BUILD_TEST=0 BUILD_PYTHON=0 BUILD_SHARED_LIBS=1 \
        USE_MKLDNN=1 USE_NATIVE_ARCH=0 \
@@ -132,10 +141,14 @@ ET_FLAGS=(
 
 case "$PLATFORM" in
   macos)
-    export MACOSX_DEPLOYMENT_TARGET=12.0   # CoreML state APIs / std::filesystem floor
+    # MLX (backends/mlx/CMakeLists.txt) hard-requires a >=14.0 deployment target; CoreML
+    # and the CPU path are fine at 12.0. So arm64 (MLX built in) floors at 14.0 and Intel
+    # (no MLX) stays at 12.0. NOTE: the arm64 package therefore requires macOS 14+.
+    if [ "$ARCH" = "arm64" ]; then MACVER=14.0; else MACVER=12.0; fi
+    export MACOSX_DEPLOYMENT_TARGET="$MACVER"
     ET_FLAGS+=(
       -DCMAKE_OSX_ARCHITECTURES="$ARCH"
-      -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACVER"
       # Apple delegates — built in so the ANE/GPU path is ready WITHOUT a rebuild. anira
       # stays on CPU for now; these just have to be present in the package.
       -DEXECUTORCH_BUILD_COREML=ON          # ANE/GPU; embeds the CoreML model in the .pte
