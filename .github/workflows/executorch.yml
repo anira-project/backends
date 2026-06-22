@@ -1,0 +1,70 @@
+name: executorch
+
+# Thin wrapper: derive version + release flag + matrix (engine-meta, from CMakePresets
+# vendor.anira), then hand off to the shared _build-backend.yml pipeline. CPU-first STATIC
+# only, built from source on every desktop leg (PyTorch ships no prebuilt desktop C++ runtime
+# to repackage). Consumed via find_package(executorch CONFIG), so archives preserve the full
+# package tree (include/ lib/ lib/cmake/ExecuTorch/).
+#
+# Triggers:
+#   - push/PR touching executorch sources or shared CI -> validate only (no release)
+#   - tag v<anira-version> (e.g. v2.0.3) -> build at its VERSION, publish to that release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'engines/executorch/**'
+      - 'scripts/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - '.github/actions/**'
+      - '.github/workflows/executorch.yml'
+      - '.github/workflows/_build-backend.yml'
+    tags:
+      - 'v[0-9]*'
+  pull_request:
+    paths:
+      - 'engines/executorch/**'
+      - 'scripts/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - '.github/actions/**'
+      - '.github/workflows/executorch.yml'
+      - '.github/workflows/_build-backend.yml'
+
+concurrency:
+  group: executorch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.m.outputs.version }}
+      release: ${{ steps.m.outputs.release }}
+      release_tag: ${{ steps.m.outputs.release_tag }}
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: m
+        uses: ./.github/actions/engine-meta
+        with:
+          preset_prefix: executorch
+          version_file: engines/executorch/VERSION
+
+  build:
+    needs: meta
+    uses: ./.github/workflows/_build-backend.yml
+    with:
+      engine: executorch
+      libname: executorch
+      version: ${{ needs.meta.outputs.version }}
+      release: ${{ needs.meta.outputs.release == 'true' }}
+      release_tag: ${{ needs.meta.outputs.release_tag }}
+      matrix: ${{ needs.meta.outputs.matrix }}
+      package_dirs: "include lib"
+      macos_universal_kinds: '["static"]'
+    secrets: inherit
