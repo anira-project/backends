@@ -108,6 +108,13 @@ if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "x86_64" ]; then
        python tools/build_libtorch.py )
   [ -d "$PT/torch/include" ] || \
     { echo "ERROR: pytorch source build produced no torch/include headers under $PT"; exit 1; }
+  # ExecuTorch's kernel codegen imports torchgen and reads torchgen/packaged/ATen/native/
+  # {native_functions,tags}.yaml. That dir is populated by PyTorch's setup.py packaging (a
+  # plain copy from aten/src/ATen/native/), which build_libtorch.py (BUILD_PYTHON=0) skips —
+  # so replicate the copy. Without it codegen dies with FileNotFoundError on native_functions.yaml.
+  mkdir -p "$PT/torchgen/packaged/ATen/native"
+  cp "$PT/aten/src/ATen/native/native_functions.yaml" "$PT/torchgen/packaged/ATen/native/"
+  cp "$PT/aten/src/ATen/native/tags.yaml"             "$PT/torchgen/packaged/ATen/native/"
   export PYTHONPATH="$PT${PYTHONPATH:+:$PYTHONPATH}"
 else
   python -m pip install "torch==${TORCH_PIN}" \
@@ -178,6 +185,12 @@ case "$PLATFORM" in
     # no rule producing it ("missing and no known rule to make it"). Add the .exe byproduct.
     # Idempotent: the regex won't re-match a line already ending in flatc.exe (cached source).
     sed -i 's|\(<INSTALL_DIR>/bin/flatc\)$|\1.exe|' "$SRC/third-party/CMakeLists.txt"
+    # Many kernel/config CMakeLists set `_common_compile_options -Wno-deprecated-declarations`,
+    # a GCC/Clang flag MSVC rejects (cl: D8021 invalid numeric argument). /wd4996 is the MSVC
+    # equivalent (already used elsewhere). Swap it tree-wide so every target builds under cl.
+    # Idempotent: once replaced there's no `-Wno-...` left to match (survives the cached source).
+    find "$SRC" -name CMakeLists.txt -print0 \
+      | xargs -0 sed -i 's|-Wno-deprecated-declarations|/wd4996|g'
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
