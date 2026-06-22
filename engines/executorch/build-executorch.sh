@@ -172,6 +172,12 @@ case "$PLATFORM" in
     # kernels (ExecuTorch warns those need -T ClangCL on MSVC); core + XNNPACK + optimized
     # kernels build fine with cl. Same Vulkan TODO as Linux applies.
     export CMAKE_GENERATOR=Ninja
+    # Upstream bug (third-party/CMakeLists.txt): flatbuffers_ep declares its byproduct as
+    # `<INSTALL_DIR>/bin/flatc` (no extension), but the imported flatc target's Windows
+    # location is `flatc.exe`. Under Ninja the schema codegen then depends on flatc.exe with
+    # no rule producing it ("missing and no known rule to make it"). Add the .exe byproduct.
+    # Idempotent: the regex won't re-match a line already ending in flatc.exe (cached source).
+    sed -i 's|\(<INSTALL_DIR>/bin/flatc\)$|\1.exe|' "$SRC/third-party/CMakeLists.txt"
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
