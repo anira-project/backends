@@ -11,9 +11,10 @@ emsdk-cache-*/
 # onnxruntime build
 engines/onnxruntime/onnxruntime-src/
 
-# executorch from-source clone (recursive submodules — large). Must be named exactly
-# `executorch` — upstream CMake rejects any other dir name (issue 6475).
-engines/executorch/executorch/
+# executorch from-source clone (recursive submodules — large). Leaf must be named exactly
+# `executorch` (upstream issue 6475); nested under src/ so the engine's VERSION file isn't
+# on the include path (case-insensitive clash with C++20 <version>).
+engines/executorch/src/
 # pytorch source built on Intel mac only, to generate torch headers (no x86_64 wheel)
 engines/executorch/pytorch-src/
 

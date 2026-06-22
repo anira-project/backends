@@ -40,9 +40,14 @@ VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 # the 260-char MAX_PATH limit; enable git long-path support. No-op on macOS/Linux.
 [ "$PLATFORM" = "windows" ] && git config --global core.longpaths true
 
-# ExecuTorch's CMakeLists.txt refuses to configure unless its source tree is named
-# exactly `executorch` (upstream issue 6475); so NOT `executorch-src` like onnxruntime.
-SRC="$HERE/executorch"
+# ExecuTorch's CMakeLists.txt refuses to configure unless its source tree is named exactly
+# `executorch` (upstream issue 6475). It also puts the source tree's PARENT on the compiler
+# include path (so `#include <executorch/...>` resolves), so that parent must NOT contain a
+# file that case-insensitively matches a stdlib header — our engine dir has a `VERSION` file,
+# which on macOS/Windows collides with `#include <version>` (C++20). Nest the clone under a
+# clean `src/` dir: leaf stays `executorch`, and the parent (src/) holds nothing else.
+SRC="$HERE/src/executorch"
+mkdir -p "$HERE/src"
 if [ ! -d "$SRC/.git" ]; then
   git clone --depth 1 --recurse-submodules --shallow-submodules \
     --branch "v${VER}" https://github.com/pytorch/executorch "$SRC"
