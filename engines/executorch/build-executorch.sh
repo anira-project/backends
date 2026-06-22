@@ -62,6 +62,44 @@ python -m pip install --upgrade pip
 python -m pip install pyyaml setuptools wheel
 export PYTHONPATH="$SRC${PYTHONPATH:+:$PYTHONPATH}"
 
+# ExecuTorch's configure resolves ATen headers from an INSTALLED `torch` (EXECUTORCH_
+# BUILD_KERNELS_OPTIMIZED -> CMakeLists.txt:602 find_package_torch_headers ->
+# tools/cmake/Utils.cmake get_torch_base_path, which runs find_spec('torch') and reads
+# <torch>/include). We never LINK libtorch — only its C++ headers are needed at build time.
+# ExecuTorch v1.3.1 pins torch==2.12.0 (install_requirements.py).
+TORCH_PIN="2.12.0"
+if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "x86_64" ]; then
+  # PyTorch ships no x86_64-macOS wheel since 2.3.0, so build libtorch from source on the
+  # macos-15-intel runner exactly like engines/libtorch/build-libtorch.sh — but only to
+  # GENERATE torch/include. find_spec('torch') merely LOCATES the package (never imports
+  # its _C extension), so the pytorch source root on PYTHONPATH is enough: it resolves to
+  # <pytorch>/torch, whose include/ build_libtorch.py has populated with the ATen headers.
+  PT="$HERE/pytorch-src"
+  if [ ! -d "$PT/.git" ]; then
+    git clone --depth 1 --recurse-submodules --shallow-submodules \
+      --branch "v${TORCH_PIN}" https://github.com/pytorch/pytorch "$PT"
+  fi
+  [ -f "$PT/requirements-build.txt" ] && python -m pip install -r "$PT/requirements-build.txt"
+  python -m pip install pyyaml typing_extensions setuptools numpy
+  rm -f "$PT/build/CMakeCache.txt"   # sticky cache vars from a prior config (see build-libtorch.sh)
+  # Env scoped to the subshell so PyTorch's BUILD_* / USE_* don't leak into ExecuTorch's
+  # own cmake below. CMAKE_POLICY_VERSION_MINIMUM: old vendored protobuf needs the <3.5
+  # policy floor under CMake 4.x. USE_NATIVE_ARCH=0: avoid Apple-Clang-rejected -mavx512fp16.
+  ( cd "$PT" \
+    && CMAKE_POLICY_VERSION_MINIMUM=3.5 \
+       USE_CUDA=0 USE_ROCM=0 USE_DISTRIBUTED=0 USE_MPS=0 \
+       BUILD_TEST=0 BUILD_PYTHON=0 BUILD_SHARED_LIBS=1 \
+       USE_MKLDNN=1 USE_NATIVE_ARCH=0 \
+       CMAKE_OSX_ARCHITECTURES=x86_64 MACOSX_DEPLOYMENT_TARGET=12.0 \
+       python tools/build_libtorch.py )
+  [ -d "$PT/torch/include" ] || \
+    { echo "ERROR: pytorch source build produced no torch/include headers under $PT"; exit 1; }
+  export PYTHONPATH="$PT${PYTHONPATH:+:$PYTHONPATH}"
+else
+  python -m pip install "torch==${TORCH_PIN}" \
+    --extra-index-url https://download.pytorch.org/whl/test/cpu
+fi
+
 INSTALL="$SRC/cmake-out-install"
 BUILD="$SRC/cmake-out"
 rm -rf "$INSTALL"

@@ -14,6 +14,8 @@ engines/onnxruntime/onnxruntime-src/
 # executorch from-source clone (recursive submodules — large). Must be named exactly
 # `executorch` — upstream CMake rejects any other dir name (issue 6475).
 engines/executorch/executorch/
+# pytorch source built on Intel mac only, to generate torch headers (no x86_64 wheel)
+engines/executorch/pytorch-src/
 
 # litert stage.sh header-source scratch (fetched per-mode: SDK zip for build, repo tarball for prebuilt)
 engines/litert/litert_cc_sdk/
