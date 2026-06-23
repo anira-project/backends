@@ -191,6 +191,12 @@ case "$PLATFORM" in
     # Idempotent: once replaced there's no `-Wno-...` left to match (survives the cached source).
     find "$SRC" -name CMakeLists.txt -print0 \
       | xargs -0 sed -i 's|-Wno-deprecated-declarations|/wd4996|g'
+    # Kernel ops use the idiom `constexpr auto name = "...";` at block scope. MSVC rejects a
+    # block-scope constexpr pointer bound to a string literal's address (C2131: expression did
+    # not evaluate to a constant). `name` is only used as a runtime error string by the
+    # ET_SWITCH macros, so a plain const pointer is equivalent. Patch tree-wide. Idempotent.
+    grep -rlZ 'constexpr auto name =' "$SRC" 2>/dev/null \
+      | xargs -0 --no-run-if-empty sed -i 's|constexpr auto name =|const char* const name =|g'
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
@@ -200,9 +206,24 @@ esac
 # rebuild incremental). No-op on a cold build. Mirrors build-libtorch.sh.
 rm -f "$BUILD/CMakeCache.txt"
 
-echo "== building ExecuTorch ${VER} for ${PLATFORM}/${ARCH} (static, CPU + XNNPACK${EXECUTORCH_BUILD_MLX:+ +MLX}) =="
+# Cap build parallelism by available RAM. At unlimited -j the optimized-kernel TUs (each
+# pulling heavy ATen headers) use multiple GB apiece and OOM-kill the smaller runners — the
+# macOS-arm64 and Linux legs died with "hosted runner lost communication ... starves it for
+# CPU/Memory". Budget ~3 GB/job, floor 2, ceil core count. Big runners (intel-mac) still get
+# full width; small ones (~7-16 GB) stay alive.
+ncores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
+if sysctl -n hw.memsize >/dev/null 2>&1; then
+  memgb=$(( $(sysctl -n hw.memsize) / 1073741824 ))                                   # macOS
+else
+  memgb=$(( $(getconf _PHYS_PAGES 2>/dev/null || echo 0) * $(getconf PAGE_SIZE 2>/dev/null || echo 4096) / 1073741824 ))  # linux
+fi
+[ "${memgb:-0}" -lt 1 ] && memgb=8                       # unknown (e.g. git-bash) -> assume 8
+BUILD_JOBS=$(( memgb / 3 )); [ "$BUILD_JOBS" -lt 2 ] && BUILD_JOBS=2
+[ "$BUILD_JOBS" -gt "$ncores" ] && BUILD_JOBS=$ncores
+
+echo "== building ExecuTorch ${VER} for ${PLATFORM}/${ARCH} (static, CPU + XNNPACK${EXECUTORCH_BUILD_MLX:+ +MLX}); -j ${BUILD_JOBS} (cores=${ncores} mem=${memgb}GB) =="
 cmake -S "$SRC" -B "$BUILD" "${ET_FLAGS[@]}"
-cmake --build "$BUILD" -j --target install
+cmake --build "$BUILD" -j "$BUILD_JOBS" --target install
 
 # The install tree must carry the CMake package (lib/cmake/ExecuTorch/executorch-config.cmake
 # + ExecuTorchTargets.cmake) — that is what find_package(executorch CONFIG) resolves.
