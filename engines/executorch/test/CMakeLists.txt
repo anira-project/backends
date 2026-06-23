@@ -9,7 +9,23 @@ project(executorch_smoke LANGUAGES CXX)
 find_package(executorch CONFIG REQUIRED)
 
 add_executable(smoke smoke.cpp)
-target_link_libraries(smoke PRIVATE ${EXECUTORCH_LIBRARIES})
+
+# ExecuTorch ships several op-REGISTRATION libs that each register the same aten ops
+# (portable_ops_lib, optimized_ops_lib, optimized_portable_ops_lib, optimized_native_cpu_ops_lib).
+# Force-loading more than one double-registers operators and the registry aborts in a static
+# initializer before main(). Link only the merged optimized_native_cpu_ops_lib (optimized +
+# portable fallback, the lib neural_tilde uses) plus quantized_ops_lib (disjoint namespace);
+# drop the redundant registration libs. This is the same curation anira must do as a consumer.
+set(_et_libs ${EXECUTORCH_LIBRARIES})
+list(REMOVE_ITEM _et_libs portable_ops_lib optimized_ops_lib optimized_portable_ops_lib)
+# MLX delegate: libmlxdelegate.a references mlx::core from libmlx, which the config exposes as a
+# (non-force-loaded) imported `mlx` target but does NOT add to EXECUTORCH_LIBRARIES. Link it
+# explicitly, after the delegate, so the mlx::core symbols resolve (macOS arm64 only).
+if(TARGET mlx)
+  list(APPEND _et_libs mlx)
+endif()
+
+target_link_libraries(smoke PRIVATE ${_et_libs})
 target_include_directories(smoke PRIVATE ${EXECUTORCH_INCLUDE_DIRS})
 target_compile_features(smoke PRIVATE cxx_std_17)
 

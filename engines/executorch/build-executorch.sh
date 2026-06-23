@@ -121,8 +121,12 @@ else
     --extra-index-url https://download.pytorch.org/whl/test/cpu
 fi
 
-INSTALL="$SRC/cmake-out-install"
-BUILD="$SRC/cmake-out"
+# Per-target build/install dirs: the iOS device + simulator slices run in the SAME job
+# (ios.sh builds both), so they must not share one cmake-out, and a tag suffix also keeps
+# desktop reconfigure clean across cached source.
+_tag="${PLATFORM}-${ARCH}"
+INSTALL="$SRC/cmake-out-install-$_tag"
+BUILD="$SRC/cmake-out-$_tag"
 rm -rf "$INSTALL"
 
 # --- Common config: static runtime, full CPU op set + XNNPACK, no runner/pybind/tests ---
@@ -207,6 +211,32 @@ case "$PLATFORM" in
     # `static constexpr auto name =`. Idempotent (already-correct form maps to itself).
     grep -rlZ -E '(static )?(const char\* const|constexpr auto) name =' "$SRC" 2>/dev/null \
       | xargs -0 --no-run-if-empty sed -E -i 's#(static )?(const char\* const|constexpr auto) name =#static constexpr auto name =#g'
+    ;;
+  android)
+    # NDK cross-compile; ARCH is the ABI (arm64-v8a | x86_64). CPU-only: XNNPACK + optimized/
+    # portable/quantized kernels, no Apple delegates. Host torch wheel (linux x86_64) supplies
+    # the ATen headers — fine for cross-compile (headers are arch-independent). Vulkan TODO as
+    # on Linux. NDK provided by setup-toolchain (toolchain: android -> ANDROID_NDK_HOME).
+    : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME not set (needs toolchain: android)}"
+    ET_FLAGS+=(
+      -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake"
+      -DANDROID_ABI="$ARCH"
+      -DANDROID_PLATFORM=android-27
+    )
+    ;;
+  ios|ios-sim)
+    # iOS device (OS64) / simulator (SIMULATORARM64), arm64 only, via ExecuTorch's vendored
+    # ios-cmake toolchain. CoreML delegate (iOS GPU/ANE) + XNNPACK + optimized kernels; no MLX
+    # (Apple-Silicon-Mac only). Called once per slice by ios.sh, which lipos them into an
+    # .xcframework. Host (macos arm64) torch wheel supplies ATen headers for the cross-build.
+    if [ "$PLATFORM" = "ios" ]; then IOS_PLATFORM=OS64; else IOS_PLATFORM=SIMULATORARM64; fi
+    export CMAKE_GENERATOR=Ninja
+    ET_FLAGS+=(
+      -DCMAKE_TOOLCHAIN_FILE="$SRC/third-party/ios-cmake/ios.toolchain.cmake"
+      -DPLATFORM="$IOS_PLATFORM"
+      -DDEPLOYMENT_TARGET=17.0
+      -DEXECUTORCH_BUILD_COREML=ON
+    )
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac

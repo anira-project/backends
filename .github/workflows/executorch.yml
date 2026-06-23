@@ -67,4 +67,8 @@ jobs:
       matrix: ${{ needs.meta.outputs.matrix }}
       package_dirs: "include lib"
       macos_universal_kinds: '["static"]'
+      # Mobile: per-ABI Android static legs combine into one multi-ABI archive; iOS builds a
+      # static .xcframework (device + simulator arm64) via engines/executorch/ios.sh.
+      android_bundle_kinds: '["static"]'
+      has_ios: true
     secrets: inherit
