@@ -295,11 +295,16 @@ done
 #      form ExecuTorch already uses for the correctly-installed targets.
 etc="$ST/lib/cmake/ExecuTorch"
 if [ -d "$etc" ]; then
-  grep -rhoE "$BUILD/lib/lib[A-Za-z0-9_]+\.a" "$etc" 2>/dev/null | sort -u | while IFS= read -r f; do
-    [ -f "$f" ] && cp -f "$f" "$ST/lib/" && echo "relocated build-tree lib into package: $(basename "$f")"
+  # Match by the `cmake-out` build-dir marker rather than $BUILD: path-format agnostic (handles
+  # both the macOS/Linux abs path and the Windows D:/ path the cmake file actually contains) and
+  # both lib naming schemes (Unix lib*.a, Windows *.lib). `|| true` everywhere: grep exits 1 on
+  # no-match (Windows had no .a) and pipefail+set -e would otherwise abort the whole build here.
+  reloc_re='[^";]*cmake-out[^";]*/((lib)?[A-Za-z0-9_]+\.(a|lib))'
+  ( grep -rhoE "$reloc_re" "$etc" 2>/dev/null | sort -u || true ) | while IFS= read -r f; do
+    [ -n "$f" ] && [ -f "$f" ] && cp -f "$f" "$ST/lib/" && echo "relocated build-tree lib into package: $(basename "$f")"
   done
-  sed -i.bak -E "s#$BUILD/lib/(lib[A-Za-z0-9_]+\.a)#\${_IMPORT_PREFIX}/lib/\1#g" "$etc"/*.cmake
-  rm -f "$etc"/*.bak
+  sed -i.bak -E "s#${reloc_re}#\${_IMPORT_PREFIX}/lib/\1#g" "$etc"/*.cmake 2>/dev/null || true
+  rm -f "$etc"/*.bak 2>/dev/null || true
 fi
 
 # MLX delegate: the mlxdelegate static lib references mlx::core::* from libmlx, which MLX's
