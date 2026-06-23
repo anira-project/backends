@@ -275,6 +275,24 @@ for d in include lib; do
   [ -d "$INSTALL/$d" ] && cp -R "$INSTALL/$d" "$ST/"
 done
 
+# Make the package RELOCATABLE. ExecuTorch 1.3.1 has an install bug where a few targets (e.g.
+# extension_evalue_util) install their .a into the BUILD dir instead of the install prefix, so
+# ExecuTorchTargets.cmake bakes an absolute build-tree path. find_package then works only on the
+# original build runner (why the per-arch smokes pass in-job) and fails everywhere else — the
+# macOS-universal job AND anira on any other machine (ExecuTorchTargets.cmake validates that every
+# imported target's file exists). Fix in two steps so the staged tree is self-contained:
+#   1) copy any .a the CMake package references straight from the build tree into lib/
+#   2) rewrite absolute build-tree paths to ${_IMPORT_PREFIX}/lib/<name> — the same relocatable
+#      form ExecuTorch already uses for the correctly-installed targets.
+etc="$ST/lib/cmake/ExecuTorch"
+if [ -d "$etc" ]; then
+  grep -rhoE "$BUILD/lib/lib[A-Za-z0-9_]+\.a" "$etc" 2>/dev/null | sort -u | while IFS= read -r f; do
+    [ -f "$f" ] && cp -f "$f" "$ST/lib/" && echo "relocated build-tree lib into package: $(basename "$f")"
+  done
+  sed -i.bak -E "s#$BUILD/lib/(lib[A-Za-z0-9_]+\.a)#\${_IMPORT_PREFIX}/lib/\1#g" "$etc"/*.cmake
+  rm -f "$etc"/*.bak
+fi
+
 # MLX delegate: the mlxdelegate static lib references mlx::core::* from libmlx, which MLX's
 # CMake builds as a sub-dependency but does NOT install into our prefix. executorch-config.cmake
 # does find_library(mlx HINTS <root>/lib), so without libmlx in lib/ the `mlx` target is never
