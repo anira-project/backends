@@ -237,6 +237,15 @@ case "$PLATFORM" in
       -DDEPLOYMENT_TARGET=17.0
       -DEXECUTORCH_BUILD_COREML=ON
     )
+    # The flatc/flatcc host tools build for the runner's macOS (ExecuTorch unsets their
+    # toolchain + sysroot), but it still forwards our iOS DEPLOYMENT_TARGET to them as
+    # CMAKE_OSX_DEPLOYMENT_TARGET -> the host compiler gets -mmacosx-version-min=17.0, a macOS
+    # version that doesn't exist, and the compiler check fails ("broken compiler"). Empty that
+    # forwarding in the host-tool ExternalProjects so they use the runner's default macOS.
+    # Idempotent: after the rewrite there's no ":STRING=" left to match (survives cached source).
+    sed -i.bak -E 's#-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=.*#-DCMAKE_OSX_DEPLOYMENT_TARGET=#' \
+      "$SRC/third-party/CMakeLists.txt"
+    rm -f "$SRC/third-party/CMakeLists.txt.bak"
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
