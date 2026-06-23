@@ -37,16 +37,27 @@ static int fail(const char* msg) {
 using executorch::extension::Module;
 using executorch::extension::make_tensor_ptr;
 
+// Checkpoints to stderr (flushed) so we can localize an ExecuTorch ET_CHECK/abort even when
+// the runtime is built with logging compiled out (the abort otherwise produces no output).
+#define CK(msg) do { std::fprintf(stderr, "[smoke] " msg "\n"); std::fflush(stderr); } while (0)
+
 int main() {
+    CK("start");
     executorch::runtime::runtime_init();
+    CK("runtime_init ok");
 
     Module module(SMOKE_PTE);
-    if (module.load() != executorch::runtime::Error::Ok) return fail("could not load add.pte");
+    CK("module constructed");
+    const auto load_err = module.load();
+    CK("module.load returned");
+    if (load_err != executorch::runtime::Error::Ok) return fail("could not load add.pte");
 
     auto a = make_tensor_ptr({3}, std::vector<float>{1.0f, 2.0f, 3.0f});
     auto b = make_tensor_ptr({3}, std::vector<float>{2.0f, 3.0f, 4.0f});
+    CK("inputs built; calling forward");
 
     auto result = module.forward({a, b});
+    CK("forward returned");
     if (!result.ok()) return fail("forward() failed");
 
     const auto out = result->at(0).toTensor();

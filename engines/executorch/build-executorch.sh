@@ -245,10 +245,20 @@ for d in include lib; do
   [ -d "$INSTALL/$d" ] && cp -R "$INSTALL/$d" "$ST/"
 done
 
-# MLX delegate ships compiled Metal kernels as a sidecar mlx.metallib that the runtime
-# loads at execute() time; the install tree may leave it in the build dir, so make sure a
-# copy sits next to the libs. (No-op when MLX wasn't built.)
+# MLX delegate: the mlxdelegate static lib references mlx::core::* from libmlx, which MLX's
+# CMake builds as a sub-dependency but does NOT install into our prefix. executorch-config.cmake
+# does find_library(mlx HINTS <root>/lib), so without libmlx in lib/ the `mlx` target is never
+# created and consumers (smoke, anira) fail to link with undefined mlx::core symbols. Bundle
+# libmlx.a from the build tree into lib/. Also bundle the sidecar mlx.metallib (compiled Metal
+# kernels the delegate loads at execute() time). (No-op when MLX wasn't built.)
 if [ "${EXECUTORCH_BUILD_MLX:-}" = "ON" ]; then
+  mlxlib="$(find "$BUILD" "$INSTALL" -name 'libmlx.a' -type f 2>/dev/null | head -1)"
+  if [ -n "$mlxlib" ]; then
+    cp -f "$mlxlib" "$ST/lib/"
+    echo "bundled MLX core lib: $mlxlib -> $ST/lib/"
+  else
+    echo "WARN: MLX enabled but libmlx.a not found in build tree — consumers will fail to link mlx::core"
+  fi
   found=""
   for mlib in "$INSTALL"/lib/*.metallib "$BUILD"/**/*.metallib "$BUILD"/*.metallib; do
     [ -e "$mlib" ] || continue
