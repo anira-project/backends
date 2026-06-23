@@ -179,6 +179,15 @@ case "$PLATFORM" in
     # kernels (ExecuTorch warns those need -T ClangCL on MSVC); core + XNNPACK + optimized
     # kernels build fine with cl. Same Vulkan TODO as Linux applies.
     export CMAKE_GENERATOR=Ninja
+    # win-arm64: XNNPACK keeps its ARM FP16/BF16 micro-kernels on for any arm64 target, but
+    # those .c files #include <arm_fp16.h>, a Clang/GCC-ARM header MSVC's arm64 cl lacks
+    # (fatal C1083). Disable them explicitly (-D overrides XNNPACK's OPTION default); fp16
+    # ops fall back to fp32 paths. CPU-first anira doesn't need fp16-accelerated kernels here.
+    [ "$ARCH" = "arm64" ] && ET_FLAGS+=(
+      -DXNNPACK_ENABLE_ARM_FP16_VECTOR=OFF
+      -DXNNPACK_ENABLE_ARM_FP16_SCALAR=OFF
+      -DXNNPACK_ENABLE_ARM_BF16=OFF
+    )
     # Upstream bug (third-party/CMakeLists.txt): flatbuffers_ep declares its byproduct as
     # `<INSTALL_DIR>/bin/flatc` (no extension), but the imported flatc target's Windows
     # location is `flatc.exe`. Under Ninja the schema codegen then depends on flatc.exe with
@@ -191,12 +200,13 @@ case "$PLATFORM" in
     # Idempotent: once replaced there's no `-Wno-...` left to match (survives the cached source).
     find "$SRC" -name CMakeLists.txt -print0 \
       | xargs -0 sed -i 's|-Wno-deprecated-declarations|/wd4996|g'
-    # Kernel ops use the idiom `constexpr auto name = "...";` at block scope. MSVC rejects a
-    # block-scope constexpr pointer bound to a string literal's address (C2131: expression did
-    # not evaluate to a constant). `name` is only used as a runtime error string by the
-    # ET_SWITCH macros, so a plain const pointer is equivalent. Patch tree-wide. Idempotent.
-    grep -rlZ 'constexpr auto name =' "$SRC" 2>/dev/null \
-      | xargs -0 --no-run-if-empty sed -i 's|constexpr auto name =|const char* const name =|g'
+    # Kernel ops declare `name` for ET_SWITCH error strings — but some macros also pass it as a
+    # template non-type arg (&name), which on MSVC requires STATIC STORAGE + constexpr or it's
+    # "not usable in constant expressions" (C2131). Block-scope `constexpr auto name` (no static)
+    # fails that, and a plain `const char*` fails it too. Normalize every variant tree-wide to
+    # `static constexpr auto name =`. Idempotent (already-correct form maps to itself).
+    grep -rlZ -E '(static )?(const char\* const|constexpr auto) name =' "$SRC" 2>/dev/null \
+      | xargs -0 --no-run-if-empty sed -E -i 's#(static )?(const char\* const|constexpr auto) name =#static constexpr auto name =#g'
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac

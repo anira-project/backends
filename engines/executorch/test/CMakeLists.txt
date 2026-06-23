@@ -13,27 +13,34 @@ target_link_libraries(smoke PRIVATE ${EXECUTORCH_LIBRARIES})
 target_include_directories(smoke PRIVATE ${EXECUTORCH_INCLUDE_DIRS})
 target_compile_features(smoke PRIVATE cxx_std_17)
 
-# Try to export a real add.pte with the pinned ExecuTorch wheel. If the wheel/torch aren't
-# importable on this runner (e.g. a platform with no ExecuTorch pip wheel), fall back to the
-# link + runtime-init smoke — the model-load path then isn't exercised, but the package is
-# still proven complete + consumable. Mirrors the repo's link-only gates (WASM/Android).
-find_package(Python3 COMPONENTS Interpreter)
-set(_pte "${CMAKE_CURRENT_BINARY_DIR}/add.pte")
-if(Python3_FOUND)
-  execute_process(
-    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/export_add.py" "${_pte}"
-    RESULT_VARIABLE _export_rc
-    OUTPUT_VARIABLE _export_out
-    ERROR_VARIABLE  _export_err)
-  if(_export_rc EQUAL 0 AND EXISTS "${_pte}")
-    target_compile_definitions(smoke PRIVATE SMOKE_PTE="${_pte}")
-    message(STATUS "executorch smoke: exported add.pte -> real model load+run smoke")
-  else()
-    message(STATUS "executorch smoke: add.pte export unavailable -> link + runtime-init smoke")
-    message(STATUS "  (export_add.py said: ${_export_err})")
-  endif()
+# A real add.pte (a+b -> {3,5,7}) is committed next to this file, exported once with the
+# pinned ExecuTorch wheel (export_add.py — see its header). Using it makes EVERY leg do a
+# real model load+run with no ExecuTorch/torch wheel needed at CI time, and no fragile
+# fallback. Must be regenerated if VERSION changes (the .pte format is tied to the runtime
+# version). If it's somehow absent, try exporting on the fly; else a link + runtime-init smoke.
+set(_pte "")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/add.pte")
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/add.pte" "${CMAKE_CURRENT_BINARY_DIR}/add.pte" COPYONLY)
+  set(_pte "${CMAKE_CURRENT_BINARY_DIR}/add.pte")
+  message(STATUS "executorch smoke: committed add.pte -> real model load+run smoke")
 else()
-  message(STATUS "executorch smoke: no Python3 -> link + runtime-init smoke")
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_FOUND)
+    execute_process(
+      COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/export_add.py" "${CMAKE_CURRENT_BINARY_DIR}/add.pte"
+      RESULT_VARIABLE _export_rc ERROR_VARIABLE _export_err)
+    if(_export_rc EQUAL 0 AND EXISTS "${CMAKE_CURRENT_BINARY_DIR}/add.pte")
+      set(_pte "${CMAKE_CURRENT_BINARY_DIR}/add.pte")
+      message(STATUS "executorch smoke: exported add.pte -> real model load+run smoke")
+    else()
+      message(STATUS "executorch smoke: add.pte unavailable -> link + runtime-init smoke (${_export_err})")
+    endif()
+  else()
+    message(STATUS "executorch smoke: no add.pte, no Python3 -> link + runtime-init smoke")
+  endif()
+endif()
+if(_pte)
+  target_compile_definitions(smoke PRIVATE SMOKE_PTE="${_pte}")
 endif()
 
 # Run via ctest like the other engines so the shared smoke action stays engine-agnostic.
