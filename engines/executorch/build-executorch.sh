@@ -246,6 +246,15 @@ esac
 # rebuild incremental). No-op on a cold build. Mirrors build-libtorch.sh.
 rm -f "$BUILD/CMakeCache.txt"
 
+# The flatc/flatcc host-tool ExternalProjects don't survive an incremental rebuild from a
+# RESTORED build-tree cache: their libs link, then a step fails silently ("subcommand failed",
+# no error) — both Windows legs hit this deterministically off the cache. They install outputs
+# back into the source tree (third-party/flatcc/{lib,bin}), so a cached copy collides on
+# reinstall. Wipe their build state + in-source outputs so they rebuild clean each run; both
+# are tiny, so the cost is negligible.
+rm -rf "$BUILD/third-party/flatc_ep" "$BUILD/third-party/flatcc_ep" \
+       "$SRC/third-party/flatcc/lib" "$SRC/third-party/flatcc/bin" 2>/dev/null || true
+
 # Cap build parallelism by available RAM. At unlimited -j the optimized-kernel TUs (each
 # pulling heavy ATen headers) use multiple GB apiece and OOM-kill the smaller runners — the
 # macOS-arm64 and Linux legs died with "hosted runner lost communication ... starves it for
