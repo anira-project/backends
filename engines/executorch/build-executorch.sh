@@ -224,29 +224,10 @@ case "$PLATFORM" in
       -DANDROID_PLATFORM=android-27
     )
     ;;
-  ios|ios-sim)
-    # iOS device (OS64) / simulator (SIMULATORARM64), arm64 only, via ExecuTorch's vendored
-    # ios-cmake toolchain. CoreML delegate (iOS GPU/ANE) + XNNPACK + optimized kernels; no MLX
-    # (Apple-Silicon-Mac only). Called once per slice by ios.sh, which lipos them into an
-    # .xcframework. Host (macos arm64) torch wheel supplies ATen headers for the cross-build.
-    if [ "$PLATFORM" = "ios" ]; then IOS_PLATFORM=OS64; else IOS_PLATFORM=SIMULATORARM64; fi
-    export CMAKE_GENERATOR=Ninja
-    ET_FLAGS+=(
-      -DCMAKE_TOOLCHAIN_FILE="$SRC/third-party/ios-cmake/ios.toolchain.cmake"
-      -DPLATFORM="$IOS_PLATFORM"
-      -DDEPLOYMENT_TARGET=17.0
-      -DEXECUTORCH_BUILD_COREML=ON
-    )
-    # The flatc/flatcc host tools build for the runner's macOS (ExecuTorch unsets their
-    # toolchain + sysroot), but it still forwards our iOS DEPLOYMENT_TARGET to them as
-    # CMAKE_OSX_DEPLOYMENT_TARGET -> the host compiler gets -mmacosx-version-min=17.0, a macOS
-    # version that doesn't exist, and the compiler check fails ("broken compiler"). Empty that
-    # forwarding in the host-tool ExternalProjects so they use the runner's default macOS.
-    # Idempotent: after the rewrite there's no ":STRING=" left to match (survives cached source).
-    sed -i.bak -E 's#-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=.*#-DCMAKE_OSX_DEPLOYMENT_TARGET=#' \
-      "$SRC/third-party/CMakeLists.txt"
-    rm -f "$SRC/third-party/CMakeLists.txt.bak"
-    ;;
+  # NOTE: iOS is NOT handled here. ios.sh builds it via ExecuTorch's own `ios`/`ios-simulator`
+  # CMake presets (which build the host flatc/flatcc tools correctly during the cross-compile);
+  # a hand-rolled ios-cmake toolchain here leaked the iOS SDK/deployment target into the host
+  # tools and broke them. Keep this build path desktop/Android only.
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
 
