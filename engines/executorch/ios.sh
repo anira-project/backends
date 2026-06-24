@@ -47,10 +47,18 @@ build_slice() {  # <preset> <build-dir>
   local preset="$1" out="$2"
   rm -rf "$out"
   echo "== iOS build: preset=$preset -j$JOBS =="
+  # The apple presets use the Xcode (multi-config) generator -> every build/install needs an
+  # explicit --config. Trim the preset's LLM/torchao extras (irrelevant to a CPU audio backend)
+  # to match the desktop/Android op set + speed up the build; keep XNNPACK + optimized/quantized
+  # kernels and the CoreML + MPS GPU/ANE delegates (the iOS hardware-accel paths).
   cmake -S "$SRC" -B "$out" --preset "$preset" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DPYTHON_EXECUTABLE="$(command -v python)"
-  cmake --build "$out" -j "$JOBS"
+    -DPYTHON_EXECUTABLE="$(command -v python)" \
+    -DEXECUTORCH_BUILD_EXTENSION_LLM=OFF \
+    -DEXECUTORCH_BUILD_EXTENSION_LLM_RUNNER=OFF \
+    -DEXECUTORCH_BUILD_EXTENSION_LLM_APPLE=OFF \
+    -DEXECUTORCH_BUILD_KERNELS_LLM=OFF \
+    -DEXECUTORCH_BUILD_KERNELS_TORCHAO=OFF
+  cmake --build "$out" --config Release -j "$JOBS"
 }
 
 build_slice ios           "$SRC/cmake-out-ios"
@@ -63,11 +71,12 @@ bash "$ROOT/scripts/bundle-static.sh" "$SRC/cmake-out-ios"     "$PWD/dev/libexec
 bash "$ROOT/scripts/bundle-static.sh" "$SRC/cmake-out-ios-sim" "$PWD/sim/libexecutorch.a"
 
 # Public headers from an install of the device slice (xcframework just needs include/ + the lib;
-# no find_package, so the build-tree-path install quirk is irrelevant here).
+# no find_package, so the build-tree-path install quirk is irrelevant here). --config Release is
+# required for the Xcode multi-config generator. Show output so a failure is diagnosable.
 rm -rf "$HERE/ios-inst"
-cmake --install "$SRC/cmake-out-ios" --prefix "$HERE/ios-inst" >/dev/null 2>&1 || true
+cmake --install "$SRC/cmake-out-ios" --config Release --prefix "$HERE/ios-inst" || true
 hdrs="$HERE/ios-inst/include"
-[ -d "$hdrs" ] || { echo "ERROR: no installed include/ for the iOS xcframework"; exit 1; }
+[ -d "$hdrs" ] || { echo "ERROR: no installed include/ for the iOS xcframework under $HERE/ios-inst"; ls -la "$HERE/ios-inst" 2>/dev/null || true; exit 1; }
 
 rm -rf executorch.xcframework
 xcodebuild -create-xcframework \
