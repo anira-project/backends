@@ -110,8 +110,7 @@ if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "x86_64" ]; then
        BUILD_TEST=0 BUILD_PYTHON=0 BUILD_SHARED_LIBS=1 \
        USE_MKLDNN=1 USE_NATIVE_ARCH=0 \
        CMAKE_OSX_ARCHITECTURES=x86_64 MACOSX_DEPLOYMENT_TARGET=12.0 \
-       ${PT_SCCACHE} \
-       python tools/build_libtorch.py )
+       env ${PT_SCCACHE} python tools/build_libtorch.py )
   [ -d "$PT/torch/include" ] || \
     { echo "ERROR: pytorch source build produced no torch/include headers under $PT"; exit 1; }
   # ExecuTorch's kernel codegen imports torchgen and reads torchgen/packaged/ATen/native/
