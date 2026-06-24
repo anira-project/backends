@@ -93,6 +93,11 @@ if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "x86_64" ]; then
   [ -f "$PT/requirements-build.txt" ] && python -m pip install -r "$PT/requirements-build.txt"
   python -m pip install pyyaml typing_extensions setuptools numpy
   rm -f "$PT/build/CMakeCache.txt"   # sticky cache vars from a prior config (see build-libtorch.sh)
+  # Route PyTorch's compiles through sccache too — this from-source build is the slowest leg by
+  # far, so caching it across runs is the biggest win. PyTorch forwards CMAKE_*_COMPILER_LAUNCHER.
+  PT_SCCACHE=""
+  command -v sccache >/dev/null 2>&1 && \
+    PT_SCCACHE="CMAKE_C_COMPILER_LAUNCHER=sccache CMAKE_CXX_COMPILER_LAUNCHER=sccache"
   # Env scoped to the subshell so PyTorch's BUILD_* / USE_* don't leak into ExecuTorch's
   # own cmake below. CMAKE_POLICY_VERSION_MINIMUM: old vendored protobuf needs the <3.5
   # policy floor under CMake 4.x. USE_NATIVE_ARCH=0: avoid Apple-Clang-rejected -mavx512fp16.
@@ -105,6 +110,7 @@ if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "x86_64" ]; then
        BUILD_TEST=0 BUILD_PYTHON=0 BUILD_SHARED_LIBS=1 \
        USE_MKLDNN=1 USE_NATIVE_ARCH=0 \
        CMAKE_OSX_ARCHITECTURES=x86_64 MACOSX_DEPLOYMENT_TARGET=12.0 \
+       ${PT_SCCACHE} \
        python tools/build_libtorch.py )
   [ -d "$PT/torch/include" ] || \
     { echo "ERROR: pytorch source build produced no torch/include headers under $PT"; exit 1; }
@@ -230,6 +236,14 @@ case "$PLATFORM" in
   # tools and broke them. Keep this build path desktop/Android only.
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
+
+# Route compiles through sccache (the CI sets it up) so warm re-runs are fast. The shared
+# stage-build action only wires this for tflite, so executorch compiled uncached — the big
+# intel-mac PyTorch-from-source + ExecuTorch builds rebuilt from scratch every run. Skip on
+# Windows: MSVC /Fd (pdb) trips sccache (same reason the shared action limits it to tflite).
+if [ "$PLATFORM" != "windows" ] && command -v sccache >/dev/null 2>&1; then
+  ET_FLAGS+=(-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache)
+fi
 
 # A restored/cached build tree pins CMake cache vars from the PRIOR config; drop the cache
 # so cmake re-detects against the current flags (objects + any compiler cache keep the

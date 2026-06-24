@@ -66,6 +66,11 @@ build_slice ios-simulator "$SRC/cmake-out-ios-sim"
 
 # Merge each slice's transitive static archives (executorch + kernels + xnnpack/coreml/_deps
 # CMake scatters across the build tree) into one self-contained fat libexecutorch.a per slice.
+# EXCLUDE the flatc/flatcc host-tool ExternalProjects: those build for the macOS HOST (to run
+# the schema compiler during the build), so their libs are macOS-platform Mach-O. Sweeping them
+# into the iOS bundle makes the archive "multiple platforms" and xcframework rejects it. The
+# host tools aren't part of the shipped runtime, so dropping them is correct.
+export BUNDLE_EXCLUDE_REGEX='/flatc_ep/|/flatcc_ep/'
 rm -rf dev sim && mkdir -p dev sim
 bash "$ROOT/scripts/bundle-static.sh" "$SRC/cmake-out-ios"     "$PWD/dev/libexecutorch.a"
 bash "$ROOT/scripts/bundle-static.sh" "$SRC/cmake-out-ios-sim" "$PWD/sim/libexecutorch.a"
