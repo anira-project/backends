@@ -1,5 +1,5 @@
 # Orchestrate an engine whose own build system does the heavy lifting (onnxruntime,
-# libtorch, litert/Bazel). Translate the preset's BACKENDS_* cache vars into a single call to the
+# libtorch, litert/Bazel, executorch/CMake). Translate the preset's BACKENDS_* cache vars into a single call to the
 # engine's stage.sh (build-from-source or repackage-prebuilt), which populates a
 # staging tree; `cmake --install` then copies that tree to the install prefix.
 
@@ -19,7 +19,7 @@ set(_script "${CMAKE_SOURCE_DIR}/engines/${BACKENDS_ENGINE}/stage.sh")
 if(BACKENDS_ENGINE STREQUAL "onnxruntime")
   set(_args ${BACKENDS_PLATFORM} ${BACKENDS_ARCH} ${BACKENDS_CONFIG}
             ${BACKENDS_KIND} ${BACKENDS_SOURCE} "${_stage}" "${BACKENDS_URL}" "${BACKENDS_ABIS}")
-else() # libtorch / litert (same stage.sh arg shape: no ABIs)
+else() # libtorch / litert / executorch (same stage.sh arg shape: no ABIs)
   set(_args ${BACKENDS_PLATFORM} ${BACKENDS_ARCH} ${BACKENDS_CONFIG}
             ${BACKENDS_KIND} ${BACKENDS_SOURCE} "${_stage}" "${BACKENDS_URL}")
 endif()

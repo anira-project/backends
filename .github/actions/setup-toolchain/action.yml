@@ -41,7 +41,7 @@ runs:
     # Python-driven from-source builds (onnxruntime build.py; litert/libtorch Bazel/configure.py).
     # litert prebuilt legs just curl the lib + headers — no python/bazel.
     - name: setup python
-      if: ${{ inputs.engine == 'onnxruntime' || (inputs.engine == 'litert' && inputs.source == 'build') || (inputs.engine == 'libtorch' && inputs.source == 'build') }}
+      if: ${{ inputs.engine == 'onnxruntime' || (inputs.engine == 'litert' && inputs.source == 'build') || (inputs.engine == 'libtorch' && inputs.source == 'build') || inputs.engine == 'executorch' }}
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
@@ -71,3 +71,9 @@ runs:
       with:
         path: engines/libtorch/pytorch-src
         key: pytorch-src-${{ inputs.version }}-${{ inputs.cache_suffix }}
+    - name: cache executorch source
+      if: ${{ inputs.engine == 'executorch' }}
+      uses: actions/cache@v4
+      with:
+        path: engines/executorch/src/executorch
+        key: executorch-src-${{ inputs.version }}-${{ inputs.cache_suffix }}

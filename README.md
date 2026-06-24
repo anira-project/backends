@@ -12,9 +12,15 @@ published as GitHub release archives that anira's CMake downloads at configure t
 | LiteRT      | `LiteRt*`    | [google-ai-edge/LiteRT](https://github.com/google-ai-edge/LiteRT) | `LiteRt`           | Apache-2.0 |
 | ONNXRuntime | —            | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) | `onnxruntime`      | MIT        |
 | LibTorch    | —            | [pytorch/pytorch](https://github.com/pytorch/pytorch)             | `torch`            | BSD-3      |
+| ExecuTorch  | —            | [pytorch/executorch](https://github.com/pytorch/executorch)       | `executorch`       | BSD-3      |
 
 TFLite and LiteRT are **two C APIs for the same runtime** (LiteRT is the rebranded TensorFlow
 Lite): `TfLite*` is the mature legacy API; `LiteRt*` is LiteRT's newer native API. Pick one.
+
+LibTorch and ExecuTorch are **two PyTorch C++ runtimes**: LibTorch is the full desktop runtime;
+ExecuTorch is the on-device runtime that runs ahead-of-time-exported `.pte` models. We ship a
+**generic** ExecuTorch (full CPU op set + XNNPACK, not a per-model selective build), so one
+package loads any `.pte`. Both are consumed via `find_package` (`Torch` / `executorch`).
 
 This repo is licensed [Apache-2.0](./LICENSE); the **published binaries** follow their
 upstream licenses (above).
@@ -23,18 +29,18 @@ upstream licenses (above).
 
 What ships per target — `shared` and/or `static`:
 
-| Target                          | TFLite            | LiteRT              | ONNXRuntime       | LibTorch |
-| ------------------------------- | ----------------- | ------------------- | ----------------- | -------- |
-| macOS x86_64                    | shared · static   | shared · static     | shared · static   | shared   |
-| macOS arm64                     | shared · static   | shared · static     | shared · static   | shared   |
-| macOS universal                 | shared · static   | shared · static     | shared · static   | shared   |
-| Linux x86_64                    | shared · static   | shared · static     | shared · static   | shared   |
-| Linux aarch64                   | shared · static   | shared · static     | shared · static   | shared   |
-| Windows x86_64                  | shared · static ¹ | shared · static ¹   | shared · static ¹ | shared   |
-| Windows arm64                   | shared · static ¹ | shared · static ¹   | shared · static ¹ | shared   |
-| Android (`arm64-v8a` + `x86_64`)| shared · static   | shared · static     | shared · static   | —        |
-| iOS (xcframework)               | static            | static              | static            | —        |
-| WASM (Emscripten)               | —                 | —                   | static ²          | —        |
+| Target                          | TFLite            | LiteRT              | ONNXRuntime       | LibTorch | ExecuTorch |
+| ------------------------------- | ----------------- | ------------------- | ----------------- | -------- | ---------- |
+| macOS x86_64                    | shared · static   | shared · static     | shared · static   | shared   | static     |
+| macOS arm64                     | shared · static   | shared · static     | shared · static   | shared   | static     |
+| macOS universal                 | shared · static   | shared · static     | shared · static   | shared   | static     |
+| Linux x86_64                    | shared · static   | shared · static     | shared · static   | shared   | static     |
+| Linux aarch64                   | shared · static   | shared · static     | shared · static   | shared   | static     |
+| Windows x86_64                  | shared · static ¹ | shared · static ¹   | shared · static ¹ | shared   | static     |
+| Windows arm64                   | shared · static ¹ | shared · static ¹   | shared · static ¹ | shared   | static     |
+| Android (`arm64-v8a` + `x86_64`)| shared · static   | shared · static     | shared · static   | —        | —          |
+| iOS (xcframework)               | static            | static              | static            | —        | —          |
+| WASM (Emscripten)               | —                 | —                   | static ²          | —        | —          |
 
 macOS `shared` dylibs are **Developer ID code-signed** (Hardened Runtime, timestamped); the
 consuming app re-signs/notarizes on embed.
@@ -43,6 +49,11 @@ consuming app re-signs/notarizes on embed.
 
 > ² Emscripten static archive — build flags and consumer requirements in
 > [`engines/onnxruntime`](./engines/onnxruntime).
+
+> ExecuTorch is **static-only, built from source on every leg** (no upstream prebuilt desktop
+> runtime), **CPU-first** (XNNPACK + optimized kernels everywhere; CoreML/MLX wired in on Apple
+> but off — see [`engines/executorch`](./engines/executorch)). Android/iOS and the cross-platform
+> Vulkan GPU delegate are deliberate follow-ups.
 
 > `—` = not provided.
 

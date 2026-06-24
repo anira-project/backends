@@ -15,8 +15,8 @@ name: _build-backend
 on:
   workflow_call:
     inputs:
-      engine:      { description: "Backend id: tflite | onnxruntime | libtorch", required: true, type: string }
-      libname:     { description: "Archive/lib prefix: tensorflowlite_c | onnxruntime | libtorch", required: true, type: string }
+      engine:      { description: "Backend id: tflite | onnxruntime | libtorch | litert | executorch", required: true, type: string }
+      libname:     { description: "Archive/lib prefix: tensorflowlite_c | onnxruntime | libtorch | LiteRt | executorch", required: true, type: string }
       version:     { description: "Upstream version (engine VERSION)", required: true, type: string }
       release:     { description: "Publish artifacts to a GitHub release", required: false, type: boolean, default: false }
       release_tag: { description: "Release tag (the anira version, e.g. v2.0.3)", required: false, type: string, default: "" }
@@ -216,14 +216,16 @@ jobs:
           unzip -q "dl/arm/${{ steps.n.outputs.arm }}.zip" -d ex/arm
           stage="staging/${{ steps.n.outputs.uni }}"; mkdir -p "$stage/lib"
           cp -R ex/arm/include "$stage/include"
-          if [ "${{ inputs.engine }}" = "libtorch" ]; then
-            # full package tree: arch-independent parts once, lipo every Mach-O dylib present
-            # in both slices, copy-through everything else (symlinks, non-fat files).
-            cp -R ex/arm/share "$stage/share"
+          if [ "${{ inputs.engine }}" = "libtorch" ] || [ "${{ inputs.engine }}" = "executorch" ]; then
+            # full package tree: arch-independent parts once, lipo every fat-able binary present
+            # in both slices, copy-through everything else (the CMake package dir, symlinks,
+            # non-fat data like mlx.metallib). libtorch ships shared dylibs (Mach-O); executorch
+            # ships static archives (ar) — lipo handles both, so match either file type.
+            [ -d ex/arm/share ] && cp -R ex/arm/share "$stage/share"
             [ -d ex/arm/bin ] && cp -R ex/arm/bin "$stage/bin"
             for f in ex/arm/lib/*; do
               b="$(basename "$f")"
-              if [ -f "ex/x64/lib/$b" ] && file -b "$f" | grep -q 'Mach-O'; then
+              if [ -f "ex/x64/lib/$b" ] && file -b "$f" | grep -qE 'Mach-O|ar archive'; then
                 lipo -create "ex/arm/lib/$b" "ex/x64/lib/$b" -output "$stage/lib/$b" || cp -R "$f" "$stage/lib/$b"
               else
                 cp -R "$f" "$stage/lib/$b"
