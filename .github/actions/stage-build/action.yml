@@ -101,3 +101,21 @@ runs:
         if [ "${{ runner.os }}" = "Windows" ]; then out="${{ steps.n.outputs.staging }}/lib/${{ inputs.libname }}.lib"
         else out="${{ steps.n.outputs.staging }}/lib/lib${{ inputs.libname }}.a"; fi
         bash scripts/bundle-static.sh "build/${{ inputs.preset }}" "$out"
+
+    # litert/tflite static: the bundled archive carries the whole vendored dependency
+    # closure (XNNPACK, cpuinfo, pthreadpool, ...) as EXTERNAL symbols. Other engines
+    # vendor different versions of the same deps (ExecuTorch force-loads its own
+    # XNNPACK), so a consumer linking two static engines into one image gets duplicate-
+    # symbol collisions or silent cross-binding. Reduce the archive to its public C API
+    # before packaging: internals are localized (Mach-O/ELF partial link) or renamed
+    # (COFF, member-by-member) — see scripts/isolate-static.sh. Desktop legs only; the
+    # mobile merged libs are consumed in isolation and keep their full symbol tables.
+    - name: isolate static symbols (litert/tflite)
+      if: ${{ (inputs.engine == 'litert' || inputs.engine == 'tflite') && inputs.kind == 'static' && !startsWith(inputs.name, 'Android') }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ "${{ runner.os }}" = "Windows" ]; then a="${{ steps.n.outputs.staging }}/lib/${{ inputs.libname }}.lib"
+        else a="${{ steps.n.outputs.staging }}/lib/lib${{ inputs.libname }}.a"; fi
+        keep=LiteRt; [ "${{ inputs.engine }}" = "tflite" ] && keep=TfLite
+        bash scripts/isolate-static.sh "$a" "$keep" "isolated_${{ inputs.engine }}_"
