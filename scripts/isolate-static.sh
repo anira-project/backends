@@ -82,9 +82,16 @@ elf)
     ${AR:-ar} rcs "$WORK/out.a" "$WORK/merged.o"
     ;;
 coff)
+    # For every renamed X also rename __imp_X -> __imp_<pfx>X: MSVC resolves an
+    # unresolved __imp_X against a locally-defined X ("locally imported",
+    # LNK4217) by stripping the prefix — renaming only X would strand such
+    # references (dllimport-annotated decls do this even inside one archive,
+    # and MSVC codegen versions differ in when they emit them). Keeping the
+    # pair consistent keeps the fallback working; __imp_ refs to genuinely
+    # external DLL imports match no rule and pass through untouched.
     "$NM" --defined-only --extern-only "$IN" \
-        | awk 'NF>=3 {print $3}' | sort -u | grep -Ev "$KEEP_RE" \
-        | awk -v p="$PFX" '{print $0" "p$0}' > "$WORK/rename.map"
+        | awk 'NF>=3 {print $3}' | sort -u | grep -Ev "$KEEP_RE" | grep -v '^__imp_' \
+        | awk -v p="$PFX" '{print $0" "p$0; print "__imp_"$0" __imp_"p$0}' > "$WORK/rename.map"
     [ -s "$WORK/rename.map" ] || { echo "isolate-static: empty rename map for $IN" >&2; exit 1; }
     "${OBJCOPY:-llvm-objcopy}" "--redefine-syms=$WORK/rename.map" "$IN" "$WORK/out.a"
     ;;
