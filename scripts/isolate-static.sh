@@ -25,11 +25,13 @@
 #           cross-member references keep resolving inside the archive.
 #           Undefined externals (CRT/OS imports) are untouched.
 #
-# Usage: isolate-static.sh <archive> <keep-prefixes> <rename-prefix> [output] [format]
+# Usage: isolate-static.sh <archive> <keep-patterns> <rename-prefix> [output] [format]
 #   <archive>        input static archive (.a / .lib)
-#   <keep-prefixes>  comma-separated public API symbol prefixes to keep external
-#                    (e.g. "LiteRt,TfLite" — LiteRT also publicly exposes the
-#                    TfLite* delegate API, which its Windows headers dllexport)
+#   <keep-patterns>  comma-separated glob patterns of symbols to keep external.
+#                    A bare name is a prefix ("LiteRt" == LiteRt*); '*' matches
+#                    anywhere ("*cctz_extension*"). E.g. "LiteRt,TfLite" —
+#                    LiteRT also publicly exposes the TfLite* delegate API,
+#                    which its Windows headers dllexport.
 #   <rename-prefix>  prefix for renamed internals (COFF flavor only)
 #   [output]         output path; defaults to <archive> (in-place)
 #   [format]         macho | elf | coff; default: .lib -> coff, .a -> host OS
@@ -39,11 +41,14 @@
 # kept API survives.  bash 3.2 compatible (macOS /bin/bash).
 set -euo pipefail
 
-IN="${1:?archive}"; KEEP="${2:?keep prefixes}"; PFX="${3:?rename prefix}"
+IN="${1:?archive}"; KEEP="${2:?keep patterns}"; PFX="${3:?rename prefix}"
 OUT="${4:-$IN}"; FORMAT="${5:-}"
 
-# "A,B" -> grep -E alternation "^(A|B)" for the filters below.
-KEEP_RE="^($(printf '%s' "$KEEP" | sed 's/,/|/g'))"
+# "A,B*C" -> grep -E alternation "^(A.*|B.*C.*)" for the filters below
+# (trailing * implied: bare entries are prefixes, like the ld/objcopy globs).
+KEEP_RE="^($(printf '%s' "$KEEP" | sed 's/[.[\^$+?(){}|]/\\&/g; s/\*/.*/g; s/,/.*|/g; s/$/.*/'))"
+# Same list as glob lines for ld -exported_symbols_list / objcopy --keep-global-symbols.
+keep_globs() { printf '%s' "$KEEP" | tr ',' '\n' | sed 's/$/*/'; }
 
 if [ -z "$FORMAT" ]; then
     case "$IN" in
@@ -65,13 +70,13 @@ case "$FORMAT" in
 macho)
     # Single-arch archives only (universal aggregation happens after staging).
     ARCH="$(lipo -info "$IN" | sed 's/.*architecture: //;s/.*are: //' | awk '{print $1}')"
-    printf '%s' "$KEEP" | tr ',' '\n' | sed 's/^/_/;s/$/*/' > "$WORK/keep.exp"
+    keep_globs | sed 's/^/_/' > "$WORK/keep.exp"
     ld -r -arch "$ARCH" -platform_version macos "${MINOS:-11.0}" "${MINOS:-11.0}" \
         -force_load "$IN" -exported_symbols_list "$WORK/keep.exp" -o "$WORK/merged.o"
     ${AR:-ar} rcs "$WORK/out.a" "$WORK/merged.o"
     ;;
 elf)
-    printf '%s' "$KEEP" | tr ',' '\n' | sed 's/$/*/' > "$WORK/keep.txt"
+    keep_globs > "$WORK/keep.txt"
     "${LD:-ld}" -r -o "$WORK/merged.o" --whole-archive "$IN" --no-whole-archive
     "${OBJCOPY:-objcopy}" --wildcard --keep-global-symbols="$WORK/keep.txt" "$WORK/merged.o"
     ${AR:-ar} rcs "$WORK/out.a" "$WORK/merged.o"

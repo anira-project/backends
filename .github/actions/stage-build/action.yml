@@ -125,4 +125,9 @@ runs:
         # API and its Windows headers dllexport it, so consumers' links demand those
         # definitions. It cannot collide with ExecuTorch (which defines no TfLite*),
         # and the legacy tflite engine is mutually exclusive with litert.
-        bash scripts/isolate-static.sh "$a" "LiteRt,TfLite" "isolated_litert_"
+        # *cctz_extension* stays external because absl emulates its weak
+        # zone_info_source_factory extension point on MSVC with /alternatename
+        # linker directives — strings in the .drectve section that a symbol-table
+        # rename cannot rewrite, so renaming the target breaks the link. Duplicate
+        # absl copies across archives are harmless under on-demand linking.
+        bash scripts/isolate-static.sh "$a" "LiteRt,TfLite,*cctz_extension*" "isolated_litert_"
