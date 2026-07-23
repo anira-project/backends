@@ -25,20 +25,25 @@
 #           cross-member references keep resolving inside the archive.
 #           Undefined externals (CRT/OS imports) are untouched.
 #
-# Usage: isolate-static.sh <archive> <keep-prefix> <rename-prefix> [output] [format]
-#   <archive>       input static archive (.a / .lib)
-#   <keep-prefix>   public API symbol prefix to keep external (e.g. LiteRt)
-#   <rename-prefix> prefix for renamed internals (COFF flavor only)
-#   [output]        output path; defaults to <archive> (in-place)
-#   [format]        macho | elf | coff; default: .lib -> coff, .a -> host OS
+# Usage: isolate-static.sh <archive> <keep-prefixes> <rename-prefix> [output] [format]
+#   <archive>        input static archive (.a / .lib)
+#   <keep-prefixes>  comma-separated public API symbol prefixes to keep external
+#                    (e.g. "LiteRt,TfLite" — LiteRT also publicly exposes the
+#                    TfLite* delegate API, which its Windows headers dllexport)
+#   <rename-prefix>  prefix for renamed internals (COFF flavor only)
+#   [output]         output path; defaults to <archive> (in-place)
+#   [format]         macho | elf | coff; default: .lib -> coff, .a -> host OS
 # Env overrides: NM, OBJCOPY, LD, AR, MINOS (Mach-O -platform_version, default 11.0)
 #
 # The script self-audits: it fails if any defined external symbol outside the
 # kept API survives.  bash 3.2 compatible (macOS /bin/bash).
 set -euo pipefail
 
-IN="${1:?archive}"; KEEP="${2:?keep prefix}"; PFX="${3:?rename prefix}"
+IN="${1:?archive}"; KEEP="${2:?keep prefixes}"; PFX="${3:?rename prefix}"
 OUT="${4:-$IN}"; FORMAT="${5:-}"
+
+# "A,B" -> grep -E alternation "^(A|B)" for the filters below.
+KEEP_RE="^($(printf '%s' "$KEEP" | sed 's/,/|/g'))"
 
 if [ -z "$FORMAT" ]; then
     case "$IN" in
@@ -60,20 +65,20 @@ case "$FORMAT" in
 macho)
     # Single-arch archives only (universal aggregation happens after staging).
     ARCH="$(lipo -info "$IN" | sed 's/.*architecture: //;s/.*are: //' | awk '{print $1}')"
-    printf '_%s*\n' "$KEEP" > "$WORK/keep.exp"
+    printf '%s' "$KEEP" | tr ',' '\n' | sed 's/^/_/;s/$/*/' > "$WORK/keep.exp"
     ld -r -arch "$ARCH" -platform_version macos "${MINOS:-11.0}" "${MINOS:-11.0}" \
         -force_load "$IN" -exported_symbols_list "$WORK/keep.exp" -o "$WORK/merged.o"
     ${AR:-ar} rcs "$WORK/out.a" "$WORK/merged.o"
     ;;
 elf)
-    printf '%s*\n' "$KEEP" > "$WORK/keep.txt"
+    printf '%s' "$KEEP" | tr ',' '\n' | sed 's/$/*/' > "$WORK/keep.txt"
     "${LD:-ld}" -r -o "$WORK/merged.o" --whole-archive "$IN" --no-whole-archive
     "${OBJCOPY:-objcopy}" --wildcard --keep-global-symbols="$WORK/keep.txt" "$WORK/merged.o"
     ${AR:-ar} rcs "$WORK/out.a" "$WORK/merged.o"
     ;;
 coff)
     "$NM" --defined-only --extern-only "$IN" \
-        | awk 'NF>=3 {print $3}' | sort -u | grep -v "^$KEEP" \
+        | awk 'NF>=3 {print $3}' | sort -u | grep -Ev "$KEEP_RE" \
         | awk -v p="$PFX" '{print $0" "p$0}' > "$WORK/rename.map"
     [ -s "$WORK/rename.map" ] || { echo "isolate-static: empty rename map for $IN" >&2; exit 1; }
     "${OBJCOPY:-llvm-objcopy}" "--redefine-syms=$WORK/rename.map" "$IN" "$WORK/out.a"
@@ -86,7 +91,7 @@ esac
 # prefix) may survive. nm prints "addr type name"; member headers/blanks differ.
 LEFT="$("$NM" --defined-only --extern-only "$WORK/out.a" 2>/dev/null \
     | awk 'NF>=3 {print $3}' | sed 's/^_//' \
-    | grep -v "^$KEEP" | grep -v "^$PFX" | grep -cv '^$' || true)"
+    | grep -Ev "$KEEP_RE" | grep -v "^$PFX" | grep -cv '^$' || true)"
 if [ "$LEFT" != "0" ]; then
     echo "isolate-static: $LEFT non-API globals survived in $OUT" >&2
     exit 1
@@ -94,4 +99,4 @@ fi
 
 mkdir -p "$(dirname "$OUT")"
 mv -f "$WORK/out.a" "$OUT"
-echo "isolate-static: $IN -> $OUT (only ${KEEP}* external, format $FORMAT)"
+echo "isolate-static: $IN -> $OUT (only {${KEEP}}* external, format $FORMAT)"

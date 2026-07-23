@@ -121,4 +121,8 @@ runs:
         set -euo pipefail
         if [ "${{ runner.os }}" = "Windows" ]; then a="${{ steps.n.outputs.staging }}/lib/${{ inputs.libname }}.lib"
         else a="${{ steps.n.outputs.staging }}/lib/lib${{ inputs.libname }}.a"; fi
-        bash scripts/isolate-static.sh "$a" "LiteRt" "isolated_litert_"
+        # TfLite* stays external too: LiteRT publicly exposes the TfLite* delegate
+        # API and its Windows headers dllexport it, so consumers' links demand those
+        # definitions. It cannot collide with ExecuTorch (which defines no TfLite*),
+        # and the legacy tflite engine is mutually exclusive with litert.
+        bash scripts/isolate-static.sh "$a" "LiteRt,TfLite" "isolated_litert_"
