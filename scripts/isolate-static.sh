@@ -65,6 +65,10 @@ command -v "$NM" >/dev/null 2>&1 || NM=nm
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+# Populated by the coff branch (directive-referenced names that must keep
+# their spelling); empty elsewhere — an empty grep -f pattern file matches
+# nothing, so the audit filter below is a no-op then.
+: > "$WORK/directive-keep.txt"
 
 case "$FORMAT" in
 macho)
@@ -82,6 +86,18 @@ elf)
     ${AR:-ar} rcs "$WORK/out.a" "$WORK/merged.o"
     ;;
 coff)
+    # Symbols named in .drectve linker directives must keep their names: MSVC
+    # references symbols as raw STRINGS there — /INCLUDE:<sym> (emitted e.g.
+    # for inline-variable dynamic initializers) and /ALTERNATENAME:<a>=<b>
+    # (weak-symbol emulation) — which a symbol-table rename cannot rewrite, so
+    # renaming a directive-referenced symbol strands the directive and the
+    # link fails on the ORIGINAL name. Extract every directive-referenced
+    # name and exempt it. These are a handful of engine-internal names, not
+    # the vendored xnn_/cpuinfo_/pthreadpool_ mass that actually collides.
+    strings "$IN" | tr ' ' '\n' \
+        | grep -iE '^[-/](include|alternatename):' \
+        | sed -E 's~^[^:]*:~~' | tr '=' '\n' | sort -u > "$WORK/directive-keep.txt"
+
     # For every renamed X also rename __imp_X -> __imp_<pfx>X: MSVC resolves an
     # unresolved __imp_X against a locally-defined X ("locally imported",
     # LNK4217) by stripping the prefix — renaming only X would strand such
@@ -91,6 +107,7 @@ coff)
     # external DLL imports match no rule and pass through untouched.
     "$NM" --defined-only --extern-only "$IN" \
         | awk 'NF>=3 {print $3}' | sort -u | grep -Ev "$KEEP_RE" | grep -v '^__imp_' \
+        | grep -Fxv -f "$WORK/directive-keep.txt" \
         | awk -v p="$PFX" '{print $0" "p$0; print "__imp_"$0" __imp_"p$0}' > "$WORK/rename.map"
     [ -s "$WORK/rename.map" ] || { echo "isolate-static: empty rename map for $IN" >&2; exit 1; }
     "${OBJCOPY:-llvm-objcopy}" "--redefine-syms=$WORK/rename.map" "$IN" "$WORK/out.a"
@@ -100,10 +117,15 @@ coff)
 esac
 
 # Audit: no defined external symbol outside the kept API (COFF: or the rename
-# prefix) may survive. nm prints "addr type name"; member headers/blanks differ.
+# prefix / the directive-referenced exemptions) may survive. nm prints
+# "addr type name"; member headers/blanks differ. Only Mach-O symbol names
+# carry the leading-underscore mangling — stripping it on COFF would break
+# the comparison against the directive exemptions.
+if [ "$FORMAT" = macho ]; then AUDIT_STRIP='s/^_//'; else AUDIT_STRIP=''; fi
 LEFT="$("$NM" --defined-only --extern-only "$WORK/out.a" 2>/dev/null \
-    | awk 'NF>=3 {print $3}' | sed 's/^_//' \
-    | grep -Ev "$KEEP_RE" | grep -v "^$PFX" | grep -cv '^$' || true)"
+    | awk 'NF>=3 {print $3}' | sed "$AUDIT_STRIP" \
+    | grep -Ev "$KEEP_RE" | grep -v "^$PFX" \
+    | grep -Fxv -f "$WORK/directive-keep.txt" | grep -cv '^$' || true)"
 if [ "$LEFT" != "0" ]; then
     echo "isolate-static: $LEFT non-API globals survived in $OUT" >&2
     exit 1
