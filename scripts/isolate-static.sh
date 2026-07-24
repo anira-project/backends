@@ -81,7 +81,14 @@ macho)
     ;;
 elf)
     keep_globs > "$WORK/keep.txt"
-    "${LD:-ld}" -r -o "$WORK/merged.o" --whole-archive "$IN" --no-whole-archive
+    # --force-group-allocation dissolves COMDAT section groups during the
+    # partial link (merging duplicates into plain sections). Without it the
+    # groups survive into merged.o; a C++ consumer providing the same
+    # vague-linkage symbols (typeinfo etc.) makes the final link discard
+    # merged.o's duplicate groups — whose members still reference the now-
+    # LOCALIZED copies — and fail with "defined in discarded section".
+    "${LD:-ld}" -r --force-group-allocation -o "$WORK/merged.o" \
+        --whole-archive "$IN" --no-whole-archive
     "${OBJCOPY:-objcopy}" --wildcard --keep-global-symbols="$WORK/keep.txt" "$WORK/merged.o"
     ${AR:-ar} rcs "$WORK/out.a" "$WORK/merged.o"
     ;;
