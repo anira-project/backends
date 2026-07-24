@@ -139,7 +139,10 @@ runs:
     # archive defines. Whether GCC emits them varies with the runner toolchain,
     # so a rebuild of an unchanged engine version can regress consumers without
     # this step. See scripts/de-unique-static.sh; no-op for clang-built engines.
+    # Scoped to native Linux legs (the archive NAME, not the runner OS — the
+    # Android/WASM cross-builds also run on ubuntu but their archives live in
+    # per-ABI subdirs / wasm object format and are consumed in isolation).
     - name: de-unique static archives (Linux)
-      if: ${{ runner.os == 'Linux' && inputs.kind == 'static' }}
+      if: ${{ startsWith(inputs.name, 'Linux') && inputs.kind == 'static' }}
       shell: bash
       run: bash scripts/de-unique-static.sh "${{ steps.n.outputs.staging }}/lib"

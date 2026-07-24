@@ -22,19 +22,22 @@
 set -euo pipefail
 
 DIR="${1:?lib dir}"
-NM="${NM:-llvm-nm}"
-OBJCOPY="${OBJCOPY:-llvm-objcopy}"
+# Prefer the LLVM tools, fall back to binutils (GNU nm prints the same 'u'
+# for STB_GNU_UNIQUE and GNU objcopy supports --weaken-symbols).
+NM="${NM:-llvm-nm}";           command -v "$NM"      >/dev/null 2>&1 || NM=nm
+OBJCOPY="${OBJCOPY:-llvm-objcopy}"; command -v "$OBJCOPY" >/dev/null 2>&1 || OBJCOPY=objcopy
 
 total=0
 for a in "$DIR"/*.a; do
     [ -e "$a" ] || continue
     syms="$(mktemp)"
-    # nm: "addr u name" for GNU-unique definitions; collect names.
-    "$NM" "$a" 2>/dev/null | awk '$2 == "u" {print $3}' | sort -u > "$syms"
+    # nm: "addr u name" for GNU-unique definitions; collect names. Tolerate
+    # nm failing on foreign members (|| true keeps pipefail from killing us).
+    { "$NM" "$a" 2>/dev/null || true; } | awk '$2 == "u" {print $3}' | sort -u > "$syms"
     n=$(grep -c . "$syms" || true)
     if [ "$n" != "0" ]; then
         "$OBJCOPY" "--weaken-symbols=$syms" "$a"
-        left=$("$NM" "$a" 2>/dev/null | awk '$2 == "u"' | grep -c . || true)
+        left=$({ "$NM" "$a" 2>/dev/null || true; } | awk '$2 == "u"' | grep -c . || true)
         if [ "$left" != "0" ]; then
             echo "de-unique-static: $left unique symbols survived in $a" >&2
             rm -f "$syms"
