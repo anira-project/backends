@@ -131,3 +131,15 @@ runs:
         # rename cannot rewrite, so renaming the target breaks the link. Duplicate
         # absl copies across archives are harmless under on-demand linking.
         bash scripts/isolate-static.sh "$a" "LiteRt,TfLite,*cctz_extension*" "isolated_litert_"
+
+    # Linux static (any engine): demote GCC's STB_GNU_UNIQUE symbols to weak.
+    # Unique symbols break consumers that link the archive into a hidden-
+    # visibility shared object (JUCE/CLAP plugins, Max externals) — binutils'
+    # unique-symbol handling produces undefined references to symbols the
+    # archive defines. Whether GCC emits them varies with the runner toolchain,
+    # so a rebuild of an unchanged engine version can regress consumers without
+    # this step. See scripts/de-unique-static.sh; no-op for clang-built engines.
+    - name: de-unique static archives (Linux)
+      if: ${{ runner.os == 'Linux' && inputs.kind == 'static' }}
+      shell: bash
+      run: bash scripts/de-unique-static.sh "${{ steps.n.outputs.staging }}/lib"
