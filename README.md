@@ -61,6 +61,10 @@ Per-backend build details (e.g. LiteRT's `LiteRt*` vs `TfLite*` API split, Windo
 from-source toolchain, Android `static`) live in each engine's README under
 [`engines/<backend>/`](./engines).
 
+GPU acceleration (CoreML/MPS baked into the macOS packages; DirectML/CUDA/Vulkan as
+planned variants) is being rolled out per the proposal in
+[`docs/gpu-support.md`](./docs/gpu-support.md).
+
 ## Releases
 
 Backends are versioned independently but **released together, keyed to the anira
