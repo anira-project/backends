@@ -1,6 +1,8 @@
 # LibTorch (PyTorch C++)
 
-CPU-only **shared** libtorch at the version in [`VERSION`](./VERSION), packaged for
+**Shared** libtorch (CPU everywhere; + **MPS** on macOS arm64 — see
+[`docs/gpu-support.md`](../../docs/gpu-support.md)) at the version in
+[`VERSION`](./VERSION), packaged for
 [anira](https://github.com/anira-project/anira). Unlike TFLite/ONNXRuntime (flat
 `include/`+`lib/`), libtorch ships a full CMake package tree and is consumed via
 `find_package(Torch)` — so archives preserve `include/`, `lib/`, **`share/cmake/Torch/`**
@@ -29,10 +31,10 @@ deliberately — not a quick `BUILD_SHARED_LIBS=0` flip.
 | --------------------- | ------------------------------------------------------------- |
 | `VERSION`             | Pinned PyTorch version (single source of truth)               |
 | `repackage.sh`        | Download an upstream prebuilt, restage the full package tree  |
-| `build-libtorch.sh`   | Build CPU shared libtorch from source (the three gaps)        |
+| `build-libtorch.sh`   | Build shared libtorch from source (from-source legs; MPS on mac-arm64) |
 | `stage.sh`            | Repackage or build, staged into the install prefix (orchestrator + CI) |
 | `test/CMakeLists.txt` | `find_package(Torch)` smoke (run via the smoke action / ctest) |
-| `test/smoke.cpp`      | Forward pass: `a+b -> {3,5,7}`, `dot(a,b) -> 20`              |
+| `test/smoke.cpp`      | Forward pass: `a+b -> {3,5,7}`, `dot(a,b) -> 20`; + `a+b` on MPS (mac arm64) |
 
 ## Archive naming
 
@@ -68,9 +70,11 @@ from source (no matching CPU prebuilt at 2.12.0). The macOS **universal** archiv
 from the two from-source per-arch builds — both build from source so their dylib sets match
 (a clean lipo needs matched slices; the official prebuilt arm64 isn't used).
 
-- **CPU-only config**: `USE_CUDA/ROCM/CUDNN/NCCL/DISTRIBUTED/MPI=0`. `USE_MKLDNN`+`FBGEMM`
-  on for x86_64 (off for arm64 — FBGEMM is x86-only). BLAS: Accelerate on macOS, OpenBLAS on
-  Linux aarch64, Eigen on Windows arm64 (self-contained).
+- **Base config**: `USE_CUDA/ROCM/CUDNN/NCCL/DISTRIBUTED/MPI=0`. `USE_MPS=1` on macOS
+  arm64 only (Metal GPU backend; the universal archive's x86_64 slice stays CPU —
+  `torch::mps::is_available()` exists in both slices, so lipo'ing stays link-compatible).
+  `USE_MKLDNN`+`FBGEMM` on for x86_64 (off for arm64 — FBGEMM is x86-only). BLAS:
+  Accelerate on macOS, OpenBLAS on Linux aarch64, Eigen on Windows arm64 (self-contained).
 - **Windows arm64**: native ARM64 MSVC `cl`, **not** clang-cl (`vcvarsall.bat arm64`,
   mirroring PyTorch's own win-arm64 CI). VS ships only x64 clang-cl → an earlier clang-cl
   attempt hit an x64-target mismatch, OOM under emulation, and a `uint` NEON-vec error;

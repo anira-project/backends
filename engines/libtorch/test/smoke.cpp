@@ -36,6 +36,18 @@ int main() {
                 sum[0].item<float>(), sum[1].item<float>(), sum[2].item<float>(), dot);
     if (std::fabs(dot - 20.0f) > 1e-4f) return fail("dot mismatch");
 
+#if defined(__APPLE__) && defined(__aarch64__)
+    // The macOS arm64 package is built with USE_MPS=1 (docs/gpu-support.md Phase 1);
+    // is_available() only returns true when the backend is compiled in AND a Metal
+    // device exists — both hold on the arm64 macOS runners, so a false here means
+    // the package lost MPS.
+    if (!torch::mps::is_available()) return fail("MPS not available in macOS arm64 package");
+    auto sum_mps = (a.to(torch::kMPS) + b.to(torch::kMPS)).to(torch::kCPU);
+    if (!torch::allclose(sum_mps, expected_sum)) return fail("a + b on MPS mismatch");
+    std::printf("MPS OK: a + b on Metal = {%.1f,%.1f,%.1f}\n",
+                sum_mps[0].item<float>(), sum_mps[1].item<float>(), sum_mps[2].item<float>());
+#endif
+
     std::printf("PASS\n");
     return 0;
 }

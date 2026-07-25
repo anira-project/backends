@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Build a CPU-only SHARED libtorch from source for ONE target, producing the same
-# package tree as the upstream prebuilts (include/ lib/ share/cmake/Torch/ [bin/]).
-# Used only for the targets PyTorch does NOT ship a 2.12.0 CPU prebuilt for:
+# Build a SHARED libtorch from source for ONE target (CPU everywhere; + MPS on macOS
+# arm64), producing the same package tree as the upstream prebuilts
+# (include/ lib/ share/cmake/Torch/ [bin/]). Used for the from-source legs:
+#   - macOS arm64    (built from source so we control MPS — see docs/gpu-support.md)
 #   - macOS x86_64   (PyTorch dropped Intel-mac libtorch after 2.2.2)
 #   - Linux aarch64  (no aarch64 libtorch in the download.pytorch.org/cpu index)
 #   - Windows arm64  (2.12.0 release not published; only a -debug build exists)
@@ -70,7 +71,12 @@ case "$PLATFORM" in
     # none), which auto-detects Apple Accelerate (AMX-tuned, full GEMM). Our earlier
     # BLAS=Eigen only routed GEMM through Eigen while still linking Accelerate for LAPACK;
     # the default gives full Accelerate → faster matmul.
-    export USE_MPS=0             # no Metal in a CPU libtorch build
+    #
+    # MPS (Metal) on arm64 — docs/gpu-support.md Phase 1. Matches upstream's arm64
+    # wheels (also MPS-on at MACOSX_DEPLOYMENT_TARGET=11.0; runtime gates on 12.3+ via
+    # @available). Off on x86_64: upstream dropped Intel-mac MPS with the 2.2.2 builds,
+    # and Intel-mac Metal GPUs are not a supported PyTorch path at 2.12.
+    if [ "$ARCH" = "arm64" ]; then export USE_MPS=1; else export USE_MPS=0; fi
     # USE_NATIVE_ARCH=0: don't emit -march=native. The runner's CPU can advertise
     # AVX-512, and Apple Clang rejects PyTorch's `-mavx512fp16` (clang: unknown
     # argument). Building portable dispatch kernels sidesteps it. If a newer AVX-512
