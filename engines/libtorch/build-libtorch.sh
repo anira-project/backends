@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Build a SHARED libtorch from source for ONE target (CPU everywhere; + MPS on macOS
-# arm64), producing the same package tree as the upstream prebuilts
-# (include/ lib/ share/cmake/Torch/ [bin/]). Used for the from-source legs:
-#   - macOS arm64    (built from source so we control MPS — see docs/gpu-support.md)
+# Build a SHARED libtorch from source for ONE target, producing the same package tree
+# as the upstream prebuilts (include/ lib/ share/cmake/Torch/ [bin/]). Default is
+# CPU-only; accel=mps builds the separate macOS-arm64 -gpu variant (GPU is always an
+# extra archive — docs/gpu-support.md). Used for the from-source legs:
+#   - macOS arm64    (CPU default + the mps -gpu variant)
 #   - macOS x86_64   (PyTorch dropped Intel-mac libtorch after 2.2.2)
 #   - Linux aarch64  (no aarch64 libtorch in the download.pytorch.org/cpu index)
 #   - Windows arm64  (2.12.0 release not published; only a -debug build exists)
@@ -10,17 +11,21 @@
 # Path: PyTorch's own libtorch builder, tools/build_libtorch.py (BUILD_PYTHON=OFF),
 # which installs a complete libtorch tree into <pytorch>/torch/. We restage that.
 #
-# Usage: build-libtorch.sh <platform> <arch> <staging-dir>
+# Usage: build-libtorch.sh <platform> <arch> <staging-dir> [accel]
 #   <platform>  macos | linux | windows
 #   <arch>      x86_64 | aarch64 | arm64
 #   <staging>   output prefix; gets include/ lib/ share/ [bin/]
+#   <accel>     none (default) | mps  (macOS arm64 -gpu variant)
 #
 # NOTE: this is the from-source recipe; like the ONNXRuntime/TFLite builders it is
 # expected to need a few CI rounds to converge per platform. Flags below follow
 # PyTorch's official CPU libtorch config.
 set -euo pipefail
 
-PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; ST="${3:?staging dir}"
+PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; ST="${3:?staging dir}"; ACCEL="${4:-none}"
+if [ "$ACCEL" = "mps" ] && { [ "$PLATFORM" != "macos" ] || [ "$ARCH" != "arm64" ]; }; then
+  echo "ERROR: accel=mps is macOS-arm64-only (Metal GPU backend)"; exit 1
+fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 
@@ -72,11 +77,11 @@ case "$PLATFORM" in
     # BLAS=Eigen only routed GEMM through Eigen while still linking Accelerate for LAPACK;
     # the default gives full Accelerate → faster matmul.
     #
-    # MPS (Metal) on arm64 — docs/gpu-support.md Phase 1. Matches upstream's arm64
-    # wheels (also MPS-on at MACOSX_DEPLOYMENT_TARGET=11.0; runtime gates on 12.3+ via
-    # @available). Off on x86_64: upstream dropped Intel-mac MPS with the 2.2.2 builds,
-    # and Intel-mac Metal GPUs are not a supported PyTorch path at 2.12.
-    if [ "$ARCH" = "arm64" ]; then export USE_MPS=1; else export USE_MPS=0; fi
+    # MPS (Metal): ONLY in the separate macOS-arm64 -gpu variant (accel=mps) — the
+    # default package stays CPU-only (GPU is always an extra archive). MPS-on matches
+    # upstream's arm64 wheels (built at MACOSX_DEPLOYMENT_TARGET=11.0; runtime gates on
+    # 12.3+ via @available). Never on x86_64: upstream dropped Intel-mac MPS after 2.2.2.
+    if [ "$ACCEL" = "mps" ]; then export USE_MPS=1; else export USE_MPS=0; fi
     # USE_NATIVE_ARCH=0: don't emit -march=native. The runner's CPU can advertise
     # AVX-512, and Apple Clang rejects PyTorch's `-mavx512fp16` (clang: unknown
     # argument). Building portable dispatch kernels sidesteps it. If a newer AVX-512
