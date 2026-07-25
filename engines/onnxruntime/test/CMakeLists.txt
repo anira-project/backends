@@ -23,7 +23,9 @@ if(SMOKE_KIND STREQUAL "static")
   if(WIN32)
     target_link_libraries(smoke PRIVATE advapi32)            # cpuinfo's RegGetValueW
   elseif(APPLE)
-    target_link_libraries(smoke PRIVATE "-framework Foundation" "-framework CoreFoundation")
+    # CoreML: the macOS static bundle includes the CoreML EP (build-ort.sh --use_coreml),
+    # so consumers must link the framework — this documents anira's required link line.
+    target_link_libraries(smoke PRIVATE "-framework Foundation" "-framework CoreFoundation" "-framework CoreML")
   else()
     target_link_libraries(smoke PRIVATE ${CMAKE_DL_LIBS} m rt) # Linux
   endif()

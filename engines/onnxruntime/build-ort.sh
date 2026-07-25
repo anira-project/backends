@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build static onnxruntime (FULL op set, CPU provider) from source for one target,
+# Build static onnxruntime (FULL op set, CPU provider; + CoreML EP on macOS) from source for one target,
 # leaving the component .a/.lib for scripts/bundle-static.sh to merge into one lib.
 #
 # Ports olilarkin/ort-builder's recipe MINUS the op-reduction (no --minimal_build /
@@ -62,6 +62,10 @@ case "$PLATFORM" in
     # IGNORE_PATH covers find_library/find_path (abseil/protobuf); IGNORE_PREFIX_PATH
     # covers find_package CONFIG mode (flatbuffers_DIR) — both needed.
     IGNORE="/opt/homebrew;/usr/local${ORT_IGNORE_PATHS:+;$ORT_IGNORE_PATHS}"
+    # CoreML EP (GPU/ANE) compiled in on macOS — docs/gpu-support.md Phase 1. Inactive
+    # unless the consumer appends it (AppendExecutionProvider "CoreML"), so CPU-only
+    # users see no behavior change. Static consumers must link CoreML.framework.
+    ARGS+=(--use_coreml)
     ARGS+=(--cmake_extra_defines "CMAKE_OSX_ARCHITECTURES=$ARCH" "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" \
            "CMAKE_IGNORE_PATH=$IGNORE" "CMAKE_IGNORE_PREFIX_PATH=$IGNORE")
     ;;
