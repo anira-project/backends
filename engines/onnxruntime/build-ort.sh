@@ -1,21 +1,36 @@
 #!/usr/bin/env bash
-# Build static onnxruntime (FULL op set, CPU provider; + CoreML EP on macOS) from source for one target,
+# Build static onnxruntime (FULL op set, CPU provider; GPU EPs only in -gpu variants) from source for one target,
 # leaving the component .a/.lib for scripts/bundle-static.sh to merge into one lib.
 #
 # Ports olilarkin/ort-builder's recipe MINUS the op-reduction (no --minimal_build /
 # --include_ops_by_config / --enable_reduced_operator_type_support / --disable_ml_ops),
 # so every operator ships and any model works.
 #
-# Usage: build-ort.sh <platform> <arch> <config> <build-dir> [kind]
+# Usage: build-ort.sh <platform> <arch> <config> <build-dir> [kind] [accel]
 #   <platform>  macos | linux | windows | android | ios | ios-sim
 #   <arch>      x86_64 | arm64 | aarch64 | arm64-v8a (android ABI)
 #   <config>    Release | Debug      (Windows ships both; others Release)
 #   <kind>      static (default) | shared. shared builds libonnxruntime.dylib/.so directly
-#               (one self-contained lib — no re2 force-build, no bundling). We only build
-#               SHARED for macOS; Linux/Windows/Android shared come from upstream prebuilts.
+#               (one self-contained lib — no re2 force-build, no bundling). We build SHARED
+#               for macOS and for the Windows DML gpu variant; other Linux/Windows/Android
+#               shared come from upstream prebuilts.
+#   <accel>     none (default) | coreml | dml. GPU EPs ship ONLY in the separate -gpu
+#               variant archives (docs/gpu-support.md) — CPU-only consumers get CPU-only
+#               packages, so default builds carry no EP beyond CPU.
+#               coreml = macOS CoreML EP (--use_coreml), static + shared.
+#               dml    = Windows DirectML EP (--use_dml), shared-only: Microsoft stopped
+#               publishing the DirectML NuGet after 1.24.4, so the 1.26+ gpu variant is
+#               built from source (dml.cmake nuget-restores the pinned Microsoft.AI.DirectML
+#               redist itself).
 set -euo pipefail
 
-PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:-Release}"; OUT="${4:-build}"; KIND="${5:-static}"
+PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:-Release}"; OUT="${4:-build}"; KIND="${5:-static}"; ACCEL="${6:-none}"
+if [ "$ACCEL" = "dml" ] && [ "$PLATFORM" != "windows" ]; then
+  echo "ERROR: accel=dml is Windows-only (DirectML is a D3D12 API)"; exit 1
+fi
+if [ "$ACCEL" = "coreml" ] && [ "$PLATFORM" != "macos" ]; then
+  echo "ERROR: accel=coreml is macOS-only"; exit 1
+fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 
@@ -62,10 +77,10 @@ case "$PLATFORM" in
     # IGNORE_PATH covers find_library/find_path (abseil/protobuf); IGNORE_PREFIX_PATH
     # covers find_package CONFIG mode (flatbuffers_DIR) — both needed.
     IGNORE="/opt/homebrew;/usr/local${ORT_IGNORE_PATHS:+;$ORT_IGNORE_PATHS}"
-    # CoreML EP (GPU/ANE) compiled in on macOS — docs/gpu-support.md Phase 1. Inactive
-    # unless the consumer appends it (AppendExecutionProvider "CoreML"), so CPU-only
-    # users see no behavior change. Static consumers must link CoreML.framework.
-    ARGS+=(--use_coreml)
+    # CoreML EP (GPU/ANE) — gpu variant only (docs/gpu-support.md: GPU is always a
+    # separate archive; the default macOS packages stay CPU-only). Static gpu consumers
+    # must link CoreML.framework.
+    [ "$ACCEL" = "coreml" ] && ARGS+=(--use_coreml)
     ARGS+=(--cmake_extra_defines "CMAKE_OSX_ARCHITECTURES=$ARCH" "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" \
            "CMAKE_IGNORE_PATH=$IGNORE" "CMAKE_IGNORE_PREFIX_PATH=$IGNORE")
     ;;
@@ -81,6 +96,13 @@ case "$PLATFORM" in
     # ARM CPU-matmul accelerators; disable on win-arm64 for a working CPU build. The other
     # arm64 targets (linux/macOS/android) assemble these with clang and keep them.
     [ "$ARCH" = "arm64" ] && ARGS+=(--cmake_extra_defines onnxruntime_USE_KLEIDIAI=OFF onnxruntime_USE_SVE=OFF)
+    # DirectML EP (gpu variant, shared-only): vendor-agnostic Windows GPU via D3D12.
+    # dml.cmake (Public mode) nuget-restores the pinned Microsoft.AI.DirectML redist into
+    # <build>/packages/ — stage.sh ships its DirectML.dll next to onnxruntime.dll.
+    if [ "$ACCEL" = "dml" ]; then
+      [ "$KIND" = "shared" ] || { echo "ERROR: accel=dml is shared-only (DML EP + DirectML.dll redist)"; exit 1; }
+      ARGS+=(--use_dml)
+    fi
     # build.py forces CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase (/Zi)
     # GLOBALLY — even for Release, which embeds CodeView in every .obj and bloats the
     # shipped static .lib ~5x (854 MB!). The Release lib we ship needs no debug info,

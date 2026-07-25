@@ -17,15 +17,28 @@ target_include_directories(smoke PRIVATE "${ORT_INC}")
 target_link_libraries(smoke PRIVATE "${ORT_LIB}")
 target_compile_features(smoke PRIVATE cxx_std_17)
 
+# GPU variant packages advertise their EP via the provider header they ship
+# (CPU-only packages don't carry these headers) — the smoke keys its extra
+# EP forward pass on that, exactly how anira should detect the variant.
+if(EXISTS "${ORT_INC}/coreml_provider_factory.h")
+  target_compile_definitions(smoke PRIVATE SMOKE_HAS_COREML)
+endif()
+if(EXISTS "${ORT_INC}/dml_provider_factory.h")
+  target_compile_definitions(smoke PRIVATE SMOKE_HAS_DML)
+endif()
+
 if(SMOKE_KIND STREQUAL "static")
   find_package(Threads REQUIRED)
   target_link_libraries(smoke PRIVATE Threads::Threads)
   if(WIN32)
     target_link_libraries(smoke PRIVATE advapi32)            # cpuinfo's RegGetValueW
   elseif(APPLE)
-    # CoreML: the macOS static bundle includes the CoreML EP (build-ort.sh --use_coreml),
-    # so consumers must link the framework — this documents anira's required link line.
-    target_link_libraries(smoke PRIVATE "-framework Foundation" "-framework CoreFoundation" "-framework CoreML")
+    target_link_libraries(smoke PRIVATE "-framework Foundation" "-framework CoreFoundation")
+    # gpu variant: the static bundle contains the CoreML EP -> consumers must add the
+    # framework — this documents anira's required link line for the -gpu package.
+    if(EXISTS "${ORT_INC}/coreml_provider_factory.h")
+      target_link_libraries(smoke PRIVATE "-framework CoreML")
+    endif()
   else()
     target_link_libraries(smoke PRIVATE ${CMAKE_DL_LIBS} m rt) # Linux
   endif()

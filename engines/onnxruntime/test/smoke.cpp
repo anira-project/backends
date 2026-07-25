@@ -5,9 +5,11 @@
 // path (session, MLAS kernels, the Add op). The bundled test/add.onnx computes
 // y = x + x, so x = {1,2,3} must yield y = {2,4,6}.
 //
-// On macOS the forward pass runs twice: once on the default CPU EP, once with the
-// CoreML EP appended (build-ort.sh compiles it in via --use_coreml) — proving the EP
-// is linked, registers, and executes (nodes CoreML can't take fall back to CPU).
+// GPU variant packages (docs/gpu-support.md) run the forward pass a second time with
+// their EP appended — CoreML (macOS -gpu) / DirectML (Windows -gpu) — proving the EP
+// is linked, registers, and executes (nodes the EP can't take fall back to CPU).
+// The extra pass is keyed on the provider header the package ships (SMOKE_HAS_COREML /
+// SMOKE_HAS_DML from the CMakeLists); CPU-only packages run the CPU pass only.
 //
 // Usage: smoke <model.onnx>   (no arg = link/init check only)
 // exit 0 = pass, non-zero = fail.
@@ -21,6 +23,9 @@
 #include <vector>
 
 #include "onnxruntime_cxx_api.h"
+#ifdef SMOKE_HAS_DML
+#include "dml_provider_factory.h"
+#endif
 
 int main(int argc, char** argv) {
     try {
@@ -66,11 +71,22 @@ int main(int argc, char** argv) {
         Ort::SessionOptions cpu_opts;
         if (run(cpu_opts, "cpu")) return 1;
 
-#ifdef __APPLE__
-        // CoreML EP is compiled into the macOS packages — prove it registers and runs.
+#ifdef SMOKE_HAS_COREML
+        // macOS -gpu variant: prove the CoreML EP registers and runs.
         Ort::SessionOptions coreml_opts;
         coreml_opts.AppendExecutionProvider("CoreML", std::unordered_map<std::string, std::string>{});
         if (run(coreml_opts, "coreml")) return 1;
+#endif
+
+#ifdef SMOKE_HAS_DML
+        // Windows -gpu variant: prove the DirectML EP registers and runs. Works on
+        // GPU-less runners too (D3D12 falls back to the WARP software adapter).
+        // DML requires memory patterns off + sequential execution.
+        Ort::SessionOptions dml_opts;
+        dml_opts.DisableMemPattern();
+        dml_opts.SetExecutionMode(ORT_SEQUENTIAL);
+        Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_DML(dml_opts, 0));
+        if (run(dml_opts, "dml")) return 1;
 #endif
 
         std::printf("PASS\n");

@@ -7,6 +7,14 @@ ships); **shared** is built for macOS but **repackaged** from Microsoft's prebui
 elsewhere. A **WASM** (Emscripten) static lib is built from source too — for anira
 compiled to WebAssembly.
 
+GPU EPs ship as separate variant archives ([`docs/gpu-support.md`](../../docs/gpu-support.md)):
+`-gpu` = CoreML on macOS (from source, `--use_coreml`) / DirectML on Windows (from source,
+`--use_dml` + the `Microsoft.AI.DirectML` redist DLL — Microsoft stopped publishing the
+DirectML NuGet after 1.24.4); `-cuda` = the upstream `-gpu` prebuilt repackaged (CUDA EP +
+provider bridge, TensorRT provider dropped; CUDA 12.x + cuDNN 9 are user-provided). Each
+variant package ships its provider header (`coreml_provider_factory.h` /
+`dml_provider_factory.h`) — that's how the smoke (and anira) detect the EP.
+
 ## Files
 
 | File                  | Purpose                                                      |
