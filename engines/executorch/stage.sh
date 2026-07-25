@@ -9,15 +9,16 @@
 # every desktop leg is built from source. The <source>/<url> args are accepted for a
 # uniform stage.sh signature but only `build` is supported.
 #
-# Usage: stage.sh <platform> <arch> <config> <kind> <source> <staging> [url]
+# Usage: stage.sh <platform> <arch> <config> <kind> <source> <staging> [url] [flavor]
 #   <platform> macos|linux|windows   <arch> x86_64|aarch64|arm64
 #   <config>   Release                <kind> static
 #   <source>   build                  <staging> output prefix
 #   [url]      ignored (no prebuilt desktop runtime upstream)
+#   [flavor]   GPU variant (docs/gpu-support.md): coreml (macOS -gpu) | vulkan (Linux -gpu)
 set -euo pipefail
 
 PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:?config}"; KIND="${4:?kind}"
-SOURCE="${5:?source}"; ST="${6:?staging dir}"; URL="${7:-}"
+SOURCE="${5:?source}"; ST="${6:?staging dir}"; URL="${7:-}"; FLAVOR="${8:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 if [ "$SOURCE" != "build" ]; then
@@ -25,6 +26,6 @@ if [ "$SOURCE" != "build" ]; then
   exit 1
 fi
 
-bash "$HERE/build-executorch.sh" "$PLATFORM" "$ARCH" "$ST"
+bash "$HERE/build-executorch.sh" "$PLATFORM" "$ARCH" "$ST" "${FLAVOR:-none}"
 
-echo "staged executorch ($PLATFORM/$ARCH/$KIND/$SOURCE) -> $ST"
+echo "staged executorch ($PLATFORM/$ARCH/$KIND/$SOURCE${FLAVOR:+/$FLAVOR}) -> $ST"

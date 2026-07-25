@@ -20,17 +20,31 @@
 # anira uses the CPU path for now. The cross-platform GPU delegate for Linux/Windows
 # (Vulkan) is left as a follow-up; see the TODO below.
 #
-# Usage: build-executorch.sh <platform> <arch> <staging-dir>
+# Usage: build-executorch.sh <platform> <arch> <staging-dir> [accel]
 #   <platform>  macos | linux | windows
 #   <arch>      x86_64 | aarch64 | arm64
 #   <staging>   output prefix; gets include/ lib/ (incl. lib/cmake/ExecuTorch/)
+#   <accel>     none (default) | coreml | vulkan. GPU delegates ship ONLY in the separate
+#               -gpu variant archives (docs/gpu-support.md) — the default package is
+#               CPU-only (XNNPACK + optimized kernels).
+#               coreml = macOS -gpu: CoreML delegate (+ MLX on arm64, which floors the
+#                        deployment target at 14.0 — the CPU default stays at 12.0).
+#               vulkan = Linux x86_64 -gpu (experimental): cross-vendor GPU delegate;
+#                        needs glslc at build time only (loader is dlopen'd via volk).
 #
 # NOTE: like the libtorch/onnx/litert from-source recipes, this is expected to need a few
 # CI rounds to converge per platform. Flags below follow ExecuTorch's own platform presets
 # (tools/cmake/preset/{apple_common,linux,windows}.cmake at the pinned tag).
 set -euo pipefail
 
-PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; ST="${3:?staging dir}"
+PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; ST="${3:?staging dir}"; ACCEL="${4:-none}"
+case "$ACCEL" in
+  none) ;;
+  coreml) [ "$PLATFORM" = "macos" ] || { echo "ERROR: accel=coreml is macOS-only"; exit 1; } ;;
+  vulkan) { [ "$PLATFORM" = "linux" ] && [ "$ARCH" = "x86_64" ]; } || \
+          { echo "ERROR: accel=vulkan is Linux-x86_64-only (first cut)"; exit 1; } ;;
+  *) echo "ERROR: unknown accel '$ACCEL'"; exit 1 ;;
+esac
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 
@@ -162,27 +176,45 @@ ET_FLAGS=(
 
 case "$PLATFORM" in
   macos)
-    # MLX (backends/mlx/CMakeLists.txt) hard-requires a >=14.0 deployment target; CoreML
-    # and the CPU path are fine at 12.0. So arm64 (MLX built in) floors at 14.0 and Intel
-    # (no MLX) stays at 12.0. NOTE: the arm64 package therefore requires macOS 14+.
-    if [ "$ARCH" = "arm64" ]; then MACVER=14.0; else MACVER=12.0; fi
+    # Default package is CPU-only at deployment target 12.0. The -gpu variant
+    # (accel=coreml) adds the CoreML delegate, and on arm64 also MLX — whose
+    # backends/mlx/CMakeLists.txt hard-requires >=14.0, so ONLY the arm64 -gpu
+    # package floors at macOS 14+; every other macOS package stays 12.0.
+    MACVER=12.0
+    if [ "$ACCEL" = "coreml" ]; then
+      ET_FLAGS+=(-DEXECUTORCH_BUILD_COREML=ON)   # ANE/GPU; embeds the CoreML model in the .pte
+      if [ "$ARCH" = "arm64" ]; then
+        MACVER=14.0
+        # MLX (Apple-Silicon GPU) is arm64-only; there is no Intel-mac MLX. Bundles an
+        # mlx.metallib that must ship alongside the libs (staging step below keys on
+        # this shell var).
+        EXECUTORCH_BUILD_MLX=ON
+        ET_FLAGS+=(-DEXECUTORCH_BUILD_MLX=ON)
+      fi
+    fi
     export MACOSX_DEPLOYMENT_TARGET="$MACVER"
     ET_FLAGS+=(
       -DCMAKE_OSX_ARCHITECTURES="$ARCH"
       -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACVER"
-      # Apple delegates — built in so the ANE/GPU path is ready WITHOUT a rebuild. anira
-      # stays on CPU for now; these just have to be present in the package.
-      -DEXECUTORCH_BUILD_COREML=ON          # ANE/GPU; embeds the CoreML model in the .pte
     )
-    # MLX (Apple-Silicon GPU) is arm64-only; there is no Intel-mac MLX. Bundles an
-    # mlx.metallib that must ship alongside the libs (handled in the staging step below).
-    [ "$ARCH" = "arm64" ] && ET_FLAGS+=(-DEXECUTORCH_BUILD_MLX=ON)
     ;;
   linux)
-    # CPU-only (XNNPACK + optimized ATen kernels). No CoreML/MLX off Apple.
-    # TODO(hw-accel): add -DEXECUTORCH_BUILD_VULKAN=ON here as the cross-platform GPU
-    # delegate once we move past CPU. Vulkan needs the Vulkan SDK + glslc on the runner.
-    : ;;
+    # Default: CPU-only (XNNPACK + optimized ATen kernels). The -gpu variant
+    # (accel=vulkan) adds the cross-vendor Vulkan delegate (experimental,
+    # docs/gpu-support.md Phase 4): shaders are compiled at build time with glslc;
+    # at runtime the delegate loads libvulkan via volk (dlopen), so the package adds
+    # NO hard runtime dependency — without a Vulkan driver or a vulkan-partitioned
+    # .pte it behaves exactly like the CPU package.
+    if [ "$ACCEL" = "vulkan" ]; then
+      if ! command -v glslc >/dev/null 2>&1; then
+        # ubuntu-24.04 runners: glslc ships in the `glslc` package.
+        if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq glslc
+        fi
+        command -v glslc >/dev/null 2>&1 || { echo "ERROR: accel=vulkan needs glslc (shader compiler) on PATH"; exit 1; }
+      fi
+      ET_FLAGS+=(-DEXECUTORCH_BUILD_VULKAN=ON)
+    fi ;;
   windows)
     # MSVC (cl) via the workflow's msvc-dev-cmd env + Ninja. We disable the LLM/custom
     # kernels (ExecuTorch warns those need -T ClangCL on MSVC); core + XNNPACK + optimized
@@ -273,7 +305,7 @@ fi
 BUILD_JOBS=$(( memgb / 3 )); [ "$BUILD_JOBS" -lt 2 ] && BUILD_JOBS=2
 [ "$BUILD_JOBS" -gt "$ncores" ] && BUILD_JOBS=$ncores
 
-echo "== building ExecuTorch ${VER} for ${PLATFORM}/${ARCH} (static, CPU + XNNPACK${EXECUTORCH_BUILD_MLX:+ +MLX}); -j ${BUILD_JOBS} (cores=${ncores} mem=${memgb}GB) =="
+echo "== building ExecuTorch ${VER} for ${PLATFORM}/${ARCH} (static, CPU + XNNPACK, accel=${ACCEL}${EXECUTORCH_BUILD_MLX:+ +MLX}); -j ${BUILD_JOBS} (cores=${ncores} mem=${memgb}GB) =="
 cmake -S "$SRC" -B "$BUILD" "${ET_FLAGS[@]}"
 cmake --build "$BUILD" -j "$BUILD_JOBS" --target install
 

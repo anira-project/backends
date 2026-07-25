@@ -16,14 +16,16 @@ loads any `.pte`**. The model graph is still pared down ahead-of-time on the exp
 imported targets' link interface, so op/backend static initializers register despite static
 linking (the failure mode that makes static libtorch fragile is handled upstream here).
 
-## CPU first; hardware acceleration is wired but off
+## CPU by default; GPU delegates ship as separate -gpu variants
 
-Every platform builds the optimized CPU kernels + **XNNPACK** (the CPU path anira uses now).
-On Apple the **CoreML** delegate (ANE/GPU) and, on arm64, the **MLX** delegate (Apple-Silicon
-GPU) are also built **into** the package, so the hardware path can be switched on later
-*without a runtime rebuild* — anira just selects a delegate at export/load time. The
-cross-platform GPU delegate for Linux/Windows (**Vulkan**) is a deliberate follow-up; see the
-`TODO(hw-accel)` markers in `build-executorch.sh`.
+Every platform builds the optimized CPU kernels + **XNNPACK** (the CPU path anira uses now);
+the default packages contain nothing else. GPU delegates live in the separate `-gpu` variant
+archives ([`docs/gpu-support.md`](../../docs/gpu-support.md)): on Apple the **CoreML**
+delegate (ANE/GPU) and, on arm64, the **MLX** delegate (which floors that one package at
+macOS 14+; the CPU default stays at 12.0); on Linux x64 the cross-vendor **Vulkan** delegate
+(experimental — shaders compile with `glslc` at build time; the loader is dlopen'd via volk,
+so there's no hard runtime dependency). Windows Vulkan is a follow-up (needs the Vulkan SDK
+toolchain on the runner).
 
 > Streaming caveat (from the neural_tilde external, worth knowing before enabling GPU):
 > XNNPACK and CoreML persist `cached_conv` streaming state across `execute()`; **MLX does
@@ -40,7 +42,7 @@ to repackage. So every desktop leg builds from source; there is no `prebuilt` mo
 | File                  | Purpose                                                                 |
 | --------------------- | ----------------------------------------------------------------------- |
 | `VERSION`             | Pinned ExecuTorch version (single source of truth)                      |
-| `build-executorch.sh` | Build the static CPU+XNNPACK runtime from source (Apple adds CoreML/MLX)|
+| `build-executorch.sh` | Build the static CPU+XNNPACK runtime from source (`accel=` adds CoreML/MLX/Vulkan for -gpu variants)|
 | `stage.sh`            | Dispatch to the from-source build, staged into the install prefix       |
 | `test/CMakeLists.txt` | `find_package(executorch CONFIG)` smoke (run via the smoke action/ctest)|
 | `test/smoke.cpp`      | Loads `add.pte` and runs `a+b -> {3,5,7}`; link-only fallback otherwise  |
