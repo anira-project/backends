@@ -1,72 +1,93 @@
-# GPU support — proposal (first draft)
+# GPU support
 
-Status: **draft / RFC**. Phase 1 is implemented on this branch; later phases are planned.
+Status: **implemented on this branch** (Phases 1–4 below; each leg needs its first CI
+round to converge, like every from-source recipe in this repo).
 
-## Goals
+## Principles
 
-Offer GPU acceleration per backend where the upstream runtime has a *supported* desktop
-GPU path, without regressing the CPU packages that real-time audio users rely on:
+1. **CPU-only users get CPU-only packages.** GPU support is ALWAYS a separate variant
+   archive (`-gpu` / `-cuda` name token) — never baked into the default packages. At
+   typical audio buffer sizes, host↔device transfer latency and scheduling jitter
+   usually make CPU inference faster and more predictable anyway; GPU variants target
+   large models / relaxed-latency use cases.
+2. **A variant is one extra build leg, not a new pipeline.** The accelerator is encoded
+   in the preset's `vendor.anira.name` (e.g. `Windows-x86_64-gpu`), so archive naming,
+   packaging, upload, smoke and publish all reuse the existing machinery. The preset's
+   `BACKENDS_FLAVOR` cache var tells the engine's `stage.sh` what to build.
+3. **CUDA runtime + cuDNN are user-provided prerequisites**, documented per package —
+   bundling them would push archives past GitHub's 2 GB release-file limit and multiply
+   download size. `-cuda` packages need the NVIDIA libraries on the library path at
+   runtime (and therefore skip the CI smoke: `canRun=0` where the dynamic loader would
+   fail without them).
 
-1. **GPU is opt-in, CPU stays the default.** At typical audio buffer sizes, host↔device
-   transfer latency and scheduling jitter usually make CPU inference faster and more
-   predictable. GPU legs target large models / relaxed-latency use cases.
-2. **Apple GPU support is baked into the existing packages** (CoreML EP, MPS): near-zero
-   size cost, zero external dependencies — no separate archive needed.
-3. **CUDA/DirectML ship as separate `-gpu`/`-cuda` archives, shared-only.** The ORT CUDA
-   EP loads as a separate provider shim and cuDNN cannot realistically be linked
-   statically; a variant archive keeps the base packages lean.
-4. **CUDA runtime + cuDNN are user-provided prerequisites**, documented per package —
-   bundling them would push LibTorch archives past GitHub's 2 GB release-file limit and
-   multiply download size for everyone.
+## Variant matrix
 
-## Support matrix (proposed)
-
-| Backend | macOS (arm64 / x86_64) | Windows (x64 / arm64) | Linux (x64 / aarch64) |
+| Backend | macOS | Windows | Linux |
 |---|---|---|---|
-| **ONNX Runtime** | **CoreML EP** (GPU/ANE), both arches, baked into existing packages | **DirectML EP**, both arches, vendor-agnostic, `-gpu` variant | **CUDA EP**, x64 only, `-cuda` variant; aarch64 stays CPU |
-| **LibTorch** | **MPS**, arm64 only (from-source build flips `USE_MPS=1`) | **CUDA**, x64 only, repackaged upstream; arm64 stays CPU | **CUDA**, x64 only, repackaged upstream; aarch64 stays CPU |
-| **ExecuTorch** | **CoreML + MPS delegates** — already wired in the build, flip on | **Vulkan delegate**, x64 first, experimental | **Vulkan delegate**, x64 first, experimental |
-| **TFLite / LiteRT** | — (GPU delegate is mobile-only upstream) | — | — |
+| **ONNX Runtime** | `-gpu`: **CoreML EP** (GPU/ANE), x86_64 + arm64, static + shared, from source (`--use_coreml`) | `-gpu`: **DirectML EP**, x64 + arm64, shared, from source (`--use_dml`; Microsoft stopped publishing the DirectML NuGet after 1.24.4) · `-cuda`: **CUDA EP**, x64, shared, repackaged upstream `-gpu` prebuilt | `-cuda`: **CUDA EP**, x64, shared, repackaged upstream `-gpu` prebuilt |
+| **LibTorch** | `-gpu`: **MPS**, arm64 only, shared, from source (`USE_MPS=1`) | `-cuda`: x64, shared, repackaged upstream `cu126` prebuilt, NVIDIA redist libs stripped | `-cuda`: x64, shared, repackaged upstream `cu126` prebuilt, NVIDIA redist libs stripped |
+| **ExecuTorch** | `-gpu`: **CoreML delegate** (+ **MLX** on arm64), static, from source | — (Vulkan deferred: needs the Vulkan SDK toolchain on Windows runners) | `-gpu`: **Vulkan delegate** (experimental), x64, static, from source |
+| **TFLite / LiteRT** | — | — | — (GPU delegate is mobile-only upstream) |
+
+Notes:
+
+- **ExecuTorch default packages changed**: CoreML/MLX used to be compiled into the
+  default macOS packages ("wired in but off"); they now live in the `-gpu` variant
+  only. Side effect: the default macOS arm64 package no longer requires macOS 14+
+  (that floor came from MLX) — it is back to 12.0; only the arm64 `-gpu` package
+  needs 14+.
+- The ExecuTorch Vulkan delegate dlopens `libvulkan` via volk, so the Linux `-gpu`
+  package adds **no hard runtime dependency** — without a Vulkan driver or a
+  vulkan-partitioned `.pte` it behaves exactly like the CPU package. Build needs
+  `glslc` on the runner (apt: `glslc`).
+- libtorch CUDA channel is **cu126** (CUDA 12.6 + cuDNN 9) — the same CUDA 12.x
+  generation ONNX Runtime 1.26 targets, so one NVIDIA stack serves both `-cuda`
+  packages. (2.12.0 prebuilts exist for cu126 and cu130; cu128 was not published.)
+- No macOS **universal** `-gpu` archives yet (the universal lipo job aggregates by
+  kind only); consumers pick the per-arch `-gpu` archive.
 
 Deliberately **not** offered, and why:
 
 - **ROCm** (Linux/AMD): narrow supported-GPU list, very large packages, rough install UX.
 - **TensorRT EP**: adds a TensorRT install + version-pinning burden; the CUDA EP covers
-  the NVIDIA need.
+  the NVIDIA need (the repackage drops the TensorRT provider from upstream's gpu bundle).
 - **OpenVINO EP** (Intel): niche for audio workstations; revisit on demand.
 - **Vulkan on macOS**: Apple has no native Vulkan — it would run through MoltenVK, where
   the native CoreML/MPS paths are faster and better supported.
-- **TFLite/LiteRT desktop GPU delegate**: unsupported upstream on desktop (OpenCL/GL/
-  Metal, mobile-focused). Revisit with the Android/iOS GPU legs.
-- **Linux aarch64 GPU**: effectively means NVIDIA Jetson/Grace (CUDA sbsa); niche —
-  treat as a separate request.
+- **TFLite/LiteRT desktop GPU delegate**: unsupported upstream on desktop. Revisit with
+  the Android/iOS GPU legs.
+- **Linux aarch64 GPU**: effectively means NVIDIA Jetson/Grace; niche — separate request.
 
-The known gap this leaves: **AMD/Intel GPUs on Linux** have no path until the
-ExecuTorch Vulkan delegate (or a future ORT WebGPU EP leg) matures.
+The known gap: **AMD/Intel GPUs on Linux** have no path until the ExecuTorch Vulkan
+delegate (or a future ORT WebGPU EP leg) matures.
 
-## Rollout phases
+## How a variant leg works
 
-| Phase | Deliverable | Effort / risk |
-|---|---|---|
-| **1 (this branch)** | ORT **CoreML EP** compiled into the existing macOS static+shared packages; LibTorch **MPS** enabled in the from-source macOS arm64 build. Smoke tests exercise both. | Low — config flags on existing builds |
-| 2 | ORT **DirectML** `-gpu` variant, Windows x64 + arm64 (shared) | Low-medium — well-trodden upstream path; DirectML.dll redist ships in the archive |
-| 3 | ORT **CUDA EP** + LibTorch **CUDA** repackage, Linux/Windows x64, `-cuda` variants (shared-only) | Medium — archive size/splitting; CI builds without a GPU, smoke needs a GPU runner or init-only check |
-| 4 | ExecuTorch **Vulkan delegate** Linux/Windows x64 (experimental tier) + CoreML/MPS delegates on | High — desktop Vulkan delegate is uncharted upstream; needs an export-side (`.pte` partitioning) story |
+- Preset `<engine>-<platform>-<arch>-{gpu|cuda}-<kind>` sets
+  `BACKENDS_FLAVOR` (`coreml` / `dml` / `mps` / `cuda` / `linux-cuda` / `windows-cuda` /
+  `vulkan`); `vendor.anira.name` carries the `-gpu`/`-cuda` token so the archive is
+  `<lib>-<version>-<Platform>-<arch>-<variant>-<kind>.zip`.
+- `cmake/ExternalEngine.cmake` forwards the flavor to the engine's `stage.sh`, which
+  routes it to the from-source build (`--use_coreml`, `--use_dml`, `USE_MPS=1`,
+  `EXECUTORCH_BUILD_COREML/MLX/VULKAN=ON`) or the repackage script (CUDA prebuilts,
+  NVIDIA-lib stripping).
+- The smoke proves the accelerator, not just the build: ORT runs the forward pass again
+  with the variant's EP appended (CoreML on macOS `-gpu`; DirectML on Windows `-gpu`,
+  which works on GPU-less runners via the WARP software adapter); libtorch `-gpu` runs
+  an op on the Metal device — and the **default** packages assert the accelerator is
+  absent. ORT packages advertise their EP via the provider header they ship
+  (`coreml_provider_factory.h` / `dml_provider_factory.h`) — the same detection anira
+  should use.
 
 ## Consumer-facing notes (anira side)
 
-- anira must expose **execution-provider / delegate selection** in its backend config
-  (e.g. a per-backend accelerator preference) before Phase 2+ is usable; Phase 1 EPs are
-  opt-in at session level and change nothing for existing CPU users.
-- **Static macOS ORT consumers** must now additionally link `CoreML.framework`
-  (the smoke test documents the exact link line).
-- ExecuTorch delegates only run models **exported for that delegate** — Phase 4 needs
-  matching export documentation/tooling.
-
-## Per-phase packaging
-
-- Phase 1: no new archives, no renames. macOS packages simply gain the EP/backend.
-- Phase 2/3: new `onnxruntime-*-gpu` (DirectML) and `onnxruntime-*-cuda` /
-  `libtorch-*-cuda` archives, shared-only, same staging layout as the existing ones.
-- Phase 4: ExecuTorch delegates land in the existing static package (delegates are
-  compiled in; inactive unless the `.pte` targets them).
+- anira must expose **execution-provider / delegate selection** per backend; the
+  variant packages are inert without it (they run CPU by default).
+- **Static macOS ORT `-gpu` consumers** must additionally link `CoreML.framework`
+  (see the smoke CMakeLists for the exact link line).
+- `-cuda` packages: user installs CUDA 12.x + cuDNN 9 and puts them on the library
+  path. The ORT CUDA EP is loaded on demand (`libonnxruntime_providers_cuda`), so the
+  base lib still runs CPU-only without them; libtorch `-cuda` links its CUDA glue
+  directly, so it does NOT load at all without the NVIDIA libs.
+- ExecuTorch delegates only run models **exported for that delegate** (`.pte`
+  partitioned for CoreML/MLX/Vulkan) — needs matching export documentation/tooling.
