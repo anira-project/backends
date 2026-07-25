@@ -27,10 +27,18 @@ runs:
         # (runs under Rosetta). Other platforms build natively on their own runner.
         [ "${{ runner.os }}" = "macOS" ] && extra+=(-DCMAKE_OSX_ARCHITECTURES=${{ inputs.arch }})
 
+        # GPU variant legs (preset *-gpu-* / *-cuda-*) tell the smoke what to expect
+        # (e.g. libtorch's -gpu package must prove MPS; default packages must be CPU-only).
+        variant=""
+        case "${{ inputs.preset }}" in
+          *-gpu-*)  variant=gpu ;;
+          *-cuda-*) variant=cuda ;;
+        esac
+
         cmake -S "engines/${{ inputs.engine }}/test" -B "$bdir" -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ inputs.config }} \
           -DCMAKE_PREFIX_PATH="$st" \
-          -DSMOKE_KIND=${{ inputs.kind }} "${extra[@]}"
+          -DSMOKE_KIND=${{ inputs.kind }} -DSMOKE_VARIANT="$variant" "${extra[@]}"
         cmake --build "$bdir"
 
         # Runtime libs. Unix: the test bakes an rpath to the staging lib dir. Windows loads DLLs

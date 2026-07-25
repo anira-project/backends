@@ -72,6 +72,7 @@ jobs:
           ext:        ${{ matrix.ext }}
           cpu_suffix: ${{ matrix.cpuSuffix }}
           flavor:     ${{ matrix.flavor }}
+          channel:    ${{ matrix.channel }}
 
       # Developer ID sign the macOS shared dylibs before packaging (no-op without the org cert).
       - name: sign macOS dylibs
