@@ -87,12 +87,18 @@ case "$PLATFORM" in
     # must link CoreML.framework.
     if [ "$ACCEL" = "coreml" ]; then
       ARGS+=(--use_coreml)
-      # Upstream CMake bug (static-only): coreml_proto is installed but never added to
-      # the ${PROJECT_NAME}Targets export set, so CMake's generate step aborts with
-      # "requires target 'coreml_proto' that is not in any export set" (the providers
-      # and the onnxruntime target both export-depend on it). Add it — idempotent (the
-      # patched line no longer ends in 'coreml_proto'), perl for BSD/GNU-sed neutrality.
-      perl -pi -e 's/install\(TARGETS coreml_proto\s*$/install(TARGETS coreml_proto EXPORT \$\{PROJECT_NAME\}Targets\n/' \
+      # Upstream CMake bugs (static-only, hit once coreml_proto must be exported):
+      # 1) coreml_proto is installed but never added to the ${PROJECT_NAME}Targets
+      #    export set -> generate aborts with "requires target 'coreml_proto' that is
+      #    not in any export set" (providers_coreml + onnxruntime export-depend on it).
+      # 2) once exported, its PUBLIC include of ${CMAKE_CURRENT_BINARY_DIR} is a raw
+      #    build-dir path, illegal in an installed export -> wrap in $<BUILD_INTERFACE:>
+      #    (build behavior identical; the export interface just drops the build path —
+      #    fine, our packaging bundles flat .a's and never ships this export).
+      # Both idempotent (patterns don't rematch their replacements); perl for
+      # BSD/GNU-sed neutrality.
+      perl -pi -e 's/install\(TARGETS coreml_proto\s*$/install(TARGETS coreml_proto EXPORT \$\{PROJECT_NAME\}Targets\n/;
+                   s/^(\s+)"\$\{CMAKE_CURRENT_BINARY_DIR\}"\)\s*$/$1\$<BUILD_INTERFACE:\$\{CMAKE_CURRENT_BINARY_DIR\}>)\n/' \
         "$SRC/cmake/onnxruntime_providers_coreml.cmake"
     fi
     ARGS+=(--cmake_extra_defines "CMAKE_OSX_ARCHITECTURES=$ARCH" "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" \
