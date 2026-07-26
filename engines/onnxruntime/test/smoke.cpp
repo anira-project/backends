@@ -24,6 +24,7 @@
 
 #include "onnxruntime_cxx_api.h"
 #ifdef SMOKE_HAS_DML
+#include <dxgi1_4.h>   // IDXGIFactory4::EnumWarpAdapter (WARP fallback on GPU-less runners)
 #include "dml_provider_factory.h"
 #endif
 
@@ -79,14 +80,62 @@ int main(int argc, char** argv) {
 #endif
 
 #ifdef SMOKE_HAS_DML
-        // Windows -gpu variant: prove the DirectML EP registers and runs. Works on
-        // GPU-less runners too (D3D12 falls back to the WARP software adapter).
-        // DML requires memory patterns off + sequential execution.
-        Ort::SessionOptions dml_opts;
-        dml_opts.DisableMemPattern();
-        dml_opts.SetExecutionMode(ORT_SEQUENTIAL);
-        Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_DML(dml_opts, 0));
-        if (run(dml_opts, "dml")) return 1;
+        // Windows -gpu variant: prove the DirectML EP registers and runs. The simple
+        // device_id path deliberately skips software adapters (fails with C0262002 on
+        // GPU-less CI runners), so fall back to an explicitly created WARP (software)
+        // D3D12 device via the DML1 API. DML needs mem patterns off + sequential exec.
+        {
+            const OrtDmlApi* dml_api = nullptr;
+            Ort::ThrowOnError(Ort::GetApi().GetExecutionProviderApi(
+                "DML", ORT_API_VERSION, reinterpret_cast<const void**>(&dml_api)));
+
+            Ort::SessionOptions dml_opts;
+            dml_opts.DisableMemPattern();
+            dml_opts.SetExecutionMode(ORT_SEQUENTIAL);
+            OrtStatus* hw = dml_api->SessionOptionsAppendExecutionProvider_DML(dml_opts, 0);
+            if (hw == nullptr) {
+                if (run(dml_opts, "dml")) return 1;
+            } else {
+                std::fprintf(stderr, "note: no hardware D3D12 adapter (%s) -> WARP fallback\n",
+                             Ort::GetApi().GetErrorMessage(hw));
+                Ort::GetApi().ReleaseStatus(hw);
+
+                IDXGIFactory4* factory = nullptr;
+                if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))
+                    { std::fprintf(stderr, "FAIL: CreateDXGIFactory1\n"); return 1; }
+                IDXGIAdapter* warp = nullptr;
+                if (FAILED(factory->EnumWarpAdapter(IID_PPV_ARGS(&warp))))
+                    { std::fprintf(stderr, "FAIL: EnumWarpAdapter\n"); return 1; }
+                ID3D12Device* dev = nullptr;
+                if (FAILED(D3D12CreateDevice(warp, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&dev))))
+                    { std::fprintf(stderr, "FAIL: D3D12CreateDevice(WARP)\n"); return 1; }
+
+                // DMLCreateDevice lives in the DirectML.dll shipped in this package
+                // (copied next to the smoke exe by the smoke action) — resolve it
+                // dynamically so the smoke needs no DirectML import lib.
+                HMODULE dml_mod = LoadLibraryW(L"DirectML.dll");
+                if (!dml_mod) { std::fprintf(stderr, "FAIL: LoadLibrary(DirectML.dll)\n"); return 1; }
+                using DMLCreateDeviceFn = HRESULT(WINAPI*)(ID3D12Device*, DML_CREATE_DEVICE_FLAGS, REFIID, void**);
+                auto dml_create = reinterpret_cast<DMLCreateDeviceFn>(
+                    reinterpret_cast<void*>(GetProcAddress(dml_mod, "DMLCreateDevice")));
+                if (!dml_create) { std::fprintf(stderr, "FAIL: GetProcAddress(DMLCreateDevice)\n"); return 1; }
+                IDMLDevice* dml_dev = nullptr;
+                if (FAILED(dml_create(dev, DML_CREATE_DEVICE_FLAG_NONE, IID_PPV_ARGS(&dml_dev))))
+                    { std::fprintf(stderr, "FAIL: DMLCreateDevice(WARP)\n"); return 1; }
+
+                D3D12_COMMAND_QUEUE_DESC qd = {};
+                qd.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+                ID3D12CommandQueue* queue = nullptr;
+                if (FAILED(dev->CreateCommandQueue(&qd, IID_PPV_ARGS(&queue))))
+                    { std::fprintf(stderr, "FAIL: CreateCommandQueue\n"); return 1; }
+
+                Ort::SessionOptions warp_opts;
+                warp_opts.DisableMemPattern();
+                warp_opts.SetExecutionMode(ORT_SEQUENTIAL);
+                Ort::ThrowOnError(dml_api->SessionOptionsAppendExecutionProvider_DML1(warp_opts, dml_dev, queue));
+                if (run(warp_opts, "dml-warp")) return 1;
+            }
+        }
 #endif
 
         std::printf("PASS\n");

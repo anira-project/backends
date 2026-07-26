@@ -41,6 +41,9 @@ if(EXISTS "${ORT_INC}/coreml_provider_factory.h")
 endif()
 if(EXISTS "${ORT_INC}/dml_provider_factory.h")
   target_compile_definitions(smoke PRIVATE SMOKE_HAS_DML)
+  # d3d12/dxgi for the explicit WARP-device fallback (GPU-less runners); DirectML.dll
+  # itself is resolved at runtime from the package (no import lib shipped).
+  target_link_libraries(smoke PRIVATE d3d12 dxgi)
 endif()
 
 if(SMOKE_KIND STREQUAL "static")
