@@ -7,10 +7,26 @@ project(onnx_smoke LANGUAGES CXX)
 # forward pass (add.onnx: y = x + x, {1,2,3} -> {2,4,6}). Driven by .github/actions/smoke.
 
 set(SMOKE_KIND "static" CACHE STRING "static | shared")
+set(SMOKE_VARIANT "" CACHE STRING "expected package variant: '' (cpu) | gpu | cuda")
 
 find_path(ORT_INC NAMES onnxruntime_cxx_api.h REQUIRED)
 find_library(ORT_LIB NAMES onnxruntime REQUIRED)   # static .a/.lib, or shared .dylib/.so/import-.lib
 get_filename_component(ORT_LIBDIR "${ORT_LIB}" DIRECTORY)
+
+# False-green guards: a variant package that lost its accelerator must FAIL here, not
+# quietly pass the CPU smoke (round 1 shipped CPU builds under -gpu names when the
+# flavor arg was dropped — see cmake/ExternalEngine.cmake).
+if(SMOKE_VARIANT STREQUAL "gpu"
+   AND NOT EXISTS "${ORT_INC}/coreml_provider_factory.h"
+   AND NOT EXISTS "${ORT_INC}/dml_provider_factory.h")
+  message(FATAL_ERROR "-gpu package ships no GPU EP provider header — built CPU-only?")
+endif()
+if(SMOKE_VARIANT STREQUAL "cuda")
+  file(GLOB _cuda_ep "${ORT_LIBDIR}/*onnxruntime_providers_cuda*")
+  if(NOT _cuda_ep)
+    message(FATAL_ERROR "-cuda package ships no CUDA execution provider library — plain repackage?")
+  endif()
+endif()
 
 add_executable(smoke smoke.cpp)
 target_include_directories(smoke PRIVATE "${ORT_INC}")

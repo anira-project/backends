@@ -13,11 +13,14 @@
 #   [abis]     android-aar only: space-separated ABIs (e.g. "arm64-v8a x86_64")
 #   [flavor]   variant selector (docs/gpu-support.md): "dml" builds the Windows DirectML
 #              gpu variant from source; for prebuilts it overrides the platform-derived
-#              repackage flavor (e.g. linux-cuda / windows-cuda).
+#              repackage flavor (e.g. linux-cuda / windows-cuda). CI passes it via the
+#              BACKENDS_FLAVOR env var (CMake drops empty positional args, which would
+#              shift a trailing flavor into the URL slot); the positional wins if given.
 set -euo pipefail
 
 PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:?config}"; KIND="${4:?kind}"
-SOURCE="${5:?source}"; ST="${6:?staging dir}"; URL="${7:-}"; ABIS="${8:-}"; FLAVOR="${9:-}"
+SOURCE="${5:?source}"; ST="${6:?staging dir}"; URL="${7:-}"; ABIS="${8:-}"
+FLAVOR="${9:-${BACKENDS_FLAVOR:-}}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"   # backends/
 mkdir -p "$ST/include" "$ST/lib"

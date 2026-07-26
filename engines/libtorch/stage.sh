@@ -16,7 +16,9 @@
 set -euo pipefail
 
 PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:?config}"; KIND="${4:?kind}"
-SOURCE="${5:?source}"; ST="${6:?staging dir}"; URL="${7:-}"; FLAVOR="${8:-}"
+SOURCE="${5:?source}"; ST="${6:?staging dir}"; URL="${7:-}"
+# CI passes the flavor via env (CMake drops empty positional args); positional wins.
+FLAVOR="${8:-${BACKENDS_FLAVOR:-}}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 if [ "$SOURCE" = "prebuilt" ]; then

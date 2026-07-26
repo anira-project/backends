@@ -8,6 +8,17 @@ project(executorch_smoke LANGUAGES CXX)
 # backend registration survives static linking).
 find_package(executorch CONFIG REQUIRED)
 
+# False-green guard: a -gpu variant package must actually contain its delegate targets
+# (CoreML on Apple, Vulkan elsewhere) — otherwise it's a CPU build under a -gpu name.
+set(SMOKE_VARIANT "" CACHE STRING "expected package variant: '' (cpu) | gpu")
+if(SMOKE_VARIANT STREQUAL "gpu")
+  if(APPLE AND NOT TARGET coremldelegate)
+    message(FATAL_ERROR "-gpu package ships no CoreML delegate — built CPU-only?")
+  elseif(NOT APPLE AND NOT TARGET vulkan_backend)
+    message(FATAL_ERROR "-gpu package ships no Vulkan delegate — built CPU-only?")
+  endif()
+endif()
+
 add_executable(smoke smoke.cpp)
 
 # ExecuTorch ships several op-REGISTRATION libs that each register the same aten ops
