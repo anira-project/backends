@@ -34,6 +34,11 @@ fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 
+# Ancient FetchContent deps still declare cmake_minimum_required(<3.5), which CMake 4.x
+# refuses (psimd, pulled in via FP16 by --use_coreml, killed the -gpu macOS configure).
+# Same policy floor the libtorch/tflite builders already set; no-op on modern deps.
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
+
 # onnxruntime source at the pinned version; build.py FetchContents the rest.
 SRC="$HERE/onnxruntime-src"
 if [ ! -d "$SRC/.git" ]; then
