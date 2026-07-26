@@ -206,12 +206,28 @@ case "$PLATFORM" in
     # NO hard runtime dependency — without a Vulkan driver or a vulkan-partitioned
     # .pte it behaves exactly like the CPU package.
     if [ "$ACCEL" = "vulkan" ]; then
-      if ! command -v glslc >/dev/null 2>&1; then
-        # ubuntu-24.04 runners: glslc ships in the `glslc` package.
+      # ExecuTorch 1.3.1's int8 shaders need a glslang that knows
+      # GL_EXT_integer_dot_product (dotPacked4x8AccSatEXT). Ubuntu 24.04's apt glslc
+      # (shaderc 2023.8) rejects it — "'#extension' : extension not supported" — so
+      # probe the ACTUAL requirement and install LunarG's current shaderc if the
+      # ambient glslc can't do it. (The Android NDK's glslc is also incompatible,
+      # per upstream's own cmake/ShaderLibrary.cmake warning.)
+      glslc_ok() {
+        command -v glslc >/dev/null 2>&1 || return 1
+        local probe; probe="$(mktemp /tmp/et-glslc-probe-XXXXXX.comp)"
+        printf '#version 450\n#extension GL_EXT_integer_dot_product : require\nvoid main(){}\n' > "$probe"
+        glslc -fshader-stage=compute --target-env=vulkan1.1 "$probe" -o /dev/null 2>/dev/null
+        local rc=$?; rm -f "$probe"; return $rc
+      }
+      if ! glslc_ok; then
         if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
-          sudo apt-get update -qq && sudo apt-get install -y -qq glslc
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          echo "deb https://packages.lunarg.com/vulkan noble main" \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan-noble.list >/dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq shaderc
         fi
-        command -v glslc >/dev/null 2>&1 || { echo "ERROR: accel=vulkan needs glslc (shader compiler) on PATH"; exit 1; }
+        glslc_ok || { echo "ERROR: accel=vulkan needs a glslc with GL_EXT_integer_dot_product support on PATH"; exit 1; }
       fi
       ET_FLAGS+=(-DEXECUTORCH_BUILD_VULKAN=ON)
     fi ;;
