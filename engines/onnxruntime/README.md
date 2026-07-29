@@ -11,7 +11,7 @@ GPU EPs ship as separate variant archives:
 `-gpu` = CoreML on macOS (from source, `--use_coreml`) / DirectML on Windows (from source,
 `--use_dml` + the `Microsoft.AI.DirectML` redist DLL — Microsoft stopped publishing the
 DirectML NuGet after 1.24.4); `-cuda` = the upstream `-gpu` prebuilt repackaged (CUDA EP +
-provider bridge, TensorRT provider dropped; CUDA 12.x + cuDNN 9 are user-provided). Each
+provider bridge, TensorRT provider dropped; CUDA 13.x + cuDNN 9 are user-provided — the gpu_cuda13 upstream asset, so Blackwell/RTX-50 is covered; Turing (2018) is the oldest supported GPU generation). Each
 variant package ships its provider header (`coreml_provider_factory.h` /
 `dml_provider_factory.h`) — that's how the smoke (and anira) detect the EP.
 

@@ -255,12 +255,12 @@
     {
       "name": "onnx-linux-x86_64-cuda-shared", "inherits": "orch-base",
       "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt", "BACKENDS_FLAVOR": "linux-cuda" },
-      "vendor": { "anira": { "name": "Linux-x86_64-cuda", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "prebuilt", "flavor": "linux-cuda", "asset": "onnxruntime-linux-x64-gpu", "ext": "tgz" } }
+      "vendor": { "anira": { "name": "Linux-x86_64-cuda", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "source": "prebuilt", "flavor": "linux-cuda", "asset": "onnxruntime-linux-x64-gpu_cuda13", "ext": "tgz" } }
     },
     {
       "name": "onnx-windows-x86_64-cuda-shared", "inherits": "orch-base",
       "cacheVariables": { "BACKENDS_ENGINE": "onnxruntime", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt", "BACKENDS_FLAVOR": "windows-cuda" },
-      "vendor": { "anira": { "name": "Windows-x86_64-cuda", "runner": "windows-2025", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "prebuilt", "flavor": "windows-cuda", "asset": "onnxruntime-win-x64-gpu", "ext": "zip" } }
+      "vendor": { "anira": { "name": "Windows-x86_64-cuda", "runner": "windows-2025", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "1", "toolchain": "none", "msvcArch": "x64", "source": "prebuilt", "flavor": "windows-cuda", "asset": "onnxruntime-win-x64-gpu_cuda13", "ext": "zip" } }
     },
 
     {
@@ -301,12 +301,12 @@
     {
       "name": "libtorch-linux-x86_64-cuda-shared", "inherits": "orch-base",
       "cacheVariables": { "BACKENDS_ENGINE": "libtorch", "BACKENDS_PLATFORM": "linux", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt", "BACKENDS_FLAVOR": "cuda" },
-      "vendor": { "anira": { "name": "Linux-x86_64-cuda", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "none", "source": "prebuilt", "asset": "libtorch-shared-with-deps", "cpuSuffix": "%2Bcu126", "channel": "cu126" } }
+      "vendor": { "anira": { "name": "Linux-x86_64-cuda", "runner": "ubuntu-24.04", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "none", "source": "prebuilt", "asset": "libtorch-shared-with-deps", "cpuSuffix": "%2Bcu130", "channel": "cu130" } }
     },
     {
       "name": "libtorch-windows-x86_64-cuda-shared", "inherits": "orch-base",
       "cacheVariables": { "BACKENDS_ENGINE": "libtorch", "BACKENDS_PLATFORM": "windows", "BACKENDS_ARCH": "x86_64", "BACKENDS_CONFIG": "Release", "BACKENDS_KIND": "shared", "BACKENDS_SOURCE": "prebuilt", "BACKENDS_FLAVOR": "cuda" },
-      "vendor": { "anira": { "name": "Windows-x86_64-cuda", "runner": "windows-2025", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "none", "msvcArch": "x64", "source": "prebuilt", "asset": "libtorch-win-shared-with-deps", "cpuSuffix": "%2Bcu126", "channel": "cu126" } }
+      "vendor": { "anira": { "name": "Windows-x86_64-cuda", "runner": "windows-2025", "arch": "x86_64", "kind": "shared", "config": "Release", "canRun": "0", "toolchain": "none", "msvcArch": "x64", "source": "prebuilt", "asset": "libtorch-win-shared-with-deps", "cpuSuffix": "%2Bcu130", "channel": "cu130" } }
     },
 
     {

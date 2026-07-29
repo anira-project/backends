@@ -2,7 +2,7 @@
 
 **Shared** libtorch at the version in [`VERSION`](./VERSION) — CPU-only by default,
 with separate GPU variant archives (`macOS-arm64-gpu` = MPS from source;
-`Linux/Windows-x86_64-cuda` = repackaged upstream cu126 prebuilts, NVIDIA redist libs
+`Linux/Windows-x86_64-cuda` = repackaged upstream cu130 prebuilts, NVIDIA redist libs
 stripped), packaged for
 [anira](https://github.com/anira-project/anira). Unlike TFLite/ONNXRuntime (flat
 `include/`+`lib/`), libtorch ships a full CMake package tree and is consumed via
@@ -76,8 +76,8 @@ from the two from-source per-arch builds — both build from source so their dyl
   packages assert MPS is absent in the smoke. `USE_MKLDNN`+`FBGEMM` on for x86_64 (off
   for arm64 — FBGEMM is x86-only). BLAS: Accelerate on macOS, OpenBLAS on Linux aarch64,
   Eigen on Windows arm64 (self-contained).
-- **-cuda variants** repackage the upstream `cu126` prebuilts with the NVIDIA
-  redistributables stripped (GitHub's 2 GB asset limit; CUDA 12.x + cuDNN 9 are
+- **-cuda variants** repackage the upstream `cu130` prebuilts with the NVIDIA
+  redistributables stripped (GitHub's 2 GB asset limit; CUDA 13.x + cuDNN 9 are
   user-provided). They can't load without those libs, so their CI legs skip the smoke
   (`canRun=0`).
 - **Windows arm64**: native ARM64 MSVC `cl`, **not** clang-cl (`vcvarsall.bat arm64`,
