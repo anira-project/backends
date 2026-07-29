@@ -11,7 +11,7 @@
 #   <source>   build|prebuilt                <staging> output prefix (include/ + lib/)
 #   [url]      prebuilt download URL (source=prebuilt)
 #   [abis]     android-aar only: space-separated ABIs (e.g. "arm64-v8a x86_64")
-#   [flavor]   variant selector (docs/gpu-support.md): "dml" builds the Windows DirectML
+#   [flavor]   variant selector: "dml" builds the Windows DirectML
 #              gpu variant from source; for prebuilts it overrides the platform-derived
 #              repackage flavor (e.g. linux-cuda / windows-cuda). CI passes it via the
 #              BACKENDS_FLAVOR env var (CMake drops empty positional args, which would

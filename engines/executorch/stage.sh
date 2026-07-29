@@ -14,7 +14,7 @@
 #   <config>   Release                <kind> static
 #   <source>   build                  <staging> output prefix
 #   [url]      ignored (no prebuilt desktop runtime upstream)
-#   [flavor]   GPU variant (docs/gpu-support.md): coreml (macOS -gpu) | vulkan (Linux -gpu)
+#   [flavor]   GPU variant: coreml (macOS -gpu) | vulkan (Linux -gpu)
 set -euo pipefail
 
 PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:?config}"; KIND="${4:?kind}"

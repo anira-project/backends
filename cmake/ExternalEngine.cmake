@@ -12,7 +12,7 @@ endforeach()
 # Set at configure time for prebuilt (repackage) legs: -DBACKENDS_URL=<download url>.
 set(BACKENDS_URL  "" CACHE STRING "Prebuilt download URL (when BACKENDS_SOURCE=prebuilt)")
 set(BACKENDS_ABIS "" CACHE STRING "Android ABIs for a prebuilt multi-ABI AAR (onnx)")
-# Variant selector for GPU legs (docs/gpu-support.md) — set by the preset, e.g. "dml"
+# Variant selector for GPU legs — set by the preset, e.g. "dml"
 # (onnx Windows DirectML from-source) or "linux-cuda"/"windows-cuda" (repackage flavor).
 set(BACKENDS_FLAVOR "" CACHE STRING "Engine variant flavor (onnx GPU legs)")
 

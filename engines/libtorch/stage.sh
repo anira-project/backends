@@ -10,7 +10,7 @@
 #   <config>   Release (libtorch ships Release only)   <kind> shared
 #   <source>   build|prebuilt        <staging> output prefix
 #   [url]      prebuilt download URL (source=prebuilt)
-#   [flavor]   GPU variant (docs/gpu-support.md): "mps" (macOS arm64 -gpu, from source)
+#   [flavor]   GPU variant: "mps" (macOS arm64 -gpu, from source)
 #              or "cuda" (Linux/Windows x64 -cuda, repackaged upstream CUDA prebuilt
 #              with the NVIDIA redist libs stripped — user provides CUDA + cuDNN)
 set -euo pipefail

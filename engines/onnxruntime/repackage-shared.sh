@@ -12,7 +12,7 @@
 # *-cuda: repackage the upstream `-gpu` prebuilt (CUDA EP) — keeps the CUDA provider +
 # the provider-bridge shim (loaded on demand; the base lib runs CPU-only without them),
 # drops the TensorRT provider (needs a TensorRT install; the CUDA EP covers the NVIDIA
-# need — docs/gpu-support.md). CUDA runtime + cuDNN are user-provided at runtime.
+# need). CUDA runtime + cuDNN are user-provided at runtime.
 set -euo pipefail
 
 FLAVOR="${1:?flavor}"; SRC="${2:?src url/path}"; ST="${3:?staging dir}"; ABIS="${4:-}"

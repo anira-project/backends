@@ -25,7 +25,7 @@
 #   <arch>      x86_64 | aarch64 | arm64
 #   <staging>   output prefix; gets include/ lib/ (incl. lib/cmake/ExecuTorch/)
 #   <accel>     none (default) | coreml | vulkan. GPU delegates ship ONLY in the separate
-#               -gpu variant archives (docs/gpu-support.md) — the default package is
+#               -gpu variant archives — the default package is
 #               CPU-only (XNNPACK + optimized kernels).
 #               coreml = macOS -gpu: CoreML delegate (+ MLX on arm64, which floors the
 #                        deployment target at 14.0 — the CPU default stays at 12.0).
@@ -201,7 +201,7 @@ case "$PLATFORM" in
   linux)
     # Default: CPU-only (XNNPACK + optimized ATen kernels). The -gpu variant
     # (accel=vulkan) adds the cross-vendor Vulkan delegate (experimental,
-    # docs/gpu-support.md Phase 4): shaders are compiled at build time with glslc;
+    # the GPU variant scheme): shaders are compiled at build time with glslc;
     # at runtime the delegate loads libvulkan via volk (dlopen), so the package adds
     # NO hard runtime dependency — without a Vulkan driver or a vulkan-partitioned
     # .pte it behaves exactly like the CPU package.

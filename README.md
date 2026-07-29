@@ -53,7 +53,7 @@ consuming app re-signs/notarizes on embed.
 > ExecuTorch is **static-only, built from source on every leg** (no upstream prebuilt desktop
 > runtime), **CPU-only by default** (XNNPACK + optimized kernels everywhere). GPU delegates
 > live in the separate `-gpu` variants: CoreML (+MLX on arm64) on macOS, Vulkan on Linux x64
-> (experimental) — see [`docs/gpu-support.md`](./docs/gpu-support.md). Windows Vulkan and
+> (experimental). Windows Vulkan and
 > Android/iOS GPU are deliberate follow-ups.
 
 > `—` = not provided.
@@ -65,8 +65,8 @@ from-source toolchain, Android `static`) live in each engine's README under
 GPU acceleration ships as **separate `-gpu` / `-cuda` variant archives** — the default
 packages above stay CPU-only. Variants: ONNXRuntime CoreML (macOS), DirectML (Windows),
 CUDA (Linux/Windows x64); LibTorch MPS (macOS arm64), CUDA (Linux/Windows x64);
-ExecuTorch CoreML+MLX (macOS), Vulkan (Linux x64, experimental). Details in
-[`docs/gpu-support.md`](./docs/gpu-support.md).
+ExecuTorch CoreML+MLX (macOS), Vulkan (Linux x64, experimental).
+
 
 ## Releases
 

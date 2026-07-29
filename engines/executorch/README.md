@@ -20,7 +20,7 @@ linking (the failure mode that makes static libtorch fragile is handled upstream
 
 Every platform builds the optimized CPU kernels + **XNNPACK** (the CPU path anira uses now);
 the default packages contain nothing else. GPU delegates live in the separate `-gpu` variant
-archives ([`docs/gpu-support.md`](../../docs/gpu-support.md)): on Apple the **CoreML**
+archives: on Apple the **CoreML**
 delegate (ANE/GPU) and, on arm64, the **MLX** delegate (which floors that one package at
 macOS 14+; the CPU default stays at 12.0); on Linux x64 the cross-vendor **Vulkan** delegate
 (experimental — shaders compile with `glslc` at build time; the loader is dlopen'd via volk,

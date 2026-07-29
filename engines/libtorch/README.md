@@ -3,7 +3,7 @@
 **Shared** libtorch at the version in [`VERSION`](./VERSION) — CPU-only by default,
 with separate GPU variant archives (`macOS-arm64-gpu` = MPS from source;
 `Linux/Windows-x86_64-cuda` = repackaged upstream cu126 prebuilts, NVIDIA redist libs
-stripped — see [`docs/gpu-support.md`](../../docs/gpu-support.md)), packaged for
+stripped), packaged for
 [anira](https://github.com/anira-project/anira). Unlike TFLite/ONNXRuntime (flat
 `include/`+`lib/`), libtorch ships a full CMake package tree and is consumed via
 `find_package(Torch)` — so archives preserve `include/`, `lib/`, **`share/cmake/Torch/`**

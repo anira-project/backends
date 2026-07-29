@@ -7,7 +7,7 @@ ships); **shared** is built for macOS but **repackaged** from Microsoft's prebui
 elsewhere. A **WASM** (Emscripten) static lib is built from source too — for anira
 compiled to WebAssembly.
 
-GPU EPs ship as separate variant archives ([`docs/gpu-support.md`](../../docs/gpu-support.md)):
+GPU EPs ship as separate variant archives:
 `-gpu` = CoreML on macOS (from source, `--use_coreml`) / DirectML on Windows (from source,
 `--use_dml` + the `Microsoft.AI.DirectML` redist DLL — Microsoft stopped publishing the
 DirectML NuGet after 1.24.4); `-cuda` = the upstream `-gpu` prebuilt repackaged (CUDA EP +

@@ -2,7 +2,7 @@
 # Build a SHARED libtorch from source for ONE target, producing the same package tree
 # as the upstream prebuilts (include/ lib/ share/cmake/Torch/ [bin/]). Default is
 # CPU-only; accel=mps builds the separate macOS-arm64 -gpu variant (GPU is always an
-# extra archive — docs/gpu-support.md). Used for the from-source legs:
+# extra archive). Used for the from-source legs:
 #   - macOS arm64    (CPU default + the mps -gpu variant)
 #   - macOS x86_64   (PyTorch dropped Intel-mac libtorch after 2.2.2)
 #   - Linux aarch64  (no aarch64 libtorch in the download.pytorch.org/cpu index)
