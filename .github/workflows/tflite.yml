@@ -65,4 +65,5 @@ jobs:
       macos_universal_kinds: '["static","shared"]'
       android_bundle_kinds: '["static","shared"]'
       has_ios: true
+      ios_variants: '["", "gpu"]'
     secrets: inherit
