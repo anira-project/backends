@@ -15,7 +15,7 @@
 #               for macOS and for the Windows DML gpu variant; other Linux/Windows/Android
 #               shared come from upstream prebuilts.
 #   <accel>     none (default) | coreml | dml. GPU EPs ship ONLY in the separate -gpu
-#               variant archives (docs/gpu-support.md) — CPU-only consumers get CPU-only
+#               variant archives — CPU-only consumers get CPU-only
 #               packages, so default builds carry no EP beyond CPU.
 #               coreml = macOS CoreML EP (--use_coreml), static + shared.
 #               dml    = Windows DirectML EP (--use_dml), shared-only: Microsoft stopped
@@ -28,9 +28,10 @@ PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:-Release}"; OUT="${4:-
 if [ "$ACCEL" = "dml" ] && [ "$PLATFORM" != "windows" ]; then
   echo "ERROR: accel=dml is Windows-only (DirectML is a D3D12 API)"; exit 1
 fi
-if [ "$ACCEL" = "coreml" ] && [ "$PLATFORM" != "macos" ]; then
-  echo "ERROR: accel=coreml is macOS-only"; exit 1
-fi
+case "$ACCEL:$PLATFORM" in
+  coreml:macos|coreml:ios|coreml:ios-sim) ;;
+  coreml:*) echo "ERROR: accel=coreml is Apple-only (macos/ios/ios-sim)"; exit 1 ;;
+esac
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 
@@ -43,6 +44,21 @@ export CMAKE_POLICY_VERSION_MINIMUM=3.5
 SRC="$HERE/onnxruntime-src"
 if [ ! -d "$SRC/.git" ]; then
   git clone --depth 1 --branch "v${VER}" https://github.com/microsoft/onnxruntime "$SRC"
+fi
+
+# Upstream CMake bugs hit by any STATIC --use_coreml build (macOS and iOS):
+# 1) coreml_proto is installed but never added to the ${PROJECT_NAME}Targets export
+#    set -> generate aborts ("requires target 'coreml_proto' that is not in any export
+#    set"; providers_coreml + onnxruntime export-depend on it).
+# 2) once exported, its PUBLIC include of ${CMAKE_CURRENT_BINARY_DIR} is a raw
+#    build-dir path, illegal in an installed export -> wrap in $<BUILD_INTERFACE:>
+#    (build behavior identical; our packaging bundles flat .a's, nothing ships the
+#    export). Both idempotent (patterns don't rematch their replacements); perl for
+#    BSD/GNU-sed neutrality.
+if [ "$ACCEL" = "coreml" ]; then
+  perl -pi -e 's/install\(TARGETS coreml_proto\s*$/install(TARGETS coreml_proto EXPORT \$\{PROJECT_NAME\}Targets\n/;
+               s/^(\s+)"\$\{CMAKE_CURRENT_BINARY_DIR\}"\)\s*$/$1\$<BUILD_INTERFACE:\$\{CMAKE_CURRENT_BINARY_DIR\}>)\n/' \
+    "$SRC/cmake/onnxruntime_providers_coreml.cmake"
 fi
 
 ARGS=(
@@ -82,25 +98,11 @@ case "$PLATFORM" in
     # IGNORE_PATH covers find_library/find_path (abseil/protobuf); IGNORE_PREFIX_PATH
     # covers find_package CONFIG mode (flatbuffers_DIR) — both needed.
     IGNORE="/opt/homebrew;/usr/local${ORT_IGNORE_PATHS:+;$ORT_IGNORE_PATHS}"
-    # CoreML EP (GPU/ANE) — gpu variant only (docs/gpu-support.md: GPU is always a
-    # separate archive; the default macOS packages stay CPU-only). Static gpu consumers
-    # must link CoreML.framework.
-    if [ "$ACCEL" = "coreml" ]; then
-      ARGS+=(--use_coreml)
-      # Upstream CMake bugs (static-only, hit once coreml_proto must be exported):
-      # 1) coreml_proto is installed but never added to the ${PROJECT_NAME}Targets
-      #    export set -> generate aborts with "requires target 'coreml_proto' that is
-      #    not in any export set" (providers_coreml + onnxruntime export-depend on it).
-      # 2) once exported, its PUBLIC include of ${CMAKE_CURRENT_BINARY_DIR} is a raw
-      #    build-dir path, illegal in an installed export -> wrap in $<BUILD_INTERFACE:>
-      #    (build behavior identical; the export interface just drops the build path —
-      #    fine, our packaging bundles flat .a's and never ships this export).
-      # Both idempotent (patterns don't rematch their replacements); perl for
-      # BSD/GNU-sed neutrality.
-      perl -pi -e 's/install\(TARGETS coreml_proto\s*$/install(TARGETS coreml_proto EXPORT \$\{PROJECT_NAME\}Targets\n/;
-                   s/^(\s+)"\$\{CMAKE_CURRENT_BINARY_DIR\}"\)\s*$/$1\$<BUILD_INTERFACE:\$\{CMAKE_CURRENT_BINARY_DIR\}>)\n/' \
-        "$SRC/cmake/onnxruntime_providers_coreml.cmake"
-    fi
+    # CoreML EP (GPU/ANE) — gpu variant only (GPU is always a separate archive; the
+    # default macOS packages stay CPU-only). Static gpu consumers must link
+    # CoreML.framework. (The coreml_proto export patch is applied post-clone above,
+    # shared with the iOS coreml slices.)
+    [ "$ACCEL" = "coreml" ] && ARGS+=(--use_coreml)
     ARGS+=(--cmake_extra_defines "CMAKE_OSX_ARCHITECTURES=$ARCH" "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" \
            "CMAKE_IGNORE_PATH=$IGNORE" "CMAKE_IGNORE_PREFIX_PATH=$IGNORE")
     ;;
@@ -137,9 +139,11 @@ case "$PLATFORM" in
     ;;
   ios)
     ARGS+=(--ios --use_xcode --apple_sysroot iphoneos --osx_arch "$ARCH" --apple_deploy_target 13.0 --build_apple_framework)
+    [ "$ACCEL" = "coreml" ] && ARGS+=(--use_coreml)   # iOS -gpu xcframework (GPU/ANE)
     ;;
   ios-sim)
     ARGS+=(--ios --use_xcode --apple_sysroot iphonesimulator --osx_arch "$ARCH" --apple_deploy_target 13.0 --build_apple_framework)
+    [ "$ACCEL" = "coreml" ] && ARGS+=(--use_coreml)
     ;;
   wasm)
     # --build_wasm_static_lib bundles EVERY transitive dep (onnx/protobuf/re2/mlas/xnnpack)
