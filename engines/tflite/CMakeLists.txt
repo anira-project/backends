@@ -41,7 +41,21 @@ if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
 else()
     set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "" FORCE)
 endif()
-set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
+# GPU: OFF by default (CPU-only packages). The Apple -gpu variant builds TFLite's
+# Metal GPU delegate (TFLGpuDelegateCreate) — upstream gates it on TFLITE_ENABLE_GPU
+# too (the metal sources live inside that block). NOTE: upstream only *tests* the
+# Metal delegate on iOS; the macOS build is the same code compiled for Darwin —
+# experimental tier, we own any macOS-specific breakage.
+option(TFLITE_BUILD_METAL_DELEGATE "Build the Metal GPU delegate (-gpu variant, Apple only)" OFF)
+if(TFLITE_BUILD_METAL_DELEGATE)
+    if(NOT APPLE)
+        message(FATAL_ERROR "TFLITE_BUILD_METAL_DELEGATE is Apple-only (Metal)")
+    endif()
+    set(TFLITE_ENABLE_GPU ON CACHE BOOL "" FORCE)
+    set(TFLITE_ENABLE_METAL ON CACHE BOOL "" FORCE)
+else()
+    set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
+endif()
 
 # Lib type uses upstream's own TFLITE_C_BUILD_SHARED_LIBS, not BUILD_SHARED_LIBS.
 if(TFLITE_BUILD_STATIC)
@@ -130,3 +144,17 @@ install(DIRECTORY "${TFLITE_SOURCE_DIR}/core/c/"
     DESTINATION "include/tensorflow/lite/core/c" FILES_MATCHING PATTERN "*.h")
 install(DIRECTORY "${TFLITE_SOURCE_DIR}/core/async/c/"
     DESTINATION "include/tensorflow/lite/core/async/c" FILES_MATCHING PATTERN "*.h")
+
+# -gpu variant: ship the Metal delegate lib + its C API header. For the static kind the
+# delegate is ALSO merged into the single libtensorflowlite_c.a by the bundle step (it
+# sweeps every .a in the build tree); the standalone lib is what the shared kind links.
+# The header's presence is how the smoke (and anira) detect the variant. Consumers link
+# Metal.framework + Foundation.
+if(TFLITE_BUILD_METAL_DELEGATE)
+    if(NOT TARGET metal_delegate)
+        message(FATAL_ERROR "TFLITE_BUILD_METAL_DELEGATE set but upstream produced no metal_delegate target")
+    endif()
+    install(TARGETS metal_delegate ARCHIVE DESTINATION lib)
+    install(FILES "${TFLITE_SOURCE_DIR}/delegates/gpu/metal_delegate.h"
+        DESTINATION "include/tensorflow/lite/delegates/gpu")
+endif()

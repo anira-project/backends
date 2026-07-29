@@ -3,9 +3,12 @@
 # device + simulator). No build — the per-version download URL is read from the CocoaPods
 # podspec. Smoke-gated on the simulator (real forward pass), then zipped into dist/<archive>.zip.
 #
-# Usage: ios.sh <archive-name>   (produces dist/<archive>.zip)
+# Usage: ios.sh <archive-name> [variant]   (produces dist/<archive>.zip)
+#   [variant]  "" (CPU: TensorFlowLiteC only) | gpu (also ships Google's official
+#              TensorFlowLiteCMetal + TensorFlowLiteCCoreML delegate xcframeworks —
+#              the pod's Metal/CoreML subspecs, same release tarball)
 set -euo pipefail
-ARCHIVE="${1:?archive name}"
+ARCHIVE="${1:?archive name}"; VARIANT="${2:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 
@@ -36,5 +39,19 @@ xcrun simctl spawn "$dev" "$PWD/smoke_ios" "$PWD/add.bin"   # exits non-zero on 
 
 mkdir -p dist "staging/$ARCHIVE"
 cp -R "$xcf" "staging/$ARCHIVE/"
-( cd "staging/$ARCHIVE" && cmake -E tar cf "$OLDPWD/dist/$ARCHIVE.zip" --format=zip TensorFlowLiteC.xcframework )
-echo "packaged dist/$ARCHIVE.zip"
+frameworks=(TensorFlowLiteC.xcframework)
+
+# -gpu variant: the same pod tarball vendors the official delegate xcframeworks
+# (subspecs Metal + CoreML). Ship both — the app picks per model; unused delegates
+# cost nothing. Consumers add Metal.framework / CoreML.framework accordingly.
+if [ "$VARIANT" = "gpu" ]; then
+  for d in TensorFlowLiteCMetal TensorFlowLiteCCoreML; do
+    dxcf="$(find ex -maxdepth 4 -type d -name "$d.xcframework" | head -1)"
+    [ -n "$dxcf" ] || { echo "::error::$d.xcframework not found in the pod tarball"; exit 1; }
+    cp -R "$dxcf" "staging/$ARCHIVE/"
+    frameworks+=("$d.xcframework")
+  done
+fi
+
+( cd "staging/$ARCHIVE" && cmake -E tar cf "$OLDPWD/dist/$ARCHIVE.zip" --format=zip "${frameworks[@]}" )
+echo "packaged dist/$ARCHIVE.zip (${frameworks[*]})"
