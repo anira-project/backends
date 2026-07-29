@@ -154,6 +154,10 @@ if(TFLITE_BUILD_METAL_DELEGATE)
     if(NOT TARGET metal_delegate)
         message(FATAL_ERROR "TFLITE_BUILD_METAL_DELEGATE set but upstream produced no metal_delegate target")
     endif()
+    # tflite/c adds the parent lite dir EXCLUDE_FROM_ALL, so metal_delegate exists but
+    # is never built by the default target (round 1: install failed on the missing .a).
+    # A dependency from tensorflowlite_c (which IS in all) pulls it into every build.
+    add_dependencies(tensorflowlite_c metal_delegate)
     install(TARGETS metal_delegate ARCHIVE DESTINATION lib)
     install(FILES "${TFLITE_SOURCE_DIR}/delegates/gpu/metal_delegate.h"
         DESTINATION "include/tensorflow/lite/delegates/gpu")
