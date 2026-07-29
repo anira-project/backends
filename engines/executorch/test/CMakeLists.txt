@@ -37,6 +37,12 @@ if(TARGET mlx)
 endif()
 
 target_link_libraries(smoke PRIVATE ${_et_libs})
+# MPS delegate (in the -gpu variant): its kernels call MetalPerformanceShaders/MPSGraph —
+# link the frameworks explicitly in case the exported target interface doesn't carry them.
+if(TARGET mpsdelegate)
+  target_link_libraries(smoke PRIVATE
+    "-framework Metal" "-framework MetalPerformanceShaders" "-framework MetalPerformanceShadersGraph")
+endif()
 target_include_directories(smoke PRIVATE ${EXECUTORCH_INCLUDE_DIRS})
 target_compile_features(smoke PRIVATE cxx_std_17)
 

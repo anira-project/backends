@@ -10,9 +10,12 @@
 #
 # NOTE: first-cut Apple cross-compile — expect CI iteration (SDK/codesign/xcframework metadata).
 #
-# Usage: ios.sh <archive-name>
+# Usage: ios.sh <archive-name> [variant]
+#   [variant]  "" (CPU default: XNNPACK + kernels, delegates OFF) | gpu (CoreML + MPS
+#              delegates — the upstream apple presets' default). GPU is always a separate
+#              archive: the default package must be CPU-only like every desktop leg.
 set -euo pipefail
-ARCHIVE="${1:?archive name}"
+ARCHIVE="${1:?archive name}"; VARIANT="${2:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SRC="$HERE/src/executorch"
@@ -43,26 +46,38 @@ ncores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 memgb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 8589934592) / 1073741824 ))
 JOBS=$(( memgb / 3 )); [ "$JOBS" -lt 2 ] && JOBS=2; [ "$JOBS" -gt "$ncores" ] && JOBS=$ncores
 
+# Variant flags: the upstream apple presets default the CoreML + MPS delegates ON —
+# that's exactly the -gpu variant. The CPU default archive turns them OFF (GPU is
+# always a separate archive; matches the desktop packages).
+VFLAGS=()
+TAG=""
+if [ "$VARIANT" = "gpu" ]; then
+  TAG="-gpu"
+else
+  VFLAGS+=(-DEXECUTORCH_BUILD_COREML=OFF -DEXECUTORCH_BUILD_MPS=OFF)
+fi
+
 build_slice() {  # <preset> <build-dir>
   local preset="$1" out="$2"
   rm -rf "$out"
-  echo "== iOS build: preset=$preset -j$JOBS =="
+  echo "== iOS build: preset=$preset variant=${VARIANT:-cpu} -j$JOBS =="
   # The apple presets use the Xcode (multi-config) generator -> every build/install needs an
   # explicit --config. Trim the preset's LLM/torchao extras (irrelevant to a CPU audio backend)
-  # to match the desktop/Android op set + speed up the build; keep XNNPACK + optimized/quantized
-  # kernels and the CoreML + MPS GPU/ANE delegates (the iOS hardware-accel paths).
+  # to match the desktop/Android op set + speed up the build; XNNPACK + optimized/quantized
+  # kernels always; the CoreML + MPS GPU/ANE delegates only in the -gpu variant.
   cmake -S "$SRC" -B "$out" --preset "$preset" \
     -DPYTHON_EXECUTABLE="$(command -v python)" \
     -DEXECUTORCH_BUILD_EXTENSION_LLM=OFF \
     -DEXECUTORCH_BUILD_EXTENSION_LLM_RUNNER=OFF \
     -DEXECUTORCH_BUILD_EXTENSION_LLM_APPLE=OFF \
     -DEXECUTORCH_BUILD_KERNELS_LLM=OFF \
-    -DEXECUTORCH_BUILD_KERNELS_TORCHAO=OFF
+    -DEXECUTORCH_BUILD_KERNELS_TORCHAO=OFF \
+    "${VFLAGS[@]}"
   cmake --build "$out" --config Release -j "$JOBS"
 }
 
-build_slice ios           "$SRC/cmake-out-ios"
-build_slice ios-simulator "$SRC/cmake-out-ios-sim"
+build_slice ios           "$SRC/cmake-out-ios$TAG"
+build_slice ios-simulator "$SRC/cmake-out-ios-sim$TAG"
 
 # Merge each slice's transitive static archives (executorch + kernels + xnnpack/coreml/_deps
 # CMake scatters across the build tree) into one self-contained fat libexecutorch.a per slice.
@@ -72,14 +87,14 @@ build_slice ios-simulator "$SRC/cmake-out-ios-sim"
 # host tools aren't part of the shipped runtime, so dropping them is correct.
 export BUNDLE_EXCLUDE_REGEX='/flatc_ep/|/flatcc_ep/'
 rm -rf dev sim && mkdir -p dev sim
-bash "$ROOT/scripts/bundle-static.sh" "$SRC/cmake-out-ios"     "$PWD/dev/libexecutorch.a"
-bash "$ROOT/scripts/bundle-static.sh" "$SRC/cmake-out-ios-sim" "$PWD/sim/libexecutorch.a"
+bash "$ROOT/scripts/bundle-static.sh" "$SRC/cmake-out-ios$TAG"     "$PWD/dev/libexecutorch.a"
+bash "$ROOT/scripts/bundle-static.sh" "$SRC/cmake-out-ios-sim$TAG" "$PWD/sim/libexecutorch.a"
 
 # Public headers from an install of the device slice (xcframework just needs include/ + the lib;
 # no find_package, so the build-tree-path install quirk is irrelevant here). --config Release is
 # required for the Xcode multi-config generator. Show output so a failure is diagnosable.
 rm -rf "$HERE/ios-inst"
-cmake --install "$SRC/cmake-out-ios" --config Release --prefix "$HERE/ios-inst" || true
+cmake --install "$SRC/cmake-out-ios$TAG" --config Release --prefix "$HERE/ios-inst" || true
 hdrs="$HERE/ios-inst/include"
 [ -d "$hdrs" ] || { echo "ERROR: no installed include/ for the iOS xcframework under $HERE/ios-inst"; ls -la "$HERE/ios-inst" 2>/dev/null || true; exit 1; }
 

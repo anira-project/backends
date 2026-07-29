@@ -27,8 +27,8 @@
 #   <accel>     none (default) | coreml | vulkan. GPU delegates ship ONLY in the separate
 #               -gpu variant archives — the default package is
 #               CPU-only (XNNPACK + optimized kernels).
-#               coreml = macOS -gpu: CoreML delegate (+ MLX on arm64, which floors the
-#                        deployment target at 14.0 — the CPU default stays at 12.0).
+#               coreml = macOS -gpu: CoreML + MPS delegates (+ MLX on arm64, which floors
+#                        the deployment target at 14.0 — the CPU default stays at 12.0).
 #               vulkan = Linux x86_64 -gpu (experimental): cross-vendor GPU delegate;
 #                        needs glslc at build time only (loader is dlopen'd via volk).
 #
@@ -182,7 +182,14 @@ case "$PLATFORM" in
     # package floors at macOS 14+; every other macOS package stays 12.0.
     MACVER=12.0
     if [ "$ACCEL" = "coreml" ]; then
-      ET_FLAGS+=(-DEXECUTORCH_BUILD_COREML=ON)   # ANE/GPU; embeds the CoreML model in the .pte
+      ET_FLAGS+=(
+        -DEXECUTORCH_BUILD_COREML=ON   # ANE/GPU; embeds the CoreML model in the .pte
+        # MPS delegate too: CoreML and MPS serve different models (ANE-compiled vs
+        # direct Metal kernels) and the .pte's export-time partitioning picks — both
+        # being present means any Apple-exported .pte works with this one -gpu
+        # archive, matching the iOS xcframework which already ships both.
+        -DEXECUTORCH_BUILD_MPS=ON
+      )
       if [ "$ARCH" = "arm64" ]; then
         MACVER=14.0
         # MLX (Apple-Silicon GPU) is arm64-only; there is no Intel-mac MLX. Bundles an
