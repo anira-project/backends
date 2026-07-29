@@ -1,7 +1,11 @@
 # Accelerator analysis — every option anira users might want
 
-Status: analysis / decision input (2026-07). Companion to [`gpu-support.md`](./gpu-support.md),
-which documents what already ships. This document surveys the WHOLE option space —
+Status: analysis (2026-07) — **decided**: the offering is deliberately simple —
+**CPU everywhere · `-gpu` = platform-native path (CoreML/MPS/MLX on Apple, DirectML on
+Windows/ORT, Vulkan on Linux/ExecuTorch) · `-cuda` (ORT + LibTorch, Linux/Windows x64)**.
+NPU (QNN/OpenVINO) was considered and **dropped** (2026-07-29, user decision — revisit on
+demand; §6 and §8 below are kept as the reference for that revisit). Companion to
+[`gpu-support.md`](./gpu-support.md), which documents what ships. This document surveys the WHOLE option space —
 CUDA, OpenVINO, CoreML, Linux GPU, NPUs, mobile — across all four runtimes, and ranks
 what to build next.
 
