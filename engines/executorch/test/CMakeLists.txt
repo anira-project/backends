@@ -1,33 +1,49 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.15)
 project(executorch_smoke LANGUAGES CXX)
 
-# Consumes the PACKAGED ExecuTorch exactly like anira will: CMAKE_PREFIX_PATH points at the
-# staging tree (passed by the .github/actions/smoke verb) and find_package(executorch CONFIG)
-# resolves lib/cmake/ExecuTorch/executorch-config.cmake. This proves the CMake package
-# survived staging and every static archive links (the config carries -force_load so op /
-# backend registration survives static linking).
-find_package(executorch CONFIG REQUIRED)
-
-add_executable(smoke smoke.cpp)
-
-# ExecuTorch ships several op-REGISTRATION libs that each register the same aten ops
-# (portable_ops_lib, optimized_ops_lib, optimized_portable_ops_lib, optimized_native_cpu_ops_lib).
-# Force-loading more than one double-registers operators and the registry aborts in a static
-# initializer before main(). Link only the merged optimized_native_cpu_ops_lib (optimized +
-# portable fallback, the lib neural_tilde uses) plus quantized_ops_lib (disjoint namespace);
-# drop the redundant registration libs. This is the same curation anira must do as a consumer.
-set(_et_libs ${EXECUTORCH_LIBRARIES})
-list(REMOVE_ITEM _et_libs portable_ops_lib optimized_ops_lib optimized_portable_ops_lib)
-# MLX delegate: libmlxdelegate.a references mlx::core from libmlx, which the config exposes as a
-# (non-force-loaded) imported `mlx` target but does NOT add to EXECUTORCH_LIBRARIES. Link it
-# explicitly, after the delegate, so the mlx::core symbols resolve (macOS arm64 only).
-if(TARGET mlx)
-  list(APPEND _et_libs mlx)
+# Consumes the PACKAGED ExecuTorch exactly like anira will: the staged tree is a flat
+# include/ + lib/libexecutorch.a (executorch.lib on Windows) — ONE merged archive with the
+# kernel/backend registrations pre-linked into a single member (engines/executorch/
+# merge-static.sh), linked ON-DEMAND with no force-load. CMAKE_PREFIX_PATH points at the
+# staging tree (passed by the .github/actions/smoke verb). Running a real model here proves
+# the registrations survived the merge: a dropped registration fails at execute (the
+# archive still links — nothing references a dropped static initializer), never at link time.
+if(NOT CMAKE_PREFIX_PATH)
+  message(FATAL_ERROR "set CMAKE_PREFIX_PATH to the staged executorch tree (include/ lib/)")
+endif()
+list(GET CMAKE_PREFIX_PATH 0 _et_root)
+if(WIN32)
+  set(_et_lib "${_et_root}/lib/executorch.lib")
+else()
+  set(_et_lib "${_et_root}/lib/libexecutorch.a")
+endif()
+if(NOT EXISTS "${_et_lib}")
+  message(FATAL_ERROR "merged ExecuTorch archive not found: ${_et_lib}")
 endif()
 
-target_link_libraries(smoke PRIVATE ${_et_libs})
-target_include_directories(smoke PRIVATE ${EXECUTORCH_INCLUDE_DIRS})
+add_executable(smoke smoke.cpp)
+target_include_directories(smoke SYSTEM PRIVATE
+  "${_et_root}/include"
+  # The ExecuTorch headers include their vendored c10 as <c10/...>.
+  "${_et_root}/include/executorch/runtime/core/portable_type/c10")
+# The compile interface the exported targets used to carry (see the anira CMake, which
+# mirrors this): vendored c10 must not look for a generated cmake_macros.h; logging is
+# compiled out of the runtime; the threadpool extension is built in.
+target_compile_definitions(smoke PRIVATE C10_USING_CUSTOM_GENERATED_MACROS ET_LOG_ENABLED=0 ET_USE_THREADPOOL)
 target_compile_features(smoke PRIVATE cxx_std_17)
+
+find_package(Threads REQUIRED)
+if(WIN32)
+  # No partial link on COFF: the registration set ships as a second, small lib that the
+  # consumer whole-archives next to the on-demand one (anira does the same on Windows).
+  target_link_libraries(smoke PRIVATE "${_et_lib}" Threads::Threads)
+  target_link_options(smoke PRIVATE "/WHOLEARCHIVE:${_et_root}/lib/executorch_registrations.lib")
+else()
+  target_link_libraries(smoke PRIVATE "${_et_lib}" Threads::Threads ${CMAKE_DL_LIBS})
+  if(NOT APPLE)
+    target_link_libraries(smoke PRIVATE m)
+  endif()
+endif()
 
 # A real add.pte (a+b -> {3,5,7}) is committed next to this file, exported once with the
 # pinned ExecuTorch wheel (export_add.py — see its header). Using it makes EVERY leg do a

@@ -1,8 +1,8 @@
-// ExecuTorch smoke test: validates a packaged ExecuTorch runtime (headers + static libs +
-// the ExecuTorch CMake package). Builds via find_package(executorch CONFIG) — the same path
-// anira uses — which proves executorch-config.cmake resolves, every static archive links,
-// and the op/backend static initializers register (the config bakes -force_load into the
-// imported targets' link interface).
+// ExecuTorch smoke test: validates a packaged ExecuTorch runtime (headers + the merged static
+// archive). Links lib/libexecutorch.a on demand, with no force-load — the same way anira
+// links it — so a real model run here is the proof that the kernel/backend registrations
+// merge-static.sh pre-linked into the archive actually fire (a dropped registration still
+// links; it fails at execute).
 //
 // Two modes, picked at configure time by the test CMakeLists:
 //   * SMOKE_PTE defined — a real model-load+run: load an add.pte (a + b) exported by
