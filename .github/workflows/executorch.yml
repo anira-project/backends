@@ -1,10 +1,11 @@
 name: executorch
 
 # Thin wrapper: derive version + release flag + matrix (engine-meta, from CMakePresets
-# vendor.anira), then hand off to the shared _build-backend.yml pipeline. CPU-first STATIC
-# only, built from source on every desktop leg (PyTorch ships no prebuilt desktop C++ runtime
-# to repackage). Consumed via find_package(executorch CONFIG), so archives preserve the full
-# package tree (include/ lib/ lib/cmake/ExecuTorch/).
+# vendor.anira), then hand off to the shared _build-backend.yml pipeline. CPU-only STATIC,
+# built from source on every leg (PyTorch ships no prebuilt desktop C++ runtime to
+# repackage) and staged as a flat include/ + lib/libexecutorch.a tree — one merged archive
+# with the registrations pre-linked (engines/executorch/merge-static.sh), like the other
+# static engines.
 #
 # Triggers:
 #   - push/PR touching executorch sources or shared CI -> validate only (no release)
