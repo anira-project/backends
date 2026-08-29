@@ -161,7 +161,8 @@ EOF2
     LD="${MERGE_LD:-}"
     if [ -z "$LD" ] && [ "$PLATFORM" = "android" ]; then
       : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME not set (needed for the NDK ld.lld)}"
-      LD="$(find "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" -maxdepth 3 -name 'ld.lld' -type f | head -1)"
+      # (ld.lld is a symlink in the NDK — no -type f)
+      LD="$(find "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" -maxdepth 3 -name 'ld.lld' | head -1)"
       [ -n "$LD" ] || { echo "ERROR: ld.lld not found under $ANDROID_NDK_HOME"; exit 1; }
     fi
     LD="${LD:-ld}"
@@ -179,6 +180,9 @@ EOF2
     # No partial link on COFF: the on-demand members go into executorch.lib, the blob set
     # (per-object) into executorch_registrations.lib for the consumer to /WHOLEARCHIVE.
     command -v lib.exe >/dev/null || { echo "ERROR: lib.exe not on PATH (run in MSVC env)"; exit 1; }
+    # git-bash rewrites /nologo into a path ("C:\Program Files\Git\nologo"); the inputs are
+    # already Windows paths via cygpath, so turn MSYS argument conversion off for lib.exe.
+    export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
     REGOUT="$(dirname "$OUT")/executorch_registrations.lib"; rm -f "$REGOUT"
     RSP="$WORK/libs.rsp"
     printf '/OUT:%s\n' "$(cygpath -w "$OUT")" > "$RSP"
