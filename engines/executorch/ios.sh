@@ -74,7 +74,23 @@ build_slice ios-simulator "$SRC/cmake-out-ios-sim"
 # they never enter the merge — sweeping them in made the archive "multiple platforms" before),
 # then merge into one libexecutorch.a per slice with the registrations pre-linked.
 # --config Release is required for the Xcode multi-config generator.
+# ExecuTorch installs XNNPACK's OBJECT libraries as targets. Under the Xcode generator for
+# iOS the objects live in build/<t>.build/Release-iphoneos|iphonesimulator/Objects-normal/,
+# but CMake's object-install rule looks under plain Release/ (it ignores the effective
+# platform suffix for objects, unlike for libraries) and the install aborts before the
+# export files are written. Alias Release -> Release-<platform> so the rule finds them.
+alias_xcode_config() {  # <build-dir>
+  local d eff
+  for d in "$1"/build/*.build; do
+    [ -d "$d" ] || continue
+    for eff in "$d"/Release-*; do
+      [ -d "$eff" ] && [ ! -e "$d/Release" ] && ln -s "$(basename "$eff")" "$d/Release"
+    done
+  done
+}
 rm -rf "$HERE/ios-inst" "$HERE/ios-sim-inst" dev sim && mkdir -p dev sim
+alias_xcode_config "$SRC/cmake-out-ios"
+alias_xcode_config "$SRC/cmake-out-ios-sim"
 cmake --install "$SRC/cmake-out-ios"     --config Release --prefix "$HERE/ios-inst"
 cmake --install "$SRC/cmake-out-ios-sim" --config Release --prefix "$HERE/ios-sim-inst"
 bash "$HERE/merge-static.sh" ios "$HERE/ios-inst"     "$PWD/dev/libexecutorch.a"
