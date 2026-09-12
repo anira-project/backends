@@ -72,7 +72,7 @@ build_slice() {  # <preset> <build-dir>
     -DEXECUTORCH_BUILD_EXTENSION_LLM_APPLE=OFF \
     -DEXECUTORCH_BUILD_KERNELS_LLM=OFF \
     -DEXECUTORCH_BUILD_KERNELS_TORCHAO=OFF \
-    "${VFLAGS[@]}"
+    ${VFLAGS[@]+"${VFLAGS[@]}"}   # bash 3.2: an empty array is "unbound" under set -u
   cmake --build "$out" --config Release -j "$JOBS"
 }
 
