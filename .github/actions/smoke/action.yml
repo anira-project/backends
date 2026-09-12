@@ -55,4 +55,15 @@ runs:
           fi
         fi
 
+        # GPU variants on GPU-less Linux runners: a software Vulkan ICD (Mesa lavapipe) so the
+        # WebGPU paths (ORT's WebGPU EP over Dawn, LiteRT's WebGpu accelerator) run a REAL
+        # forward pass instead of an enumeration-only check — the false-green class of bug
+        # (a CPU build under a -gpu name) is only caught by executing the EP.
+        if [ "$variant" = "gpu" ] && [ "${{ runner.os }}" = "Linux" ]; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq mesa-vulkan-drivers libvulkan1 vulkan-tools
+          export VK_ICD_FILENAMES="$(ls /usr/share/vulkan/icd.d/lvp_icd.*.json | paste -sd: -)"
+          echo "software Vulkan ICD: $VK_ICD_FILENAMES"
+          vulkaninfo --summary 2>/dev/null | grep -E 'deviceName|apiVersion|driverName' | head -6 || true
+        fi
+
         ctest --test-dir "$bdir" --output-on-failure

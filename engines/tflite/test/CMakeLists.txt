@@ -30,12 +30,9 @@ if(EXISTS "${TFLITE_INC}/tensorflow/lite/delegates/gpu/metal_delegate.h")
   # that includes it — a consumer's too — must be Objective-C++.
   enable_language(OBJCXX)
   set_source_files_properties(smoke.cpp PROPERTIES LANGUAGE OBJCXX)
-  # shared kind: the delegate is a separate static lib next to the dylib; static kind:
-  # it's already merged into libtensorflowlite_c.a by the bundle step.
-  if(SMOKE_KIND STREQUAL "shared")
-    find_library(TFLITE_METAL_LIB NAMES metal_delegate REQUIRED)
-    target_link_libraries(smoke PRIVATE "${TFLITE_METAL_LIB}")
-  endif()
+  # Both kinds carry the delegate inside the one library (static: merged by the bundle
+  # step; shared: force-loaded into the dylib with _TFLGpuDelegate* exported) — nothing
+  # extra to link beyond the Apple frameworks.
   target_link_libraries(smoke PRIVATE "-framework Metal" "-framework Foundation" "-framework CoreFoundation")
 endif()
 
