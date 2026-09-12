@@ -477,7 +477,7 @@
         "BACKENDS_CONFIG": "Release",
         "BACKENDS_KIND": "static",
         "BACKENDS_SOURCE": "build",
-        "BACKENDS_FLAVOR": "coreml"
+        "BACKENDS_FLAVOR": "coreml+webgpu"
       },
       "vendor": {
         "anira": {
@@ -502,7 +502,7 @@
         "BACKENDS_CONFIG": "Release",
         "BACKENDS_KIND": "shared",
         "BACKENDS_SOURCE": "build",
-        "BACKENDS_FLAVOR": "coreml"
+        "BACKENDS_FLAVOR": "coreml+webgpu"
       },
       "vendor": {
         "anira": {
@@ -527,7 +527,7 @@
         "BACKENDS_CONFIG": "Release",
         "BACKENDS_KIND": "static",
         "BACKENDS_SOURCE": "build",
-        "BACKENDS_FLAVOR": "coreml"
+        "BACKENDS_FLAVOR": "coreml+webgpu"
       },
       "vendor": {
         "anira": {
@@ -552,7 +552,7 @@
         "BACKENDS_CONFIG": "Release",
         "BACKENDS_KIND": "shared",
         "BACKENDS_SOURCE": "build",
-        "BACKENDS_FLAVOR": "coreml"
+        "BACKENDS_FLAVOR": "coreml+webgpu"
       },
       "vendor": {
         "anira": {
@@ -577,7 +577,7 @@
         "BACKENDS_CONFIG": "Release",
         "BACKENDS_KIND": "shared",
         "BACKENDS_SOURCE": "build",
-        "BACKENDS_FLAVOR": "dml"
+        "BACKENDS_FLAVOR": "dml+webgpu"
       },
       "vendor": {
         "anira": {
@@ -603,7 +603,7 @@
         "BACKENDS_CONFIG": "Release",
         "BACKENDS_KIND": "shared",
         "BACKENDS_SOURCE": "build",
-        "BACKENDS_FLAVOR": "dml"
+        "BACKENDS_FLAVOR": "dml+webgpu"
       },
       "vendor": {
         "anira": {

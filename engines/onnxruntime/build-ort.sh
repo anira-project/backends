@@ -127,7 +127,11 @@ if [ "$HAS_WEBGPU" = 1 ]; then
   )
   case "$PLATFORM" in
     linux)   DAWN_FLAGS+=(-DDAWN_ENABLE_VULKAN=ON) ;;
-    windows) DAWN_FLAGS+=(-DDAWN_ENABLE_D3D12=ON -DDAWN_ENABLE_D3D11=OFF -DDAWN_ENABLE_VULKAN=OFF -DDAWN_USE_BUILT_DXC=ON -DTINT_BUILD_HLSL_WRITER=ON) ;;
+    # Windows: D3D12 backend. DXC is NOT built into Dawn (DAWN_USE_BUILT_DXC=OFF — an hour of
+    # LLVM per leg); Dawn loads dxcompiler.dll + dxil.dll from beside the module at runtime, and
+    # stage.sh ships the pinned Microsoft redistributables (scripts/fetch-dxc.sh), the same pair
+    # the LiteRT WebGpu accelerator runs on. WARP is what the GPU-less runners exercise.
+    windows) DAWN_FLAGS+=(-DDAWN_ENABLE_D3D12=ON -DDAWN_ENABLE_D3D11=OFF -DDAWN_ENABLE_VULKAN=OFF -DDAWN_USE_BUILT_DXC=OFF -DTINT_BUILD_HLSL_WRITER=ON) ;;
     macos)   DAWN_FLAGS+=(-DDAWN_ENABLE_METAL=ON -DCMAKE_OSX_ARCHITECTURES="$ARCH" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0) ;;
   esac
   if command -v sccache >/dev/null 2>&1 && [ "$PLATFORM" != "windows" ]; then

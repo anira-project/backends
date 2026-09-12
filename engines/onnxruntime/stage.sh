@@ -80,6 +80,9 @@ stage_dawn() {
   [ -f "$ST/include/webgpu/webgpu.h" ] || { echo "ERROR: Dawn headers incomplete (no include/webgpu/webgpu.h)"; exit 1; }
   [ -f "$ST/include/dawn/native/DawnNative.h" ] || { echo "ERROR: Dawn headers incomplete (no include/dawn/native/DawnNative.h)"; exit 1; }
   [ -f "$src/.anira-dawn-rev" ] && cp "$src/.anira-dawn-rev" "$ST/DAWN_VERSION"
+  # Windows: Dawn's D3D12 backend loads the DXC shader compiler (dxcompiler.dll + dxil.dll)
+  # from beside webgpu_dawn.dll at device creation — ship the pinned redistributables.
+  [ "$PLATFORM" = "windows" ] && bash "$ROOT/scripts/fetch-dxc.sh" "$ARCH" "$ST/lib"
   echo "staged Dawn $(cat "$ST/DAWN_VERSION" 2>/dev/null) into the package"
 }
 

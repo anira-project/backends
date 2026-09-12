@@ -76,9 +76,11 @@ jobs:
           flavor:     ${{ matrix.flavor }}
           channel:    ${{ matrix.channel }}
 
-      # Developer ID sign the macOS shared dylibs before packaging (no-op without the org cert).
+      # Developer ID sign every macOS dylib before packaging (no-op without the org cert, and a
+      # no-op scan on a static package without dylibs). Not only the shared kind: a static -gpu
+      # onnxruntime package carries its Dawn as libwebgpu_dawn.dylib.
       - name: sign macOS dylibs
-        if: ${{ runner.os == 'macOS' && matrix.kind == 'shared' }}
+        if: ${{ runner.os == 'macOS' }}
         uses: ./.github/actions/sign-macos
         with:
           dir: ${{ steps.b.outputs.staging }}/lib
