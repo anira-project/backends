@@ -167,7 +167,12 @@ ARGS=(
   # In 1.26 /GL is gated entirely on this flag (cmake/adjust_global_compile_flags.cmake),
   # so this *is* the patch's net effect — the literal patch no longer applies (the
   # forced-LTO block it deletes was removed upstream). Explicit here, not build.py's default.
-  --cmake_extra_defines onnxruntime_BUILD_UNIT_TESTS=OFF CMAKE_DISABLE_FIND_PACKAGE_re2=ON onnxruntime_ENABLE_MEMLEAK_CHECKER=OFF onnxruntime_ENABLE_LTO=OFF
+  #
+  # onnxruntime_USE_TELEMETRY=OFF: 1.30 can compile Microsoft's 1DS client telemetry into the
+  # runtime on every platform (a network-reporting SDK that pulls Network.framework on Apple
+  # and an HTTP transport on Linux into the static bundle). anira packages report nothing —
+  # force it off explicitly, whatever build.py's default.
+  --cmake_extra_defines onnxruntime_BUILD_UNIT_TESTS=OFF CMAKE_DISABLE_FIND_PACKAGE_re2=ON onnxruntime_ENABLE_MEMLEAK_CHECKER=OFF onnxruntime_ENABLE_LTO=OFF onnxruntime_USE_TELEMETRY=OFF
 )
 
 # Shared build → one self-contained libonnxruntime.dylib/.so (re2 etc. linked in).
