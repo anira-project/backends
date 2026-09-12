@@ -150,6 +150,15 @@ if [ "$PLATFORM" = "android" ] && [ "$KIND" = "static" ]; then
   exit 0
 fi
 
+# Windows: hide the runner's preinstalled Android SDK/NDK from Bazel. From the 2.2.0 commit the
+# workspace materialises rules_android_ndk's `androidndk` repository during analysis whenever
+# ANDROID_NDK_HOME points at an NDK, and on Windows that fetch dies symlinking into
+# C:/Android/... ("Cannot write outside of the repository directory"). No Windows leg builds
+# for Android (those run in the ml-build container above), so the env is simply dropped.
+if [ "$PLATFORM" = "windows" ]; then
+  unset ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROID_NDK ANDROID_HOME ANDROID_SDK_ROOT ANDROID_NDK_LATEST_HOME
+fi
+
 # configure.py generates the host CC toolchain (else "@@local_config_cc//:toolchain ... cpu").
 export PYTHON_BIN_PATH="$(python3 -c 'import sys; print(sys.executable)')"
 export PYTHON_LIB_PATH="$(python3 -c 'import site; print(site.getsitepackages()[0])')"
