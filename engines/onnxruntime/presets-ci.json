@@ -1,0 +1,680 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "vendor": {
+    "anira": {
+      "doc": "CI legs of the onnxruntime engine. Every visible preset carries its CI + naming metadata in vendor.anira (engine-meta jq-parses this file into the matrix). Included by the root CMakePresets.json; edit here so only the onnxruntime workflow re-triggers."
+    }
+  },
+  "include": [
+    "../../cmake/presets/orch-base.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "onnx-macos-x86_64-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64",
+          "runner": "macos-15",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-macos-arm64-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-linux-x86_64-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "linux",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-x86_64",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-linux-aarch64-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "linux",
+        "BACKENDS_ARCH": "aarch64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-aarch64",
+          "runner": "ubuntu-24.04-arm",
+          "arch": "aarch64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-windows-x86_64-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-x86_64",
+          "runner": "windows-2025",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "x64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-windows-x86_64-static-debug",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Debug",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-x86_64",
+          "runner": "windows-2025",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Debug",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "x64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-windows-arm64-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-arm64",
+          "runner": "windows-11-arm",
+          "arch": "arm64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "arm64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-windows-arm64-static-debug",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Debug",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-arm64",
+          "runner": "windows-11-arm",
+          "arch": "arm64",
+          "kind": "static",
+          "config": "Debug",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "arm64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-android-arm64-v8a-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "android",
+        "BACKENDS_ARCH": "arm64-v8a",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-arm64-v8a",
+          "runner": "ubuntu-24.04",
+          "arch": "arm64-v8a",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-android-x86_64-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "android",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-x86_64",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-wasm-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "wasm",
+        "BACKENDS_ARCH": "wasm32",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "WASM",
+          "runner": "ubuntu-24.04",
+          "arch": "wasm32",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "emscripten",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-macos-x86_64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64",
+          "runner": "macos-15",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-macos-arm64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-linux-x86_64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "linux",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-x86_64",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "prebuilt",
+          "flavor": "linux",
+          "asset": "onnxruntime-linux-x64",
+          "ext": "tgz"
+        }
+      }
+    },
+    {
+      "name": "onnx-linux-aarch64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "linux",
+        "BACKENDS_ARCH": "aarch64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-aarch64",
+          "runner": "ubuntu-24.04-arm",
+          "arch": "aarch64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "prebuilt",
+          "flavor": "linux",
+          "asset": "onnxruntime-linux-aarch64",
+          "ext": "tgz"
+        }
+      }
+    },
+    {
+      "name": "onnx-windows-x86_64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-x86_64",
+          "runner": "windows-2025",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "x64",
+          "source": "prebuilt",
+          "flavor": "windows",
+          "asset": "onnxruntime-win-x64",
+          "ext": "zip"
+        }
+      }
+    },
+    {
+      "name": "onnx-windows-arm64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-arm64",
+          "runner": "windows-11-arm",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "arm64",
+          "source": "prebuilt",
+          "flavor": "windows",
+          "asset": "onnxruntime-win-arm64",
+          "ext": "zip"
+        }
+      }
+    },
+    {
+      "name": "onnx-android-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "android",
+        "BACKENDS_ARCH": "multi",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt",
+        "BACKENDS_ABIS": "arm64-v8a x86_64"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android",
+          "runner": "ubuntu-24.04",
+          "arch": "multi",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "none",
+          "source": "prebuilt",
+          "flavor": "android-aar",
+          "abis": "arm64-v8a x86_64"
+        }
+      }
+    },
+    {
+      "name": "onnx-macos-x86_64-gpu-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "coreml"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64-gpu",
+          "runner": "macos-15",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-macos-x86_64-gpu-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "coreml"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64-gpu",
+          "runner": "macos-15",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-macos-arm64-gpu-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "coreml"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64-gpu",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-macos-arm64-gpu-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "coreml"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64-gpu",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-windows-x86_64-gpu-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "dml"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-x86_64-gpu",
+          "runner": "windows-2025",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "x64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-windows-arm64-gpu-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "dml"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-arm64-gpu",
+          "runner": "windows-11-arm",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "arm64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-linux-x86_64-cuda-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "linux",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt",
+        "BACKENDS_FLAVOR": "linux-cuda"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-x86_64-cuda",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "prebuilt",
+          "flavor": "linux-cuda",
+          "asset": "onnxruntime-linux-x64-gpu_cuda13",
+          "ext": "tgz"
+        }
+      }
+    },
+    {
+      "name": "onnx-windows-x86_64-cuda-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt",
+        "BACKENDS_FLAVOR": "windows-cuda"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-x86_64-cuda",
+          "runner": "windows-2025",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "x64",
+          "source": "prebuilt",
+          "flavor": "windows-cuda",
+          "asset": "onnxruntime-win-x64-gpu_cuda13",
+          "ext": "zip"
+        }
+      }
+    }
+  ]
+}

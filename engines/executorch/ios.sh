@@ -3,17 +3,22 @@
 # (`ios` + `ios-simulator`) — the same path scripts/build_apple_frameworks.sh uses — because
 # they build the host flatc/flatcc tools correctly during the cross-compile (a hand-rolled
 # ios-cmake toolchain leaks the iOS SDK/deployment target into the host-tool builds and breaks
-# them). The presets already enable the full CPU set we want: optimized + quantized kernels,
-# XNNPACK, and the CoreML/MPS delegates. We then merge each slice's static archives and combine
-# device (OS64) + simulator (arm64) into a STATIC .xcframework. No buck2 (that's only ExecuTorch's
-# header-export path); headers come from `cmake --install`. Produces dist/<archive>.zip.
+# them). The presets already enable the full CPU set we want: optimized + quantized kernels and
+# XNNPACK; their CoreML/MPS delegates are switched off in the CPU default and kept in the
+# -gpu variant (GPU is always a separate archive). Each slice is installed and merged into
+# ONE libexecutorch.a with the kernel/backend registrations pre-linked (merge-static.sh — a
+# plain archive merge would drop them; the -gpu variant adds the delegates' registrations to
+# that blob), then device (OS64) + simulator (arm64) combine into a STATIC .xcframework. No
+# buck2 (that's only ExecuTorch's header-export path); headers come from `cmake --install`.
+# Produces dist/<archive>.zip.
 #
 # NOTE: first-cut Apple cross-compile — expect CI iteration (SDK/codesign/xcframework metadata).
 #
 # Usage: ios.sh <archive-name> [variant]
 #   [variant]  "" (CPU default: XNNPACK + kernels, delegates OFF) | gpu (CoreML + MPS
-#              delegates — the upstream apple presets' default). GPU is always a separate
-#              archive: the default package must be CPU-only like every desktop leg.
+#              delegates — the upstream apple presets' default). Consumers of the -gpu
+#              xcframework link CoreML, Accelerate, Metal, MetalPerformanceShaders,
+#              MetalPerformanceShadersGraph, Foundation and libsqlite3.
 set -euo pipefail
 ARCHIVE="${1:?archive name}"; VARIANT="${2:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -46,13 +51,12 @@ ncores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 memgb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 8589934592) / 1073741824 ))
 JOBS=$(( memgb / 3 )); [ "$JOBS" -lt 2 ] && JOBS=2; [ "$JOBS" -gt "$ncores" ] && JOBS=$ncores
 
-# Variant flags: the upstream apple presets default the CoreML + MPS delegates ON —
-# that's exactly the -gpu variant. The CPU default archive turns them OFF (GPU is
-# always a separate archive; matches the desktop packages).
-VFLAGS=()
-TAG=""
+# Variant flags: the upstream apple presets default the CoreML + MPS delegates ON — that's
+# exactly the -gpu variant, whose registrations join the merge blob below. The CPU default
+# archive turns them OFF (GPU is always a separate archive; matches the desktop packages).
+VFLAGS=(); TAG=""; DELEGATES=""
 if [ "$VARIANT" = "gpu" ]; then
-  TAG="-gpu"
+  TAG="-gpu"; DELEGATES="coremldelegate mpsdelegate"
 else
   VFLAGS+=(-DEXECUTORCH_BUILD_COREML=OFF -DEXECUTORCH_BUILD_MPS=OFF)
 fi
@@ -63,8 +67,8 @@ build_slice() {  # <preset> <build-dir>
   echo "== iOS build: preset=$preset variant=${VARIANT:-cpu} -j$JOBS =="
   # The apple presets use the Xcode (multi-config) generator -> every build/install needs an
   # explicit --config. Trim the preset's LLM/torchao extras (irrelevant to a CPU audio backend)
-  # to match the desktop/Android op set + speed up the build; XNNPACK + optimized/quantized
-  # kernels always; the CoreML + MPS GPU/ANE delegates only in the -gpu variant.
+  # to match the desktop/Android op set + speed up the build; keep XNNPACK + optimized/quantized
+  # kernels; the CoreML + MPS delegates only in the -gpu variant.
   cmake -S "$SRC" -B "$out" --preset "$preset" \
     -DPYTHON_EXECUTABLE="$(command -v python)" \
     -DEXECUTORCH_BUILD_EXTENSION_LLM=OFF \
@@ -76,25 +80,39 @@ build_slice() {  # <preset> <build-dir>
   cmake --build "$out" --config Release -j "$JOBS"
 }
 
+# Per-variant build dirs: the cpu and gpu xcframeworks are separate CI jobs off one cached
+# source tree, and a reconfigure across variants must not inherit the other's cache.
 build_slice ios           "$SRC/cmake-out-ios$TAG"
 build_slice ios-simulator "$SRC/cmake-out-ios-sim$TAG"
 
-# Merge each slice's transitive static archives (executorch + kernels + xnnpack/coreml/_deps
-# CMake scatters across the build tree) into one self-contained fat libexecutorch.a per slice.
-# EXCLUDE the flatc/flatcc host-tool ExternalProjects: those build for the macOS HOST (to run
-# the schema compiler during the build), so their libs are macOS-platform Mach-O. Sweeping them
-# into the iOS bundle makes the archive "multiple platforms" and xcframework rejects it. The
-# host tools aren't part of the shipped runtime, so dropping them is correct.
-export BUNDLE_EXCLUDE_REGEX='/flatc_ep/|/flatcc_ep/'
-rm -rf dev sim && mkdir -p dev sim
-bash "$ROOT/scripts/bundle-static.sh" "$SRC/cmake-out-ios$TAG"     "$PWD/dev/libexecutorch.a"
-bash "$ROOT/scripts/bundle-static.sh" "$SRC/cmake-out-ios-sim$TAG" "$PWD/sim/libexecutorch.a"
+# Install each slice (the CMake package it writes is what merge-static.sh reads the member
+# list and the force-load set off; the flatc/flatcc HOST tools are not exported targets, so
+# they never enter the merge — sweeping them in made the archive "multiple platforms" before),
+# then merge into one libexecutorch.a per slice with the registrations pre-linked.
+# --config Release is required for the Xcode multi-config generator.
+# ExecuTorch installs XNNPACK's OBJECT libraries as targets. Under the Xcode generator for
+# iOS the objects live in build/<t>.build/Release-iphoneos|iphonesimulator/Objects-normal/,
+# but CMake's object-install rule looks under plain Release/ (it ignores the effective
+# platform suffix for objects, unlike for libraries) and the install aborts before the
+# export files are written. Alias Release -> Release-<platform> so the rule finds them.
+alias_xcode_config() {  # <build-dir>
+  local d eff
+  for d in "$1"/build/*.build; do
+    [ -d "$d" ] || continue
+    for eff in "$d"/Release-*; do
+      [ -d "$eff" ] && [ ! -e "$d/Release" ] && ln -s "$(basename "$eff")" "$d/Release"
+    done
+  done
+}
+rm -rf "$HERE/ios-inst" "$HERE/ios-sim-inst" dev sim && mkdir -p dev sim
+alias_xcode_config "$SRC/cmake-out-ios$TAG"
+alias_xcode_config "$SRC/cmake-out-ios-sim$TAG"
+cmake --install "$SRC/cmake-out-ios$TAG"     --config Release --prefix "$HERE/ios-inst"
+cmake --install "$SRC/cmake-out-ios-sim$TAG" --config Release --prefix "$HERE/ios-sim-inst"
+MERGE_DELEGATES="$DELEGATES" bash "$HERE/merge-static.sh" ios "$HERE/ios-inst"     "$PWD/dev/libexecutorch.a"
+MERGE_DELEGATES="$DELEGATES" bash "$HERE/merge-static.sh" ios "$HERE/ios-sim-inst" "$PWD/sim/libexecutorch.a"
 
-# Public headers from an install of the device slice (xcframework just needs include/ + the lib;
-# no find_package, so the build-tree-path install quirk is irrelevant here). --config Release is
-# required for the Xcode multi-config generator. Show output so a failure is diagnosable.
-rm -rf "$HERE/ios-inst"
-cmake --install "$SRC/cmake-out-ios$TAG" --config Release --prefix "$HERE/ios-inst" || true
+# Public headers from the device slice's install (the xcframework just needs include/ + the lib).
 hdrs="$HERE/ios-inst/include"
 [ -d "$hdrs" ] || { echo "ERROR: no installed include/ for the iOS xcframework under $HERE/ios-inst"; ls -la "$HERE/ios-inst" 2>/dev/null || true; exit 1; }
 

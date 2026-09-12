@@ -1,14 +1,17 @@
 name: executorch
 
 # Thin wrapper: derive version + release flag + matrix (engine-meta, from CMakePresets
-# vendor.anira), then hand off to the shared _build-backend.yml pipeline. CPU-first STATIC
-# only, built from source on every desktop leg (PyTorch ships no prebuilt desktop C++ runtime
-# to repackage). Consumed via find_package(executorch CONFIG), so archives preserve the full
-# package tree (include/ lib/ lib/cmake/ExecuTorch/).
+# vendor.anira), then hand off to the shared _build-backend.yml pipeline. CPU-only STATIC,
+# built from source on every leg (PyTorch ships no prebuilt desktop C++ runtime to
+# repackage) and staged as a flat include/ + lib/libexecutorch.a tree — one merged archive
+# with the registrations pre-linked (engines/executorch/merge-static.sh), like the other
+# static engines.
 #
 # Triggers:
 #   - push/PR touching executorch sources or shared CI -> validate only (no release)
-#   - tag v<anira-version> (e.g. v2.0.3) -> build at its VERSION, publish to that release
+#   - tag executorch-v<version>[-<n>] (e.g. executorch-v<VERSION>) -> build at engines/executorch/VERSION
+#     (the tag's version must match it), publish every archive to the release named after the tag
+#   - workflow_dispatch with preset_filter -> build only the matching legs (convergence rounds)
 
 on:
   push:
@@ -23,7 +26,7 @@ on:
       - '.github/workflows/executorch.yml'
       - '.github/workflows/_build-backend.yml'
     tags:
-      - 'v[0-9]*'
+      - 'executorch-v[0-9]*'
   pull_request:
     paths:
       - 'engines/executorch/**'
@@ -34,6 +37,12 @@ on:
       - '.github/actions/**'
       - '.github/workflows/executorch.yml'
       - '.github/workflows/_build-backend.yml'
+  workflow_dispatch:
+    inputs:
+      preset_filter:
+        description: "Regex over preset names: build only matching legs (aggregation off; add 'ios' to run the iOS job)"
+        required: false
+        default: ""
 
 concurrency:
   group: executorch-${{ github.ref }}
@@ -47,13 +56,16 @@ jobs:
       release: ${{ steps.m.outputs.release }}
       release_tag: ${{ steps.m.outputs.release_tag }}
       matrix: ${{ steps.m.outputs.matrix }}
+      aggregate: ${{ steps.m.outputs.aggregate }}
+      run_ios: ${{ steps.m.outputs.run_ios }}
     steps:
       - uses: actions/checkout@v6
       - id: m
         uses: ./.github/actions/engine-meta
         with:
+          engine: executorch
           preset_prefix: executorch
-          version_file: engines/executorch/VERSION
+          preset_filter: ${{ inputs.preset_filter }}
 
   build:
     needs: meta
@@ -65,11 +77,12 @@ jobs:
       release: ${{ needs.meta.outputs.release == 'true' }}
       release_tag: ${{ needs.meta.outputs.release_tag }}
       matrix: ${{ needs.meta.outputs.matrix }}
+      aggregate: ${{ needs.meta.outputs.aggregate == 'true' }}
       package_dirs: "include lib"
       macos_universal_kinds: '["static"]'
       # Mobile: per-ABI Android static legs combine into one multi-ABI archive; iOS builds a
       # static .xcframework (device + simulator arm64) via engines/executorch/ios.sh.
       android_bundle_kinds: '["static"]'
-      has_ios: true
+      has_ios: ${{ needs.meta.outputs.run_ios == 'true' }}
       ios_variants: '["", "gpu"]'
     secrets: inherit

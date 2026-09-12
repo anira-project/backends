@@ -1,59 +1,120 @@
 name: engine-meta
 description: >
-  Derive an engine's version + release flag, and generate its CI matrix straight from
-  CMakePresets.json (vendor.anira blocks) — there is no ci-matrix.json. The matrix rows
+  Derive an engine's version + release flag, and generate its CI matrix straight from the
+  engine's presets-ci.json (vendor.anira blocks) — there is no ci-matrix.json. The matrix rows
   are {preset, name, runner, kind, config, arch, canRun, toolchain, source, ...}.
 
+  Release model: ONE TAG PER BACKEND. A tag `<engine>-v<upstream version>[-<n>]`
+  (e.g. onnxruntime-v1.30.0, onnxruntime-v1.30.0-2 for a re-cut of the same upstream version)
+  builds that engine at its pinned engines/<engine>/VERSION and publishes every archive to the
+  GitHub release named after the tag. The version in the tag MUST equal the VERSION file —
+  a mismatch fails here, before anything is built, so a mistagged push can never publish a
+  release whose name lies about its contents.
+
 inputs:
+  engine:
+    description: "Engine id: tflite | onnxruntime | libtorch | litert | executorch (dir under engines/, tag prefix)"
+    required: true
   preset_prefix:
-    description: "Preset name prefix to select this engine's legs, e.g. tflite | onnx | libtorch"
+    description: "Preset name prefix selecting this engine's legs, e.g. tflite | onnx | libtorch"
     required: true
   version_file:
-    description: "Path to the engine's VERSION file"
-    required: true
-  presets:
-    description: "Path to the root CMakePresets.json"
+    description: "Path to the engine's VERSION file (default engines/<engine>/VERSION)"
     required: false
-    default: CMakePresets.json
+    default: ""
+  presets:
+    description: "Path to the engine's CI preset file (default engines/<engine>/presets-ci.json)"
+    required: false
+    default: ""
+  preset_filter:
+    description: >
+      Optional regex (jq `test`) over preset names — only matching legs enter the matrix.
+      For convergence rounds via workflow_dispatch: build one leg instead of twenty. When set,
+      the aggregation jobs (macOS universal, Android bundle) are skipped, and the iOS
+      xcframework job runs only if the regex also matches the literal string "ios".
+    required: false
+    default: ""
 
 outputs:
   version:
     description: "Upstream version pinned in the engine VERSION file"
     value: ${{ steps.meta.outputs.version }}
   release:
-    description: "true on a v<x.y.z> tag (publish), false otherwise (validate only)"
+    description: "true on a <engine>-v<version>[-n] tag (publish), false otherwise (validate only)"
     value: ${{ steps.meta.outputs.release }}
   release_tag:
-    description: "The release tag (the anira version) when release==true"
+    description: "The release tag when release==true"
     value: ${{ steps.meta.outputs.release_tag }}
   matrix:
-    description: "JSON array of build legs generated from CMakePresets vendor.anira"
+    description: "JSON array of build legs generated from the engine's presets-ci.json vendor.anira"
     value: ${{ steps.meta.outputs.matrix }}
+  aggregate:
+    description: "true unless a preset_filter is active (aggregation jobs need the full matrix)"
+    value: ${{ steps.meta.outputs.aggregate }}
+  run_ios:
+    description: "true unless a preset_filter is active that does not match 'ios'"
+    value: ${{ steps.meta.outputs.run_ios }}
 
 runs:
   using: composite
   steps:
     - id: meta
       shell: bash
+      env:
+        ENGINE: ${{ inputs.engine }}
+        PREFIX: ${{ inputs.preset_prefix }}
+        VERSION_FILE: ${{ inputs.version_file }}
+        PRESETS: ${{ inputs.presets }}
+        FILTER: ${{ inputs.preset_filter }}
       run: |
         set -euo pipefail
-        echo "version=$(tr -d '[:space:]' < '${{ inputs.version_file }}')" >> "$GITHUB_OUTPUT"
+        version_file="${VERSION_FILE:-engines/$ENGINE/VERSION}"
+        presets="${PRESETS:-engines/$ENGINE/presets-ci.json}"
+        version="$(tr -d '[:space:]' < "$version_file")"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
 
-        # Release is keyed to the anira version: a v<x.y.z> tag publishes to that release.
-        if [[ "$GITHUB_REF" == refs/tags/v[0-9]* ]]; then
+        # Release is keyed per backend: refs/tags/<engine>-v<version>[-<n>]. The workflow's
+        # tag filter already restricts us to this engine's prefix; anything else that lands
+        # here is a mistag and fails loudly.
+        if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          tag="$GITHUB_REF_NAME"
+          if [[ "$tag" =~ ^${ENGINE}-v([0-9][0-9A-Za-z.]*)(-[0-9]+)?$ ]]; then
+            tag_version="${BASH_REMATCH[1]}"
+          else
+            echo "::error::tag '$tag' is not of the form ${ENGINE}-v<version>[-<n>]"; exit 1
+          fi
+          if [ "$tag_version" != "$version" ]; then
+            echo "::error::tag '$tag' names version $tag_version but $version_file pins $version — bump the VERSION file (and rebuild) or retag"; exit 1
+          fi
           echo "release=true" >> "$GITHUB_OUTPUT"
-          echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "::notice::release build: $tag -> $ENGINE $version"
         else
           echo "release=false" >> "$GITHUB_OUTPUT"
+          echo "release_tag=" >> "$GITHUB_OUTPUT"
         fi
 
         # Matrix = every visible preset whose name starts with "<prefix>-" and carries a
-        # vendor.anira block, flattened to {preset: <name>} + vendor.anira fields.
-        matrix=$(jq -c --arg eng '${{ inputs.preset_prefix }}' \
+        # vendor.anira block, flattened to {preset: <name>} + vendor.anira fields; optionally
+        # narrowed by the preset_filter regex.
+        matrix=$(jq -c --arg eng "$PREFIX" --arg re "$FILTER" \
           '[ .configurePresets[]
              | select(.name | startswith($eng + "-"))
              | select(.vendor.anira != null)
+             | select($re == "" or (.name | test($re)))
              | { preset: .name } + .vendor.anira ]' \
-          '${{ inputs.presets }}')
+          "$presets")
+        n=$(echo "$matrix" | jq length)
+        if [ "$n" -eq 0 ]; then
+          echo "::error::preset_filter '$FILTER' matches no $PREFIX-* preset in $presets"; exit 1
+        fi
         echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-        echo "::notice::${{ inputs.preset_prefix }} matrix: $(echo "$matrix" | jq length) legs"
+        if [ -z "$FILTER" ]; then
+          echo "aggregate=true" >> "$GITHUB_OUTPUT"; echo "run_ios=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::$PREFIX matrix: $n legs"
+        else
+          echo "aggregate=false" >> "$GITHUB_OUTPUT"
+          if echo ios | jq -R -e --arg re "$FILTER" 'test($re)' >/dev/null; then run_ios=true; else run_ios=false; fi
+          echo "run_ios=$run_ios" >> "$GITHUB_OUTPUT"
+          echo "::notice::$PREFIX matrix filtered by '$FILTER': $n legs (aggregation off, ios=$run_ios)"
+        fi

@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# Reduce a static archive to its public C API so it can coexist with other
+# static engines in one consumer image.
+#
+# The self-contained static archives bundle their transitive dependency closure
+# (XNNPACK, cpuinfo, pthreadpool, kleidiai, abseil, ...). Several engines vendor
+# DIFFERENT versions of the SAME dependencies — ExecuTorch force-loads its own
+# XNNPACK — so when a consumer links two such archives into one image the
+# duplicate globals either hard-collide at link time or silently cross-bind
+# between mismatched copies. Shipping archives whose only external symbols are
+# the engine's public API removes both failure modes at the source.
+#
+# Per object format:
+#   Mach-O  ld -r -force_load + -exported_symbols_list: merges the members into
+#           one relocatable object, resolving internal references member-to-
+#           member; non-exported globals become private extern, which -r writes
+#           out as LOCAL symbols. Result is re-wrapped into an archive.
+#   ELF     ld -r --whole-archive + objcopy --wildcard --keep-global-symbols:
+#           same merge, then every global not matching the keep pattern is
+#           demoted to local. Re-wrapped into an archive.
+#   COFF    no partial link exists, so internals are RENAMED instead of
+#           localized: every defined external not matching the keep prefix gets
+#           the rename prefix, rewritten member-by-member with llvm-objcopy
+#           --redefine-syms. Definitions and references rename consistently, so
+#           cross-member references keep resolving inside the archive.
+#           Undefined externals (CRT/OS imports) are untouched.
+#
+# Usage: isolate-static.sh <archive> <keep-patterns> <rename-prefix> [output] [format]
+#   <archive>        input static archive (.a / .lib)
+#   <keep-patterns>  comma-separated glob patterns of symbols to keep external.
+#                    A bare name is a prefix ("LiteRt" == LiteRt*); '*' matches
+#                    anywhere ("*cctz_extension*"). E.g. "LiteRt,TfLite" —
+#                    LiteRT also publicly exposes the TfLite* delegate API,
+#                    which its Windows headers dllexport.
+#   <rename-prefix>  prefix for renamed internals (COFF flavor only)
+#   [output]         output path; defaults to <archive> (in-place)
+#   [format]         macho | elf | coff; default: .lib -> coff, .a -> host OS
+# Env overrides: NM, OBJCOPY, LD, AR, MINOS (Mach-O -platform_version, default 11.0)
+#
+# The script self-audits: it fails if any defined external symbol outside the
+# kept API survives.  bash 3.2 compatible (macOS /bin/bash).
+set -euo pipefail
+
+IN="${1:?archive}"; KEEP="${2:?keep patterns}"; PFX="${3:?rename prefix}"
+OUT="${4:-$IN}"; FORMAT="${5:-}"
+
+# "A,B*C" -> grep -E alternation "^(A.*|B.*C.*)" for the filters below
+# (trailing * implied: bare entries are prefixes, like the ld/objcopy globs).
+KEEP_RE="^($(printf '%s' "$KEEP" | sed 's/[.[\^$+?(){}|]/\\&/g; s/\*/.*/g; s/,/.*|/g; s/$/.*/'))"
+# Same list as glob lines for ld -exported_symbols_list / objcopy --keep-global-symbols.
+keep_globs() { printf '%s' "$KEEP" | tr ',' '\n' | sed 's/$/*/'; }
+
+if [ -z "$FORMAT" ]; then
+    case "$IN" in
+        *.lib) FORMAT=coff ;;
+        *) case "$(uname -s)" in
+               Darwin) FORMAT=macho ;;
+               *)      FORMAT=elf ;;
+           esac ;;
+    esac
+fi
+
+NM="${NM:-llvm-nm}"
+command -v "$NM" >/dev/null 2>&1 || NM=nm
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+# Populated by the coff branch (directive-referenced names that must keep
+# their spelling); empty elsewhere — an empty grep -f pattern file matches
+# nothing, so the audit filter below is a no-op then.
+: > "$WORK/directive-keep.txt"
+
+case "$FORMAT" in
+macho)
+    # Single-arch archives only (universal aggregation happens after staging).
+    ARCH="$(lipo -info "$IN" | sed 's/.*architecture: //;s/.*are: //' | awk '{print $1}')"
+    keep_globs | sed 's/^/_/' > "$WORK/keep.exp"
+    ld -r -arch "$ARCH" -platform_version macos "${MINOS:-11.0}" "${MINOS:-11.0}" \
+        -force_load "$IN" -exported_symbols_list "$WORK/keep.exp" -o "$WORK/merged.o"
+    ${AR:-ar} rcs "$WORK/out.a" "$WORK/merged.o"
+    ;;
+elf)
+    keep_globs > "$WORK/keep.txt"
+    # --force-group-allocation dissolves COMDAT section groups during the
+    # partial link (merging duplicates into plain sections). Without it the
+    # groups survive into merged.o; a C++ consumer providing the same
+    # vague-linkage symbols (typeinfo etc.) makes the final link discard
+    # merged.o's duplicate groups — whose members still reference the now-
+    # LOCALIZED copies — and fail with "defined in discarded section".
+    "${LD:-ld}" -r --force-group-allocation -o "$WORK/merged.o" \
+        --whole-archive "$IN" --no-whole-archive
+    "${OBJCOPY:-objcopy}" --wildcard --keep-global-symbols="$WORK/keep.txt" "$WORK/merged.o"
+    ${AR:-ar} rcs "$WORK/out.a" "$WORK/merged.o"
+    ;;
+coff)
+    # Symbols named in .drectve linker directives must keep their names: MSVC
+    # references symbols as raw STRINGS there — /INCLUDE:<sym> (emitted e.g.
+    # for inline-variable dynamic initializers) and /ALTERNATENAME:<a>=<b>
+    # (weak-symbol emulation) — which a symbol-table rename cannot rewrite, so
+    # renaming a directive-referenced symbol strands the directive and the
+    # link fails on the ORIGINAL name. Extract every directive-referenced
+    # name and exempt it. These are a handful of engine-internal names, not
+    # the vendored xnn_/cpuinfo_/pthreadpool_ mass that actually collides.
+    strings "$IN" | tr ' ' '\n' \
+        | grep -iE '^[-/](include|alternatename):' \
+        | sed -E 's~^[^:]*:~~' | tr '=' '\n' | sort -u > "$WORK/directive-keep.txt"
+
+    # For every renamed X also rename __imp_X -> __imp_<pfx>X: MSVC resolves an
+    # unresolved __imp_X against a locally-defined X ("locally imported",
+    # LNK4217) by stripping the prefix — renaming only X would strand such
+    # references (dllimport-annotated decls do this even inside one archive,
+    # and MSVC codegen versions differ in when they emit them). Keeping the
+    # pair consistent keeps the fallback working; __imp_ refs to genuinely
+    # external DLL imports match no rule and pass through untouched.
+    "$NM" --defined-only --extern-only "$IN" \
+        | awk 'NF>=3 {print $3}' | sort -u | grep -Ev "$KEEP_RE" | grep -v '^__imp_' \
+        | grep -Fxv -f "$WORK/directive-keep.txt" \
+        | awk -v p="$PFX" '{print $0" "p$0; print "__imp_"$0" __imp_"p$0}' > "$WORK/rename.map"
+    [ -s "$WORK/rename.map" ] || { echo "isolate-static: empty rename map for $IN" >&2; exit 1; }
+    "${OBJCOPY:-llvm-objcopy}" "--redefine-syms=$WORK/rename.map" "$IN" "$WORK/out.a"
+    ;;
+*)
+    echo "isolate-static: unknown format '$FORMAT'" >&2; exit 1 ;;
+esac
+
+# Audit: no defined external symbol outside the kept API (COFF: or the rename
+# prefix / the directive-referenced exemptions) may survive. nm prints
+# "addr type name"; member headers/blanks differ. Only Mach-O symbol names
+# carry the leading-underscore mangling — stripping it on COFF would break
+# the comparison against the directive exemptions.
+if [ "$FORMAT" = macho ]; then AUDIT_STRIP='s/^_//'; else AUDIT_STRIP=''; fi
+LEFT="$("$NM" --defined-only --extern-only "$WORK/out.a" 2>/dev/null \
+    | awk 'NF>=3 {print $3}' | sed "$AUDIT_STRIP" \
+    | grep -Ev "$KEEP_RE" | grep -v "^$PFX" \
+    | grep -Fxv -f "$WORK/directive-keep.txt" | grep -cv '^$' || true)"
+if [ "$LEFT" != "0" ]; then
+    echo "isolate-static: $LEFT non-API globals survived in $OUT" >&2
+    exit 1
+fi
+
+mkdir -p "$(dirname "$OUT")"
+mv -f "$WORK/out.a" "$OUT"
+echo "isolate-static: $IN -> $OUT (only {${KEEP}}* external, format $FORMAT)"

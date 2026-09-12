@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Build a STATIC, CPU-first ExecuTorch runtime from source for ONE desktop target,
-# producing a find_package(executorch)-consumable package tree (include/ lib/
-# lib/cmake/ExecuTorch/), the same path anira will use to link it.
+# Build a STATIC, CPU-first ExecuTorch runtime from source for ONE desktop/Android target
+# and stage it as a flat include/ + lib/libexecutorch.a tree — ONE merged archive, like the
+# onnxruntime/litert/tflite static packages, that anira links on-demand with no CMake
+# package and no force-load (see merge-static.sh for how the kernel/backend registrations
+# survive that).
 #
 # Why from source (no repackage leg like libtorch/onnx): PyTorch publishes ExecuTorch
 # only as Python wheels (the AOT exporter) plus mobile prebuilts (iOS .xcframework /
@@ -10,23 +12,22 @@
 #
 # "Generic, full op set" (the neural_tilde approach): we link the WHOLE optimized CPU
 # kernel library (optimized_native_cpu_ops_lib) + XNNPACK, NOT a per-model selective
-# build. One package loads any .pte. ExecuTorch's exported targets already carry
-# -force_load via INTERFACE_LINK_OPTIONS, so op/backend static initializers register
-# without extra whole-archive handling on the consumer side.
+# build. One package loads any .pte.
 #
-# CPU first, hardware later: XNNPACK (optimized CPU) + the portable/optimized ATen
-# kernels are enabled on every platform. Apple delegates (CoreML, and MLX on arm64) are
-# built in so the GPU/ANE path can be switched on later WITHOUT a runtime rebuild — but
-# anira uses the CPU path for now. The cross-platform GPU delegate for Linux/Windows
-# (Vulkan) is left as a follow-up; see the TODO below.
+# CPU by default: XNNPACK (optimized CPU) + the portable/optimized/quantized ATen kernels on
+# every platform, and nothing else in the default package. With the registrations pre-linked
+# into the archive a delegate is either registered for every consumer or absent (there is no
+# "present but inert" state) — which is exactly why GPU delegates ship ONLY in the separate
+# -gpu variant archives (accel= below): the delegate's register_backend() TU joins the
+# pre-linked blob through merge-static.sh's MERGE_DELEGATES.
 #
 # Usage: build-executorch.sh <platform> <arch> <staging-dir> [accel]
-#   <platform>  macos | linux | windows
-#   <arch>      x86_64 | aarch64 | arm64
-#   <staging>   output prefix; gets include/ lib/ (incl. lib/cmake/ExecuTorch/)
+#   <platform>  macos | linux | windows | android
+#   <arch>      x86_64 | aarch64 | arm64 (android: the ABI, arm64-v8a | x86_64)
+#   <staging>   output prefix; gets include/ lib/libexecutorch.a (windows: lib/executorch.lib
+#               + lib/executorch_registrations.lib)
 #   <accel>     none (default) | coreml | vulkan. GPU delegates ship ONLY in the separate
-#               -gpu variant archives — the default package is
-#               CPU-only (XNNPACK + optimized kernels).
+#               -gpu variant archives — the default package is CPU-only.
 #               coreml = macOS -gpu: CoreML + MPS delegates (+ MLX on arm64, which floors
 #                        the deployment target at 14.0 — the CPU default stays at 12.0).
 #               vulkan = Linux x86_64 -gpu (experimental): cross-vendor GPU delegate;
@@ -176,10 +177,11 @@ ET_FLAGS=(
 
 case "$PLATFORM" in
   macos)
-    # Default package is CPU-only at deployment target 12.0. The -gpu variant
-    # (accel=coreml) adds the CoreML delegate, and on arm64 also MLX — whose
-    # backends/mlx/CMakeLists.txt hard-requires >=14.0, so ONLY the arm64 -gpu
-    # package floors at macOS 14+; every other macOS package stays 12.0.
+    # Default package is CPU-only at deployment target 12.0. The -gpu variant (accel=coreml)
+    # adds the CoreML delegate, and on arm64 also MLX — whose backends/mlx/CMakeLists.txt
+    # hard-requires >=14.0, so ONLY the arm64 -gpu package floors at macOS 14+; every other
+    # macOS package stays 12.0. The delegates' register_backend() TUs join the pre-linked
+    # blob at the merge step below (MERGE_DELEGATES).
     MACVER=12.0
     if [ "$ACCEL" = "coreml" ]; then
       ET_FLAGS+=(
@@ -187,13 +189,13 @@ case "$PLATFORM" in
         # MPS delegate too: CoreML and MPS serve different models (ANE-compiled vs
         # direct Metal kernels) and the .pte's export-time partitioning picks — both
         # being present means any Apple-exported .pte works with this one -gpu
-        # archive, matching the iOS xcframework which already ships both.
+        # archive, matching the iOS -gpu xcframework which ships both as well.
         -DEXECUTORCH_BUILD_MPS=ON
       )
       if [ "$ARCH" = "arm64" ]; then
         MACVER=14.0
         # MLX (Apple-Silicon GPU) is arm64-only; there is no Intel-mac MLX. Bundles an
-        # mlx.metallib that must ship alongside the libs (staging step below keys on
+        # mlx.metallib that must ship alongside the lib (staging step below keys on
         # this shell var).
         EXECUTORCH_BUILD_MLX=ON
         ET_FLAGS+=(-DEXECUTORCH_BUILD_MLX=ON)
@@ -206,12 +208,11 @@ case "$PLATFORM" in
     )
     ;;
   linux)
-    # Default: CPU-only (XNNPACK + optimized ATen kernels). The -gpu variant
-    # (accel=vulkan) adds the cross-vendor Vulkan delegate (experimental,
-    # the GPU variant scheme): shaders are compiled at build time with glslc;
-    # at runtime the delegate loads libvulkan via volk (dlopen), so the package adds
-    # NO hard runtime dependency — without a Vulkan driver or a vulkan-partitioned
-    # .pte it behaves exactly like the CPU package.
+    # Default: CPU-only (XNNPACK + optimized ATen kernels). The -gpu variant (accel=vulkan)
+    # adds the cross-vendor Vulkan delegate (experimental): shaders are compiled at build
+    # time with glslc; at runtime the delegate loads libvulkan via volk (dlopen), so the
+    # package adds NO hard runtime dependency — without a Vulkan driver or a
+    # vulkan-partitioned .pte it behaves exactly like the CPU package.
     if [ "$ACCEL" = "vulkan" ]; then
       # ExecuTorch 1.3.1's int8 shaders need a glslang that knows
       # GL_EXT_integer_dot_product (dotPacked4x8AccSatEXT). Ubuntu 24.04's apt glslc
@@ -332,60 +333,44 @@ echo "== building ExecuTorch ${VER} for ${PLATFORM}/${ARCH} (static, CPU + XNNPA
 cmake -S "$SRC" -B "$BUILD" "${ET_FLAGS[@]}"
 cmake --build "$BUILD" -j "$BUILD_JOBS" --target install
 
-# The install tree must carry the CMake package (lib/cmake/ExecuTorch/executorch-config.cmake
-# + ExecuTorchTargets.cmake) — that is what find_package(executorch CONFIG) resolves.
+# The install tree must carry the CMake package (lib/cmake/ExecuTorch/ExecuTorchTargets*.cmake):
+# it is not shipped, but merge-static.sh reads the member list and the force-load set off it.
 [ -f "$INSTALL/lib/cmake/ExecuTorch/executorch-config.cmake" ] || \
   { echo "ERROR: build produced no lib/cmake/ExecuTorch/executorch-config.cmake under $INSTALL"; exit 1; }
 
-mkdir -p "$ST"
-for d in include lib; do
-  [ -d "$INSTALL/$d" ] && cp -R "$INSTALL/$d" "$ST/"
-done
+# Stage: headers as installed, and ONE merged archive instead of the 25-odd component
+# libs + CMake package. (ExecuTorch 1.3.1 installs a few libs into the build tree instead
+# of the prefix and bakes that absolute path into the export; merge-static.sh follows the
+# exported locations, so those members are picked up from wherever they landed.)
+rm -rf "$ST/include" "$ST/lib"; mkdir -p "$ST"
+cp -R "$INSTALL/include" "$ST/include"
+out="$ST/lib/libexecutorch.a"; [ "$PLATFORM" = "windows" ] && out="$ST/lib/executorch.lib"
+# -gpu variants: the delegates' registration TUs join the pre-linked blob (they are
+# EXCLUDE_LIBS in a default build — GPU is always a separate archive).
+MERGE_DELEGATES=""; MERGE_EXTRA_ARCHIVES=""
+case "$ACCEL" in
+  coreml)
+    MERGE_DELEGATES="coremldelegate mpsdelegate"
+    if [ "${EXECUTORCH_BUILD_MLX:-}" = "ON" ]; then
+      MERGE_DELEGATES="$MERGE_DELEGATES mlxdelegate"
+      # libmlxdelegate.a references mlx::core::* from libmlx.a, which MLX's CMake builds as a
+      # sub-dependency and installs WITHOUT an export (executorch-config.cmake find_library()s
+      # it) — so ExecuTorchTargets.cmake never lists it. Hand it to the merge explicitly.
+      MERGE_EXTRA_ARCHIVES="$(find "$INSTALL" "$BUILD" -name 'libmlx.a' -type f 2>/dev/null | head -1)"
+      [ -n "$MERGE_EXTRA_ARCHIVES" ] || { echo "ERROR: MLX enabled but libmlx.a not found under $INSTALL / $BUILD"; exit 1; }
+    fi ;;
+  vulkan) MERGE_DELEGATES="vulkan_backend" ;;
+esac
+MERGE_DELEGATES="$MERGE_DELEGATES" MERGE_EXTRA_ARCHIVES="$MERGE_EXTRA_ARCHIVES" \
+  bash "$HERE/merge-static.sh" "$PLATFORM" "$INSTALL" "$out"
 
-# Make the package RELOCATABLE. ExecuTorch 1.3.1 has an install bug where a few targets (e.g.
-# extension_evalue_util) install their .a into the BUILD dir instead of the install prefix, so
-# ExecuTorchTargets.cmake bakes an absolute build-tree path. find_package then works only on the
-# original build runner (why the per-arch smokes pass in-job) and fails everywhere else — the
-# macOS-universal job AND anira on any other machine (ExecuTorchTargets.cmake validates that every
-# imported target's file exists). Fix in two steps so the staged tree is self-contained:
-#   1) copy any .a the CMake package references straight from the build tree into lib/
-#   2) rewrite absolute build-tree paths to ${_IMPORT_PREFIX}/lib/<name> — the same relocatable
-#      form ExecuTorch already uses for the correctly-installed targets.
-etc="$ST/lib/cmake/ExecuTorch"
-if [ -d "$etc" ]; then
-  # Match by the `cmake-out` build-dir marker rather than $BUILD: path-format agnostic (handles
-  # both the macOS/Linux abs path and the Windows D:/ path the cmake file actually contains) and
-  # both lib naming schemes (Unix lib*.a, Windows *.lib). `|| true` everywhere: grep exits 1 on
-  # no-match (Windows had no .a) and pipefail+set -e would otherwise abort the whole build here.
-  reloc_re='[^";]*cmake-out[^";]*/((lib)?[A-Za-z0-9_]+\.(a|lib))'
-  ( grep -rhoE "$reloc_re" "$etc" 2>/dev/null | sort -u || true ) | while IFS= read -r f; do
-    [ -n "$f" ] && [ -f "$f" ] && cp -f "$f" "$ST/lib/" && echo "relocated build-tree lib into package: $(basename "$f")"
-  done
-  sed -i.bak -E "s#${reloc_re}#\${_IMPORT_PREFIX}/lib/\1#g" "$etc"/*.cmake 2>/dev/null || true
-  rm -f "$etc"/*.bak 2>/dev/null || true
-fi
-
-# MLX delegate: the mlxdelegate static lib references mlx::core::* from libmlx, which MLX's
-# CMake builds as a sub-dependency but does NOT install into our prefix. executorch-config.cmake
-# does find_library(mlx HINTS <root>/lib), so without libmlx in lib/ the `mlx` target is never
-# created and consumers (smoke, anira) fail to link with undefined mlx::core symbols. Bundle
-# libmlx.a from the build tree into lib/. Also bundle the sidecar mlx.metallib (compiled Metal
-# kernels the delegate loads at execute() time). (No-op when MLX wasn't built.)
+# MLX sidecar: mlx.metallib holds the compiled Metal kernels the delegate loads at execute()
+# time; it must ship next to the lib (executorch-config.cmake looks for it under lib/).
 if [ "${EXECUTORCH_BUILD_MLX:-}" = "ON" ]; then
-  mlxlib="$(find "$BUILD" "$INSTALL" -name 'libmlx.a' -type f 2>/dev/null | head -1)"
-  if [ -n "$mlxlib" ]; then
-    cp -f "$mlxlib" "$ST/lib/"
-    echo "bundled MLX core lib: $mlxlib -> $ST/lib/"
-  else
-    echo "WARN: MLX enabled but libmlx.a not found in build tree — consumers will fail to link mlx::core"
-  fi
-  found=""
-  for mlib in "$INSTALL"/lib/*.metallib "$BUILD"/**/*.metallib "$BUILD"/*.metallib; do
-    [ -e "$mlib" ] || continue
-    cp -f "$mlib" "$ST/lib/"; found=1
-  done
-  [ -n "$found" ] || echo "WARN: MLX enabled but no .metallib found to bundle (verify at runtime)"
+  metallib="$(find "$INSTALL" "$BUILD" -name 'mlx.metallib' -type f 2>/dev/null | head -1)"
+  [ -n "$metallib" ] || { echo "ERROR: MLX enabled but no mlx.metallib found to bundle"; exit 1; }
+  cp -f "$metallib" "$ST/lib/"; echo "bundled MLX kernels: $metallib -> $ST/lib/"
 fi
 
 echo "built + staged -> $ST"
-( cd "$ST" && find . -maxdepth 3 -type d | sort | sed 's/^/  /' )
+( cd "$ST" && find . -maxdepth 2 | sort | sed 's/^/  /' )

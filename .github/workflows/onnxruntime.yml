@@ -7,7 +7,9 @@ name: onnxruntime
 #
 # Triggers:
 #   - push/PR touching onnxruntime sources or shared CI -> validate only (no release)
-#   - tag v<anira-version> (e.g. v2.0.3) -> build at its VERSION, publish to that release
+#   - tag onnxruntime-v<version>[-<n>] (e.g. onnxruntime-v<VERSION>) -> build at engines/onnxruntime/VERSION
+#     (the tag's version must match it), publish every archive to the release named after the tag
+#   - workflow_dispatch with preset_filter -> build only the matching legs (convergence rounds)
 
 on:
   push:
@@ -22,7 +24,7 @@ on:
       - '.github/workflows/onnxruntime.yml'
       - '.github/workflows/_build-backend.yml'
     tags:
-      - 'v[0-9]*'
+      - 'onnxruntime-v[0-9]*'
   pull_request:
     paths:
       - 'engines/onnxruntime/**'
@@ -33,6 +35,12 @@ on:
       - '.github/actions/**'
       - '.github/workflows/onnxruntime.yml'
       - '.github/workflows/_build-backend.yml'
+  workflow_dispatch:
+    inputs:
+      preset_filter:
+        description: "Regex over preset names: build only matching legs (aggregation off; add 'ios' to run the iOS job)"
+        required: false
+        default: ""
 
 concurrency:
   group: onnxruntime-${{ github.ref }}
@@ -46,13 +54,16 @@ jobs:
       release: ${{ steps.m.outputs.release }}
       release_tag: ${{ steps.m.outputs.release_tag }}
       matrix: ${{ steps.m.outputs.matrix }}
+      aggregate: ${{ steps.m.outputs.aggregate }}
+      run_ios: ${{ steps.m.outputs.run_ios }}
     steps:
       - uses: actions/checkout@v6
       - id: m
         uses: ./.github/actions/engine-meta
         with:
+          engine: onnxruntime
           preset_prefix: onnx
-          version_file: engines/onnxruntime/VERSION
+          preset_filter: ${{ inputs.preset_filter }}
 
   build:
     needs: meta
@@ -64,8 +75,9 @@ jobs:
       release: ${{ needs.meta.outputs.release == 'true' }}
       release_tag: ${{ needs.meta.outputs.release_tag }}
       matrix: ${{ needs.meta.outputs.matrix }}
+      aggregate: ${{ needs.meta.outputs.aggregate == 'true' }}
       macos_universal_kinds: '["static","shared"]'
       android_bundle_kinds: '["static"]'
-      has_ios: true
+      has_ios: ${{ needs.meta.outputs.run_ios == 'true' }}
       ios_variants: '["", "gpu"]'
     secrets: inherit

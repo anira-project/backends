@@ -1,0 +1,514 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "vendor": {
+    "anira": {
+      "doc": "CI legs of the tflite engine. Every visible preset carries its CI + naming metadata in vendor.anira (engine-meta jq-parses this file into the matrix). Included by the root CMakePresets.json; edit here so only the tflite workflow re-triggers."
+    }
+  },
+  "include": [
+    "presets-base.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "tflite-macos-x86_64-shared",
+      "inherits": [
+        "macos-x64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64",
+          "runner": "macos-15",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-macos-x86_64-static",
+      "inherits": [
+        "macos-x64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64",
+          "runner": "macos-15",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-macos-arm64-shared",
+      "inherits": [
+        "macos-arm64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-macos-arm64-static",
+      "inherits": [
+        "macos-arm64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-linux-x86_64-shared",
+      "inherits": [
+        "linux-x64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-x86_64",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-linux-x86_64-static",
+      "inherits": [
+        "linux-x64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-x86_64",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-linux-aarch64-shared",
+      "inherits": [
+        "linux-arm64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-aarch64",
+          "runner": "ubuntu-24.04-arm",
+          "arch": "aarch64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-linux-aarch64-static",
+      "inherits": [
+        "linux-arm64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-aarch64",
+          "runner": "ubuntu-24.04-arm",
+          "arch": "aarch64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-windows-x86_64-shared",
+      "inherits": [
+        "windows-x64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-x86_64",
+          "runner": "windows-2025",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "x64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-windows-x86_64-static",
+      "inherits": [
+        "windows-x64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-x86_64",
+          "runner": "windows-2025",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "x64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-windows-x86_64-static-debug",
+      "inherits": [
+        "windows-x64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-x86_64",
+          "runner": "windows-2025",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Debug",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "x64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-windows-arm64-shared",
+      "inherits": [
+        "windows-arm64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-arm64",
+          "runner": "windows-11-arm",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "arm64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-windows-arm64-static",
+      "inherits": [
+        "windows-arm64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-arm64",
+          "runner": "windows-11-arm",
+          "arch": "arm64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "arm64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-windows-arm64-static-debug",
+      "inherits": [
+        "windows-arm64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-arm64",
+          "runner": "windows-11-arm",
+          "arch": "arm64",
+          "kind": "static",
+          "config": "Debug",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "arm64",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-macos-x86_64-gpu-shared",
+      "inherits": [
+        "macos-x64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_METAL_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64-gpu",
+          "runner": "macos-15",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-macos-x86_64-gpu-static",
+      "inherits": [
+        "macos-x64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_METAL_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64-gpu",
+          "runner": "macos-15",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-macos-arm64-gpu-shared",
+      "inherits": [
+        "macos-arm64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_METAL_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64-gpu",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-macos-arm64-gpu-static",
+      "inherits": [
+        "macos-arm64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_METAL_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64-gpu",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-android-arm64-v8a-shared",
+      "inherits": [
+        "android-arm64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-arm64-v8a",
+          "runner": "ubuntu-24.04",
+          "arch": "arm64-v8a",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-android-arm64-v8a-static",
+      "inherits": [
+        "android-arm64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-arm64-v8a",
+          "runner": "ubuntu-24.04",
+          "arch": "arm64-v8a",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-android-x86_64-shared",
+      "inherits": [
+        "android-x64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-x86_64",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-android-x86_64-static",
+      "inherits": [
+        "android-x64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-x86_64",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    }
+  ]
+}
