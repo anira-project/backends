@@ -620,6 +620,56 @@
       }
     },
     {
+      "name": "onnx-linux-x86_64-gpu-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "linux",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "webgpu"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-x86_64-gpu",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-linux-x86_64-gpu-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "linux",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "webgpu"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-x86_64-gpu",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
       "name": "onnx-linux-x86_64-cuda-shared",
       "inherits": "orch-base",
       "cacheVariables": {

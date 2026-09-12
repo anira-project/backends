@@ -18,8 +18,12 @@ get_filename_component(ORT_LIBDIR "${ORT_LIB}" DIRECTORY)
 # flavor arg was dropped — see cmake/ExternalEngine.cmake).
 if(SMOKE_VARIANT STREQUAL "gpu"
    AND NOT EXISTS "${ORT_INC}/coreml_provider_factory.h"
-   AND NOT EXISTS "${ORT_INC}/dml_provider_factory.h")
+   AND NOT EXISTS "${ORT_INC}/dml_provider_factory.h"
+   AND NOT EXISTS "${ORT_INC}/webgpu_provider_factory.h")
   message(FATAL_ERROR "-gpu package ships no GPU EP provider header — built CPU-only?")
+endif()
+if(SMOKE_VARIANT STREQUAL "" AND EXISTS "${ORT_INC}/webgpu_provider_factory.h")
+  message(FATAL_ERROR "default (CPU) package advertises the WebGPU EP — GPU must be a separate -gpu archive")
 endif()
 if(SMOKE_VARIANT STREQUAL "cuda")
   file(GLOB _cuda_ep "${ORT_LIBDIR}/*onnxruntime_providers_cuda*")
@@ -44,6 +48,24 @@ if(EXISTS "${ORT_INC}/dml_provider_factory.h")
   # d3d12/dxgi for the explicit WARP-device fallback (GPU-less runners); DirectML.dll
   # itself is resolved at runtime from the package (no import lib shipped).
   target_link_libraries(smoke PRIVATE d3d12 dxgi)
+endif()
+if(EXISTS "${ORT_INC}/webgpu_provider_factory.h")
+  # WebGPU variant: the package ships the Dawn ORT was built against (external-Dawn build)
+  # as lib/libwebgpu_dawn + include/{webgpu,dawn}. The consumer — anira's Machine — owns
+  # that Dawn: it links libwebgpu_dawn, takes dawn::native::GetProcs() and hands the table
+  # to the EP (ep.webgpuexecutionprovider.dawnProcTable). This is that link line.
+  find_library(DAWN_LIB NAMES webgpu_dawn PATHS "${ORT_LIBDIR}" NO_DEFAULT_PATH REQUIRED)
+  if(NOT EXISTS "${ORT_INC}/dawn/native/DawnNative.h" OR NOT EXISTS "${ORT_INC}/webgpu/webgpu.h")
+    message(FATAL_ERROR "-gpu (WebGPU) package ships no Dawn headers next to libwebgpu_dawn")
+  endif()
+  if(NOT EXISTS "${ORT_INC}/../DAWN_VERSION")
+    message(FATAL_ERROR "-gpu (WebGPU) package ships no DAWN_VERSION (the consumer's revision assertion needs it)")
+  endif()
+  file(READ "${ORT_INC}/../DAWN_VERSION" _dawn_rev)
+  string(STRIP "${_dawn_rev}" _dawn_rev)
+  message(STATUS "onnxruntime smoke: WebGPU EP over Dawn ${_dawn_rev} (${DAWN_LIB})")
+  target_compile_definitions(smoke PRIVATE SMOKE_HAS_WEBGPU DAWN_NATIVE_SHARED_LIBRARY WGPU_SHARED_LIBRARY)
+  target_link_libraries(smoke PRIVATE "${DAWN_LIB}")
 endif()
 
 if(SMOKE_KIND STREQUAL "static")

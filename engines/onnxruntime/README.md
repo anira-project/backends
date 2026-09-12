@@ -15,6 +15,19 @@ provider bridge, TensorRT provider dropped; CUDA 13.x + cuDNN 9 are user-provide
 variant package ships its provider header (`coreml_provider_factory.h` /
 `dml_provider_factory.h`) — that's how the smoke (and anira) detect the EP.
 
+**WebGPU (anira v3):** every desktop `-gpu` archive additionally carries the **WebGPU EP**
+built against an *external* Dawn — ORT links only the `dawn_proc` thunks; the consumer owns
+the one Dawn of the process and passes its proc table at session creation
+(`ep.webgpuexecutionprovider.dawnProcTable`, see `test/smoke.cpp`). That Dawn ships **inside
+the same archive**: `lib/libwebgpu_dawn.{so,dylib}` / `webgpu_dawn.dll`, `include/webgpu/`,
+`include/dawn/`, and `DAWN_VERSION` — the tag ORT's `cmake/deps.txt` pins, which
+`build-ort.sh` fetches (sha1-checked), builds as Dawn's monolithic shared library, and
+feeds to ORT via `onnxruntime_CUSTOM_DAWN_SRC_PATH`, so ORT, Dawn and the proc-table
+layout are one versioned triple per archive. Backends: Vulkan on Linux, Metal on macOS,
+D3D12 on Windows. `webgpu_provider_factory.h` (upstream's presence marker) is the header a
+consumer keys on. First leg: Linux x86_64 (`onnx-linux-x86_64-gpu-{shared,static}`, flavor
+`webgpu`); macOS (`coreml+webgpu`) and Windows (`dml+webgpu`) follow.
+
 ## Files
 
 | File                  | Purpose                                                      |
