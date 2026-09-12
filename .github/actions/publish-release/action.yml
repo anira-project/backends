@@ -6,8 +6,12 @@ description: >
 
 inputs:
   tag:
-    description: "Release tag (the anira version, e.g. v2.0.3)"
+    description: "Release tag: <engine>-v<version>[-<n>], e.g. onnxruntime-v1.30.0 (one release per backend)"
     required: true
+  notes:
+    description: "Release notes body (e.g. '<engine> <version>'); used only when the release is created"
+    required: false
+    default: ""
   file:
     description: "Path to the .zip artifact to upload"
     required: true
@@ -24,6 +28,7 @@ runs:
       run: |
         set -euo pipefail
         tag="${{ inputs.tag }}"
+        notes="${{ inputs.notes }}"
         gh release view "$tag" >/dev/null 2>&1 || \
-          gh release create "$tag" --title "$tag" --notes "anira backends $tag"
+          gh release create "$tag" --title "$tag" --notes "anira backends: ${notes:-$tag}"
         gh release upload "$tag" "${{ inputs.file }}" --clobber

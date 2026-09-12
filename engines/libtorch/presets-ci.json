@@ -1,0 +1,168 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "vendor": {
+    "anira": {
+      "doc": "CI legs of the libtorch engine. Every visible preset carries its CI + naming metadata in vendor.anira (engine-meta jq-parses this file into the matrix). Included by the root CMakePresets.json; edit here so only the libtorch workflow re-triggers."
+    }
+  },
+  "include": [
+    "../../cmake/presets/orch-base.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "libtorch-macos-x86_64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "libtorch",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64",
+          "runner": "macos-15-intel",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "libtorch-macos-arm64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "libtorch",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "libtorch-linux-x86_64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "libtorch",
+        "BACKENDS_PLATFORM": "linux",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-x86_64",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "prebuilt",
+          "asset": "libtorch-shared-with-deps",
+          "cpuSuffix": "%2Bcpu"
+        }
+      }
+    },
+    {
+      "name": "libtorch-linux-aarch64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "libtorch",
+        "BACKENDS_PLATFORM": "linux",
+        "BACKENDS_ARCH": "aarch64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-aarch64",
+          "runner": "ubuntu-24.04-arm",
+          "arch": "aarch64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "libtorch-windows-x86_64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "libtorch",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-x86_64",
+          "runner": "windows-2025",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "x64",
+          "source": "prebuilt",
+          "asset": "libtorch-win-shared-with-deps",
+          "cpuSuffix": "%2Bcpu"
+        }
+      }
+    },
+    {
+      "name": "libtorch-windows-arm64-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "libtorch",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-arm64",
+          "runner": "windows-11-arm",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "msvcArch": "arm64",
+          "source": "build"
+        }
+      }
+    }
+  ]
+}
