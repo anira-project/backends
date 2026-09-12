@@ -103,6 +103,9 @@ if [ "$SOURCE" = "prebuilt" ]; then
     esac
     for a in $accels; do fetch_prebuilt "$a" "$ST/lib/$a"; done
     echo "staged litert GPU accelerator(s): $accels"
+    # Windows: the WebGpu accelerator's Dawn (D3D12 backend) loads the DXC shader compiler
+    # redistributables at device creation — upstream's prebuilt ships without them.
+    [ "$PLATFORM" = "windows" ] && bash "$HERE/../../scripts/fetch-dxc.sh" "$ARCH" "$ST/lib"
   fi
   if [ "$PLATFORM" = "windows" ]; then
     # The prebuilt ships only the .dll — synthesize the import lib (LiteRt.lib) consumers link.
