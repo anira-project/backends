@@ -26,6 +26,10 @@ if(SMOKE_VARIANT STREQUAL "gpu" AND NOT EXISTS "${TFLITE_INC}/tensorflow/lite/de
 endif()
 if(EXISTS "${TFLITE_INC}/tensorflow/lite/delegates/gpu/metal_delegate.h")
   target_compile_definitions(smoke PRIVATE SMOKE_HAS_METAL)
+  # metal_delegate.h #imports <Metal/Metal.h> (Objective-C) unconditionally, so any TU
+  # that includes it — a consumer's too — must be Objective-C++.
+  enable_language(OBJCXX)
+  set_source_files_properties(smoke.cpp PROPERTIES LANGUAGE OBJCXX)
   # shared kind: the delegate is a separate static lib next to the dylib; static kind:
   # it's already merged into libtensorflowlite_c.a by the bundle step.
   if(SMOKE_KIND STREQUAL "shared")
