@@ -30,6 +30,7 @@
 #include "litert/c/litert_compiled_model.h"
 #include "litert/c/litert_environment.h"
 #include "litert/c/litert_environment_options.h"
+#include "litert/c/litert_layout.h"
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_model_types.h"
 #include "litert/c/litert_options.h"
@@ -63,10 +64,21 @@ static int run_pass(LiteRtEnvironment env, LiteRtModel model, LiteRtHwAccelerato
     if (s != kLiteRtStatusOk) return fail("LiteRtCompiledModelIsFullyAccelerated", s);
     *fully = full;
 
-    // add.bin's input has an unspecified shape — size it to [2] (as the TFLite smoke does).
+    // add.bin's input has a fixed [1] signature — size it to [2] the way the TFLite smoke does:
+    // the NON-strict resize (the strict one refuses a non-dynamic dimension), then refresh the
+    // output layouts with update_allocation so the output side follows the new shape.
     const int dims[1] = {2};
-    s = LiteRtCompiledModelResizeInputTensor(compiled, 0, 0, dims, 1);
-    if (s != kLiteRtStatusOk) return fail("LiteRtCompiledModelResizeInputTensor", s);
+    s = LiteRtCompiledModelResizeInputTensorNonStrict(compiled, 0, 0, dims, 1);
+    if (s != kLiteRtStatusOk) return fail("LiteRtCompiledModelResizeInputTensorNonStrict", s);
+    LiteRtLayout out_layout;
+    std::memset(&out_layout, 0, sizeof(out_layout));
+    s = LiteRtGetCompiledModelOutputTensorLayouts(compiled, 0, 1, &out_layout, /*update_allocation=*/true);
+    if (s != kLiteRtStatusOk) return fail("LiteRtGetCompiledModelOutputTensorLayouts", s);
+    if (out_layout.rank != 1 || out_layout.dimensions[0] != 2) {
+        std::printf("FAIL: [%s] output layout after resize is rank %u dims[0]=%d, expected [2]\n",
+                    label, static_cast<unsigned>(out_layout.rank), out_layout.dimensions[0]);
+        return 1;
+    }
 
     LiteRtRankedTensorType ttype;
     std::memset(&ttype, 0, sizeof(ttype));
