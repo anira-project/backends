@@ -11,16 +11,34 @@
 #                     macOS x86_64 (shared), and ALL static legs (upstream ships no static lib —
 #                     we build the C API impl and merge its transitive .a closure into libLiteRt.a).
 #
-# Usage: stage.sh <platform> <arch> <config> <kind> <source> <staging> [url]
+# Usage: stage.sh <platform> <arch> <config> <kind> <source> <staging> [url] [flavor]
+#   [flavor]   "" (CPU-only default) | gpu — the -gpu variant: the same prebuilt libLiteRt plus
+#              upstream's prebuilt GPU ACCELERATOR next to it (libLiteRtWebGpuAccelerator on
+#              Linux/Windows, libLiteRtMetalAccelerator on macOS/iOS, ClGl + WebGpu on Android),
+#              which the runtime dlopens from the dir named by kLiteRtEnvOptionTagRuntimeLibraryDir
+#              (or the loader's default search) when a model is compiled for
+#              kLiteRtHwAcceleratorGpu. GPU is always a separate archive: the default package
+#              ships no accelerator, and its build_config.h says LITERT_DISABLE_GPU.
+#              Prebuilt + shared only (upstream ships the accelerators as shared objects).
+#              CI passes it via the BACKENDS_FLAVOR env var; the positional wins if given.
 set -euo pipefail
 
 PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:-Release}"; KIND="${4:-shared}"
 SOURCE="${5:-build}"; ST="${6:?staging dir}"
+FLAVOR="${8:-${BACKENDS_FLAVOR:-}}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
-# Pinned LiteRT main commit for the prebuilt libLiteRt binaries (litert/prebuilt/ is unversioned
-# upstream). Bump deliberately and re-verify the LiteRt* symbols after.
-PREBUILT_SHA="89c838788bba9c2ec6bbefd52971daf39d8e2856"
+# Pinned LiteRT commit for the prebuilt libLiteRt binaries (litert/prebuilt/ is unversioned
+# upstream): the v${VER} release tag's commit. Bump deliberately and re-verify the LiteRt*
+# symbols after. (The 2.1.5-era pin 89c8387 stored the prebuilts as `<lib>.lfs`; from 2.2.0
+# they carry their plain names — the fetch below tries both.)
+PREBUILT_SHA="145c7523ff08d5e57ab5c582141775eea47da9c7"
+case "$FLAVOR" in
+  "") ;;
+  gpu) { [ "$SOURCE" = "prebuilt" ] && [ "$KIND" = "shared" ]; } || \
+       { echo "ERROR: flavor=gpu is prebuilt+shared only (upstream ships the GPU accelerators as shared objects next to the prebuilt libLiteRt)"; exit 1; } ;;
+  *) echo "ERROR: unknown litert flavor '$FLAVOR' ('' | gpu)"; exit 1 ;;
+esac
 
 # ---- Headers: from the pinned LiteRT commit ($PREBUILT_SHA) — the SAME ref BOTH modes use for the
 # lib (prebuilt binary AND from-source Bazel build, below), so headers and binary never skew. A
@@ -36,10 +54,14 @@ if [ ! -d "$sdk/litert/c" ]; then
 fi
 ( cd "$sdk" && find litert/c -name '*.h' | while IFS= read -r h; do
     mkdir -p "$ST/include/$(dirname "$h")"; cp "$h" "$ST/include/$h"; done )
-cat > "$ST/include/litert/build_common/build_config.h" <<'EOF'
+# build_config.h: the feature toggles the headers read. CPU-only packages disable GPU (the
+# header-level marker anira keys on, like the ORT provider headers); the -gpu variant leaves
+# GPU enabled so the GPU option/buffer surfaces compile.
+gpu_disabled=1; [ "$FLAVOR" = "gpu" ] && gpu_disabled=0
+cat > "$ST/include/litert/build_common/build_config.h" <<EOF
 #ifndef LITERT_BUILD_COMMON_BUILD_CONFIG_H_
 #define LITERT_BUILD_COMMON_BUILD_CONFIG_H_
-#define LITERT_BUILD_CONFIG_DISABLE_GPU 1
+#define LITERT_BUILD_CONFIG_DISABLE_GPU ${gpu_disabled}
 #define LITERT_BUILD_CONFIG_DISABLE_NPU 1
 #if LITERT_BUILD_CONFIG_DISABLE_GPU
 #define LITERT_DISABLE_GPU
@@ -61,7 +83,27 @@ if [ "$SOURCE" = "prebuilt" ]; then
     macos-arm64)       sub=macos_arm64;    f=libLiteRt.dylib ;;
     *) echo "ERROR: no litert prebuilt for $PLATFORM-$ARCH"; exit 1 ;;
   esac
-  curl -fsSL "https://media.githubusercontent.com/media/google-ai-edge/LiteRT/${PREBUILT_SHA}/litert/prebuilt/${sub}/${f}.lfs" -o "$ST/lib/$f"
+  # Git-LFS media endpoint; the plain name from 2.2.0 on, `.lfs`-suffixed at older pins.
+  fetch_prebuilt() {  # <name> <dest>
+    local base="https://media.githubusercontent.com/media/google-ai-edge/LiteRT/${PREBUILT_SHA}/litert/prebuilt/${sub}"
+    curl -fsSL "$base/$1" -o "$2" 2>/dev/null || curl -fsSL "$base/$1.lfs" -o "$2" || \
+      { echo "ERROR: no prebuilt $sub/$1 at LiteRT @ ${PREBUILT_SHA:0:7}"; return 1; }
+    [ "$(wc -c < "$2")" -gt 4096 ] || { echo "ERROR: $1 downloaded as an LFS pointer, not the binary"; return 1; }
+  }
+  fetch_prebuilt "$f" "$ST/lib/$f"
+  if [ "$FLAVOR" = "gpu" ]; then
+    # The GPU accelerator(s) upstream ships beside libLiteRt for this platform (see the
+    # header comment). Same commit, same media endpoint.
+    case "$PLATFORM-$ARCH" in
+      linux-*)           accels="libLiteRtWebGpuAccelerator.so" ;;
+      windows-x86_64)    accels="libLiteRtWebGpuAccelerator.dll" ;;
+      macos-arm64)       accels="libLiteRtMetalAccelerator.dylib" ;;
+      android-*)         accels="libLiteRtClGlAccelerator.so libLiteRtWebGpuAccelerator.so" ;;
+      *) echo "ERROR: no litert GPU accelerator prebuilt for $PLATFORM-$ARCH"; exit 1 ;;
+    esac
+    for a in $accels; do fetch_prebuilt "$a" "$ST/lib/$a"; done
+    echo "staged litert GPU accelerator(s): $accels"
+  fi
   if [ "$PLATFORM" = "windows" ]; then
     # The prebuilt ships only the .dll — synthesize the import lib (LiteRt.lib) consumers link.
     m=x64; [ "$ARCH" = "arm64" ] && m=arm64
@@ -72,7 +114,7 @@ if [ "$SOURCE" = "prebuilt" ]; then
       } > LiteRt.def
       MSYS_NO_PATHCONV=1 lib /nologo /def:LiteRt.def /out:LiteRt.lib /machine:$m )
   fi
-  echo "staged litert PREBUILT ($PLATFORM/$ARCH @ ${PREBUILT_SHA:0:7}) -> $ST"
+  echo "staged litert PREBUILT ($PLATFORM/$ARCH @ ${PREBUILT_SHA:0:7}${FLAVOR:+, $FLAVOR}) -> $ST"
   exit 0
 fi
 
