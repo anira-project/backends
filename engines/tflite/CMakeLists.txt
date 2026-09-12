@@ -165,7 +165,9 @@ if(TFLITE_BUILD_METAL_DELEGATE)
         install(TARGETS metal_delegate ARCHIVE DESTINATION lib)
     else()
         file(WRITE "${CMAKE_BINARY_DIR}/metal_delegate_exports.lds" "_TFLGpuDelegate*\n")
-        target_link_libraries(tensorflowlite_c PRIVATE
+        # plain signature: upstream's tflite/c/CMakeLists.txt links tensorflowlite_c that
+        # way, and CMake refuses to mix the two forms on one target.
+        target_link_libraries(tensorflowlite_c
             "-Wl,-force_load,$<TARGET_FILE:metal_delegate>" metal_delegate
             "-framework Metal" "-framework Foundation")
         # ld64 unions multiple -exported_symbols_list files: upstream's _TfLite* plus ours.
