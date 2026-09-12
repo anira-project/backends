@@ -145,11 +145,14 @@ install(DIRECTORY "${TFLITE_SOURCE_DIR}/core/c/"
 install(DIRECTORY "${TFLITE_SOURCE_DIR}/core/async/c/"
     DESTINATION "include/tensorflow/lite/core/async/c" FILES_MATCHING PATTERN "*.h")
 
-# -gpu variant: ship the Metal delegate lib + its C API header. For the static kind the
-# delegate is ALSO merged into the single libtensorflowlite_c.a by the bundle step (it
-# sweeps every .a in the build tree); the standalone lib is what the shared kind links.
-# The header's presence is how the smoke (and anira) detect the variant. Consumers link
-# Metal.framework + Foundation.
+# -gpu variant: the Metal delegate + its C API header. STATIC kind: the delegate archive is
+# merged into the single libtensorflowlite_c.a by the bundle step (it sweeps every .a in the
+# build tree). SHARED kind: the delegate goes INSIDE libtensorflowlite_c.dylib — a standalone
+# libmetal_delegate.a cannot be linked by a consumer, because it references absl, the
+# tflite::gpu common code and the tflite logger, which the dylib carries hidden (upstream
+# exports only _TfLite* via exported_symbols.lds). Force-load it into the dylib and export its
+# _TFLGpuDelegate* C API next to _TfLite*. The header's presence is how the smoke (and anira)
+# detect the variant. Consumers link Metal.framework + Foundation.
 if(TFLITE_BUILD_METAL_DELEGATE)
     if(NOT TARGET metal_delegate)
         message(FATAL_ERROR "TFLITE_BUILD_METAL_DELEGATE set but upstream produced no metal_delegate target")
@@ -158,7 +161,17 @@ if(TFLITE_BUILD_METAL_DELEGATE)
     # is never built by the default target (round 1: install failed on the missing .a).
     # A dependency from tensorflowlite_c (which IS in all) pulls it into every build.
     add_dependencies(tensorflowlite_c metal_delegate)
-    install(TARGETS metal_delegate ARCHIVE DESTINATION lib)
+    if(TFLITE_BUILD_STATIC)
+        install(TARGETS metal_delegate ARCHIVE DESTINATION lib)
+    else()
+        file(WRITE "${CMAKE_BINARY_DIR}/metal_delegate_exports.lds" "_TFLGpuDelegate*\n")
+        target_link_libraries(tensorflowlite_c PRIVATE
+            "-Wl,-force_load,$<TARGET_FILE:metal_delegate>" metal_delegate
+            "-framework Metal" "-framework Foundation")
+        # ld64 unions multiple -exported_symbols_list files: upstream's _TfLite* plus ours.
+        target_link_options(tensorflowlite_c PRIVATE
+            "-Wl,-exported_symbols_list,${CMAKE_BINARY_DIR}/metal_delegate_exports.lds")
+    endif()
     install(FILES "${TFLITE_SOURCE_DIR}/delegates/gpu/metal_delegate.h"
         DESTINATION "include/tensorflow/lite/delegates/gpu")
 endif()
