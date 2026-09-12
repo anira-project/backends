@@ -66,6 +66,9 @@ if(EXISTS "${ORT_INC}/webgpu_provider_factory.h")
   message(STATUS "onnxruntime smoke: WebGPU EP over Dawn ${_dawn_rev} (${DAWN_LIB})")
   target_compile_definitions(smoke PRIVATE SMOKE_HAS_WEBGPU DAWN_NATIVE_SHARED_LIBRARY WGPU_SHARED_LIBRARY)
   target_link_libraries(smoke PRIVATE "${DAWN_LIB}")
+  # Dawn's C++ header (webgpu_cpp.h, pulled in by dawn/native/DawnNative.h) is C++20 —
+  # consumers of anira::webgpu_dawn compile as C++20 (anira's Machine does).
+  target_compile_features(smoke PRIVATE cxx_std_20)
 endif()
 
 if(SMOKE_KIND STREQUAL "static")
