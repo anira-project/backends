@@ -2,8 +2,8 @@ name: onnxruntime
 
 # Thin wrapper: derive version + release flag + matrix (engine-meta, from CMakePresets
 # vendor.anira), then hand off to the shared _build-backend.yml pipeline. onnxruntime ships
-# static (built from source, all platforms incl. iOS xcframework) AND shared (macOS built
-# from source; Linux/Windows/Android repackaged from upstream prebuilts).
+# static (built from source, all platforms incl. iOS xcframework) AND shared (macOS and
+# Android built from source; Linux/Windows repackaged from upstream prebuilts).
 #
 # Triggers:
 #   - push/PR touching onnxruntime sources or shared CI -> validate only (no release)
@@ -77,7 +77,7 @@ jobs:
       matrix: ${{ needs.meta.outputs.matrix }}
       aggregate: ${{ needs.meta.outputs.aggregate == 'true' }}
       macos_universal_kinds: '["static","shared"]'
-      android_bundle_kinds: '["static"]'
+      android_bundle_kinds: '["static","shared"]'
       has_ios: ${{ needs.meta.outputs.run_ios == 'true' }}
       ios_variants: '["", "gpu"]'
     secrets: inherit

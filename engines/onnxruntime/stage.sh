@@ -26,7 +26,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"   # backends/
 mkdir -p "$ST/include" "$ST/lib"
 
-# ---- repackage an upstream shared prebuilt (Linux/Windows release, Android AAR) -----------
+# ---- repackage an upstream shared prebuilt (Linux/Windows release; the Android AAR flavor is
+# kept for manual use — CI builds Android shared from source per ABI since 1.30, whose AAR
+# reaches Maven days after the GitHub release) ---------------------------------------------
 if [ "$SOURCE" = "prebuilt" ]; then
   : "${URL:?prebuilt source needs a URL}"
   if [ -n "$FLAVOR" ]; then
@@ -117,9 +119,9 @@ if [ "$KIND" = "shared" ] && has_accel dml; then
 fi
 
 if [ "$KIND" = "shared" ]; then
-  # From-source shared: macOS (every kind) and the Linux -gpu WebGPU variant (the CPU Linux/
-  # Windows/Android shared come from prebuilt). Builds libonnxruntime.{dylib,so} directly —
-  # one self-contained lib, no re2 force-build / no bundling.
+  # From-source shared: macOS (every kind), Android (per ABI, bundled multi-ABI by CI) and the
+  # Linux -gpu WebGPU variant (the CPU Linux/Windows shared come from prebuilt). Builds
+  # libonnxruntime.{dylib,so} directly — one self-contained lib, no re2 force-build / no bundling.
   bash "$HERE/build-ort.sh" "$PLATFORM" "$ARCH" "$CONFIG" "$HERE/build" shared "$ACCEL"
   if [ "$PLATFORM" = "macos" ]; then
     dy="$(find "$HERE/build/$CONFIG" -maxdepth 1 -type f -name 'libonnxruntime*.dylib' | head -1)"
@@ -139,7 +141,10 @@ else
   # (build-time only; onnxruntime runs on protobuf-lite). The smoke link proves completeness.
   bash "$HERE/build-ort.sh" "$PLATFORM" "$ARCH" "$CONFIG" "$HERE/build" static "$ACCEL"
   if [ "$PLATFORM" = "windows" ]; then out="$ST/lib/onnxruntime.lib"; else out="$ST/lib/libonnxruntime.a"; fi
-  BUNDLE_EXCLUDE_REGEX='/testdata/|libprotoc|libprotobuf[d]?\.(lib|a)' \
+  # Also exclude Microsoft's 1DS client telemetry SDK if the tree built it (libmat + its
+  # bundled sqlite/zlib under _deps/cpp_client_telemetry-build): anira packages report
+  # nothing, and its objects drag Network.framework into every Apple consumer's link.
+  BUNDLE_EXCLUDE_REGEX='/testdata/|libprotoc|libprotobuf[d]?\.(lib|a)|cpp_client_telemetry|telemetry_linux_http' \
     bash "$ROOT/scripts/bundle-static.sh" "$HERE/build/$CONFIG" "$out"
 fi
 has_accel webgpu && stage_dawn
