@@ -23,3 +23,6 @@ engines/litert/litert_cc_sdk/
 engines/litert/litert_cc_sdk.zip
 engines/litert/litert-src.tar.gz
 engines/litert/LiteRT-*/
+
+# local planning/analysis docs — not published
+docs/

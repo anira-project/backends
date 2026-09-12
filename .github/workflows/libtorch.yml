@@ -8,7 +8,9 @@ name: libtorch
 #
 # Triggers:
 #   - push/PR touching libtorch sources or shared CI -> validate only (no release)
-#   - tag v<anira-version> (e.g. v2.0.3) -> build at its VERSION, publish to that release
+#   - tag libtorch-v<version>[-<n>] (e.g. libtorch-v<VERSION>) -> build at engines/libtorch/VERSION
+#     (the tag's version must match it), publish every archive to the release named after the tag
+#   - workflow_dispatch with preset_filter -> build only the matching legs (convergence rounds)
 
 on:
   push:
@@ -23,7 +25,7 @@ on:
       - '.github/workflows/libtorch.yml'
       - '.github/workflows/_build-backend.yml'
     tags:
-      - 'v[0-9]*'
+      - 'libtorch-v[0-9]*'
   pull_request:
     paths:
       - 'engines/libtorch/**'
@@ -34,6 +36,12 @@ on:
       - '.github/actions/**'
       - '.github/workflows/libtorch.yml'
       - '.github/workflows/_build-backend.yml'
+  workflow_dispatch:
+    inputs:
+      preset_filter:
+        description: "Regex over preset names: build only matching legs (aggregation off; add 'ios' to run the iOS job)"
+        required: false
+        default: ""
 
 concurrency:
   group: libtorch-${{ github.ref }}
@@ -47,13 +55,16 @@ jobs:
       release: ${{ steps.m.outputs.release }}
       release_tag: ${{ steps.m.outputs.release_tag }}
       matrix: ${{ steps.m.outputs.matrix }}
+      aggregate: ${{ steps.m.outputs.aggregate }}
+      run_ios: ${{ steps.m.outputs.run_ios }}
     steps:
       - uses: actions/checkout@v6
       - id: m
         uses: ./.github/actions/engine-meta
         with:
+          engine: libtorch
           preset_prefix: libtorch
-          version_file: engines/libtorch/VERSION
+          preset_filter: ${{ inputs.preset_filter }}
 
   build:
     needs: meta
@@ -65,6 +76,7 @@ jobs:
       release: ${{ needs.meta.outputs.release == 'true' }}
       release_tag: ${{ needs.meta.outputs.release_tag }}
       matrix: ${{ needs.meta.outputs.matrix }}
+      aggregate: ${{ needs.meta.outputs.aggregate == 'true' }}
       package_dirs: "include lib share bin"
       macos_universal_kinds: '["shared"]'
     secrets: inherit

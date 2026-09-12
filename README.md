@@ -63,9 +63,24 @@ from-source toolchain, Android `static`) live in each engine's README under
 
 ## Releases
 
-Backends are versioned independently but **released together, keyed to the anira
-version**: tag `v2.1.1` builds every backend at its pinned `engines/<backend>/VERSION`
-and publishes all archives to a single release `v2.1.1`.
+Backends are versioned and **released independently, one tag per backend**:
+
+```
+<engine>-v<upstream version>[-<n>]      e.g. onnxruntime-v1.30.0, libtorch-v2.12.0, litert-v2.2.0
+```
+
+A tag builds that one engine at its pinned `engines/<engine>/VERSION` (CI refuses a tag whose
+version differs from the file) and publishes every archive of that engine to the GitHub release
+named after the tag. `-<n>` (`onnxruntime-v1.30.0-2`) re-cuts the same upstream version after a
+packaging change. Nothing else is rebuilt, so a re-cut of one backend never touches the others.
+anira pins a tag per engine in its `cmake/backends.cmake`.
+
+Convergence rounds: run a workflow manually (`workflow_dispatch`) with `preset_filter`, a regex
+over preset names (`onnx-linux-x86_64-shared`, `macos-.*-gpu`, …), to build only the matching
+legs; aggregation jobs (macOS universal, Android bundle) are skipped under a filter, and the
+iOS job runs only if the regex also matches `ios`.
+
+Releases up to `v2.4.0` predate this scheme and hold every backend under one anira-version tag.
 
 ## Sponsor
 <img src="https://raw.githubusercontent.com/anira-project/anira/main/docs/img/bmftr-funding.png" alt="Funded by the German Federal Ministry of Research, Technology and Space (BMFTR)" width="200">

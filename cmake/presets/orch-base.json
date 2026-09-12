@@ -1,0 +1,27 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "vendor": {
+    "anira": {
+      "doc": "Shared hidden base for the stage.sh-orchestrated engines (onnxruntime, libtorch, litert, executorch): Ninja, Release, per-preset build dir. Included by each engine's presets-ci.json."
+    }
+  },
+  "configurePresets": [
+    {
+      "name": "orch-base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      },
+      "environment": {
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+      }
+    }
+  ]
+}
