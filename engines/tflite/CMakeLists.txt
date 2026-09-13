@@ -47,12 +47,22 @@ endif()
 # Metal delegate on iOS; the macOS build is the same code compiled for Darwin —
 # experimental tier, we own any macOS-specific breakage.
 option(TFLITE_BUILD_METAL_DELEGATE "Build the Metal GPU delegate (-gpu variant, Apple only)" OFF)
+# Android -gpu: TFLite's official OpenCL GPU delegate (TfLiteGpuDelegateV2Create, the
+# tensorflow/lite/delegates/gpu/delegate.h C API). Upstream compiles it into the tensorflow-lite
+# target under TFLITE_ENABLE_GPU (CL_DELEGATE_NO_GL: OpenCL only, loaded via dlopen at runtime —
+# no hard libOpenCL/EGL dependency). GPU is always a separate archive.
+option(TFLITE_BUILD_GPU_DELEGATE "Build the OpenCL GPU delegate (-gpu variant, Android)" OFF)
 if(TFLITE_BUILD_METAL_DELEGATE)
     if(NOT APPLE)
         message(FATAL_ERROR "TFLITE_BUILD_METAL_DELEGATE is Apple-only (Metal)")
     endif()
     set(TFLITE_ENABLE_GPU ON CACHE BOOL "" FORCE)
     set(TFLITE_ENABLE_METAL ON CACHE BOOL "" FORCE)
+elseif(TFLITE_BUILD_GPU_DELEGATE)
+    if(NOT ANDROID)
+        message(FATAL_ERROR "TFLITE_BUILD_GPU_DELEGATE is Android-only here (desktop GPU is unsupported upstream)")
+    endif()
+    set(TFLITE_ENABLE_GPU ON CACHE BOOL "" FORCE)
 else()
     set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
 endif()
@@ -175,5 +185,49 @@ if(TFLITE_BUILD_METAL_DELEGATE)
             "-Wl,-exported_symbols_list,${CMAKE_BINARY_DIR}/metal_delegate_exports.lds")
     endif()
     install(FILES "${TFLITE_SOURCE_DIR}/delegates/gpu/metal_delegate.h"
+        DESTINATION "include/tensorflow/lite/delegates/gpu")
+endif()
+
+# Android -gpu variant: the OpenCL delegate's C API + headers. Its objects sit inside
+# libtensorflow-lite.a; nothing in the C API references them, so the SHARED lib must pull them
+# explicitly (--undefined=<entry point>) — upstream's version script then exports them as they
+# match TfLite*. The STATIC bundle sweeps the objects in and a consumer's call pulls them on
+# demand. The delegate dlopens libOpenCL at runtime (CL_DELEGATE_NO_GL), so no extra link deps.
+if(TFLITE_BUILD_GPU_DELEGATE)
+    # Upstream's CMake source list for the GPU delegate is incomplete on Android: delegate.cc's
+    # Android-only paths (the async delegate over AHardwareBuffer + EGL fences, GPU info via
+    # GL) reference helpers that only the Bazel build compiles. Add them to the tensorflow-lite
+    # target so the delegate links — as an on-demand member of the static bundle and inside the
+    # shared lib. EGL/GLESv3 are NDK system libs (the shared lib records them; static consumers
+    # add -lEGL -lGLESv3); libandroid's AHardwareBuffer entry points are dlopened, and OpenCL
+    # itself too (CL_DELEGATE_NO_GL), so no other runtime dependency.
+    if(NOT TARGET tensorflow-lite)
+        message(FATAL_ERROR "TFLITE_BUILD_GPU_DELEGATE: upstream produced no tensorflow-lite target")
+    endif()
+    target_sources(tensorflow-lite PRIVATE
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/android_hardware_buffer.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/async_buffers.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/android_sync.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/egl_context.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/egl_environment.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/egl_surface.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/gl_errors.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/gl_sync.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/request_gpu_info.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/utils/async_type_helpers.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/utils/sync_fence.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/utils/utils.cc"
+        "${TFLITE_SOURCE_DIR}/async/backend_async_kernel_interface.cc"
+        "${TFLITE_SOURCE_DIR}/core/async/c/task.cc"
+        "${TFLITE_SOURCE_DIR}/core/async/interop/attribute_map_internal.cc"
+        "${TFLITE_SOURCE_DIR}/core/async/interop/reconcile_fns.cc")
+    target_link_libraries(tensorflow-lite PUBLIC EGL GLESv3)
+    if(NOT TFLITE_BUILD_STATIC)
+        foreach(_sym TfLiteGpuDelegateV2Create TfLiteGpuDelegateV2CreateAsync TfLiteGpuDelegateV2Delete TfLiteGpuDelegateOptionsV2Default)
+            target_link_options(tensorflowlite_c PRIVATE "-Wl,--undefined=${_sym}")
+        endforeach()
+    endif()
+    install(FILES "${TFLITE_SOURCE_DIR}/delegates/gpu/delegate.h"
+                  "${TFLITE_SOURCE_DIR}/delegates/gpu/delegate_options.h"
         DESTINATION "include/tensorflow/lite/delegates/gpu")
 endif()

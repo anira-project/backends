@@ -42,8 +42,8 @@ PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; ST="${3:?staging dir}"; ACCEL="${4
 case "$ACCEL" in
   none) ;;
   coreml) [ "$PLATFORM" = "macos" ] || { echo "ERROR: accel=coreml is macOS-only"; exit 1; } ;;
-  vulkan) { [ "$PLATFORM" = "linux" ] && [ "$ARCH" = "x86_64" ]; } || \
-          { echo "ERROR: accel=vulkan is Linux-x86_64-only (first cut)"; exit 1; } ;;
+  vulkan) { { [ "$PLATFORM" = "linux" ] && [ "$ARCH" = "x86_64" ]; } || [ "$PLATFORM" = "android" ]; } || \
+          { echo "ERROR: accel=vulkan is Linux-x86_64 or Android only"; exit 1; } ;;
   *) echo "ERROR: unknown accel '$ACCEL'"; exit 1 ;;
 esac
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -175,6 +175,32 @@ ET_FLAGS=(
   -DEXECUTORCH_XNNPACK_ENABLE_WEIGHT_CACHE=ON
 )
 
+# The Vulkan delegate compiles its shaders with glslc at build time. ExecuTorch 1.3.1's int8
+# shaders need a glslang that knows GL_EXT_integer_dot_product (dotPacked4x8AccSatEXT):
+# Ubuntu 24.04's apt glslc (shaderc 2023.8) rejects it and the Android NDK's glslc is also
+# incompatible (per upstream's own cmake/ShaderLibrary.cmake warning) — so probe the ACTUAL
+# requirement and install LunarG's current shaderc on the (Ubuntu) runner if needed. Used by the
+# Linux and the Android (NDK cross-compile on an Ubuntu runner) -gpu legs alike.
+ensure_glslc() {
+  glslc_ok() {
+    command -v glslc >/dev/null 2>&1 || return 1
+    local probe; probe="$(mktemp /tmp/et-glslc-probe-XXXXXX.comp)"
+    printf '#version 450\n#extension GL_EXT_integer_dot_product : require\nvoid main(){}\n' > "$probe"
+    glslc -fshader-stage=compute --target-env=vulkan1.1 "$probe" -o /dev/null 2>/dev/null
+    local rc=$?; rm -f "$probe"; return $rc
+  }
+  if ! glslc_ok; then
+    if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+      curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+        | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+      echo "deb https://packages.lunarg.com/vulkan noble main" \
+        | sudo tee /etc/apt/sources.list.d/lunarg-vulkan-noble.list >/dev/null
+      sudo apt-get update -qq && sudo apt-get install -y -qq shaderc
+    fi
+    glslc_ok || { echo "ERROR: accel=vulkan needs a glslc with GL_EXT_integer_dot_product support on PATH"; exit 1; }
+  fi
+}
+
 case "$PLATFORM" in
   macos)
     # Default package is CPU-only at deployment target 12.0. The -gpu variant (accel=coreml)
@@ -220,23 +246,7 @@ case "$PLATFORM" in
       # probe the ACTUAL requirement and install LunarG's current shaderc if the
       # ambient glslc can't do it. (The Android NDK's glslc is also incompatible,
       # per upstream's own cmake/ShaderLibrary.cmake warning.)
-      glslc_ok() {
-        command -v glslc >/dev/null 2>&1 || return 1
-        local probe; probe="$(mktemp /tmp/et-glslc-probe-XXXXXX.comp)"
-        printf '#version 450\n#extension GL_EXT_integer_dot_product : require\nvoid main(){}\n' > "$probe"
-        glslc -fshader-stage=compute --target-env=vulkan1.1 "$probe" -o /dev/null 2>/dev/null
-        local rc=$?; rm -f "$probe"; return $rc
-      }
-      if ! glslc_ok; then
-        if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
-          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
-            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
-          echo "deb https://packages.lunarg.com/vulkan noble main" \
-            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan-noble.list >/dev/null
-          sudo apt-get update -qq && sudo apt-get install -y -qq shaderc
-        fi
-        glslc_ok || { echo "ERROR: accel=vulkan needs a glslc with GL_EXT_integer_dot_product support on PATH"; exit 1; }
-      fi
+      ensure_glslc
       ET_FLAGS+=(-DEXECUTORCH_BUILD_VULKAN=ON)
     fi ;;
   windows)
@@ -274,16 +284,24 @@ case "$PLATFORM" in
       | xargs -0 --no-run-if-empty sed -E -i 's#(static )?(const char\* const|constexpr auto) name =#static constexpr auto name =#g'
     ;;
   android)
-    # NDK cross-compile; ARCH is the ABI (arm64-v8a | x86_64). CPU-only: XNNPACK + optimized/
-    # portable/quantized kernels, no Apple delegates. Host torch wheel (linux x86_64) supplies
-    # the ATen headers — fine for cross-compile (headers are arch-independent). Vulkan TODO as
-    # on Linux. NDK provided by setup-toolchain (toolchain: android -> ANDROID_NDK_HOME).
+    # NDK cross-compile; ARCH is the ABI (arm64-v8a | x86_64). Default: CPU-only (XNNPACK +
+    # optimized/portable/quantized kernels). Host torch wheel (linux x86_64) supplies the ATen
+    # headers — fine for cross-compile (headers are arch-independent). NDK provided by
+    # setup-toolchain (toolchain: android -> ANDROID_NDK_HOME).
     : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME not set (needs toolchain: android)}"
     ET_FLAGS+=(
       -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake"
       -DANDROID_ABI="$ARCH"
       -DANDROID_PLATFORM=android-27
     )
+    # -gpu (accel=vulkan): the Vulkan delegate — Android is its home platform. Shaders compile
+    # with the host glslc at build time (ensure_glslc: LunarG shaderc, not the NDK's); at
+    # runtime the delegate loads libvulkan via volk, so the package adds no hard dependency.
+    # Its registration joins the merged archive through MERGE_DELEGATES (below), as on Linux.
+    if [ "$ACCEL" = "vulkan" ]; then
+      ensure_glslc
+      ET_FLAGS+=(-DEXECUTORCH_BUILD_VULKAN=ON)
+    fi
     ;;
   # NOTE: iOS is NOT handled here. ios.sh builds it via ExecuTorch's own `ios`/`ios-simulator`
   # CMake presets (which build the host flatc/flatcc tools correctly during the cross-compile);

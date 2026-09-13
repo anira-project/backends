@@ -24,7 +24,7 @@ Builds LiteRT's **native C API** — `libLiteRt` (`LiteRt*` symbols) — from
   when a model is compiled for `kLiteRtHwAcceleratorGpu`; `build_config.h` leaves GPU enabled
   there and disables it in the CPU packages. The `-gpu` smoke runs a forward pass on the
   accelerator and asserts `LiteRtCompiledModelIsFullyAccelerated` (software Vulkan on the Linux
-  runners). Android (ClGl + WebGpu accelerators) and iOS (Metal) follow with the mobile wave.
+  runners). Android ships both upstream accelerators (`libLiteRtClGlAccelerator.so` + `libLiteRtWebGpuAccelerator.so`, per ABI in the multi-ABI `-gpu` bundle); iOS (Metal) follows.
 
 ## Build
 

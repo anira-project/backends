@@ -82,7 +82,7 @@ jobs:
       macos_universal_kinds: '["static"]'
       # Mobile: per-ABI Android static legs combine into one multi-ABI archive; iOS builds a
       # static .xcframework (device + simulator arm64) via engines/executorch/ios.sh.
-      android_bundle_kinds: '["static"]'
+      android_bundles: '[{"kind":"static","variant":""},{"kind":"static","variant":"gpu"}]'
       has_ios: ${{ needs.meta.outputs.run_ios == 'true' }}
       ios_variants: '["", "gpu"]'
     secrets: inherit
