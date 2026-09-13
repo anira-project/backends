@@ -194,6 +194,34 @@ endif()
 # match TfLite*. The STATIC bundle sweeps the objects in and a consumer's call pulls them on
 # demand. The delegate dlopens libOpenCL at runtime (CL_DELEGATE_NO_GL), so no extra link deps.
 if(TFLITE_BUILD_GPU_DELEGATE)
+    # Upstream's CMake source list for the GPU delegate is incomplete on Android: delegate.cc's
+    # Android-only paths (the async delegate over AHardwareBuffer + EGL fences, GPU info via
+    # GL) reference helpers that only the Bazel build compiles. Add them to the tensorflow-lite
+    # target so the delegate links — as an on-demand member of the static bundle and inside the
+    # shared lib. EGL/GLESv3 are NDK system libs (the shared lib records them; static consumers
+    # add -lEGL -lGLESv3); libandroid's AHardwareBuffer entry points are dlopened, and OpenCL
+    # itself too (CL_DELEGATE_NO_GL), so no other runtime dependency.
+    if(NOT TARGET tensorflow-lite)
+        message(FATAL_ERROR "TFLITE_BUILD_GPU_DELEGATE: upstream produced no tensorflow-lite target")
+    endif()
+    target_sources(tensorflow-lite PRIVATE
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/android_hardware_buffer.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/async_buffers.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/android_sync.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/egl_context.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/egl_environment.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/egl_surface.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/gl_errors.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/gl_sync.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/gpu/gl/request_gpu_info.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/utils/async_type_helpers.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/utils/sync_fence.cc"
+        "${TFLITE_SOURCE_DIR}/delegates/utils/utils.cc"
+        "${TFLITE_SOURCE_DIR}/async/backend_async_kernel_interface.cc"
+        "${TFLITE_SOURCE_DIR}/core/async/c/task.cc"
+        "${TFLITE_SOURCE_DIR}/core/async/interop/attribute_map_internal.cc"
+        "${TFLITE_SOURCE_DIR}/core/async/interop/reconcile_fns.cc")
+    target_link_libraries(tensorflow-lite PUBLIC EGL GLESv3)
     if(NOT TFLITE_BUILD_STATIC)
         foreach(_sym TfLiteGpuDelegateV2Create TfLiteGpuDelegateV2CreateAsync TfLiteGpuDelegateV2Delete TfLiteGpuDelegateOptionsV2Default)
             target_link_options(tensorflowlite_c PRIVATE "-Wl,--undefined=${_sym}")
