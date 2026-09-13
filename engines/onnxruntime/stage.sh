@@ -82,6 +82,18 @@ stage_dawn() {
   [ -f "$ST/include/webgpu/webgpu.h" ] || { echo "ERROR: Dawn headers incomplete (no include/webgpu/webgpu.h)"; exit 1; }
   [ -f "$ST/include/dawn/native/DawnNative.h" ] || { echo "ERROR: Dawn headers incomplete (no include/dawn/native/DawnNative.h)"; exit 1; }
   [ -f "$src/.anira-dawn-rev" ] && cp "$src/.anira-dawn-rev" "$ST/DAWN_VERSION"
+  # Windows: Dawn's D3D12 backend loads its shader compilers from beside webgpu_dawn.dll at
+  # device creation, never from the OS copy: DXC (dxcompiler.dll + dxil.dll — the pinned
+  # redistributables) and FXC (d3dcompiler_47.dll — the Windows SDK's redistributable, which
+  # the runner's SDK carries under Redist/D3D/<arch>; Chrome ships the same file next to its
+  # binary). Without FXC, EnsureFXC fails and no WebGPU device is created (seen on arm64).
+  if [ "$PLATFORM" = "windows" ]; then
+    bash "$ROOT/scripts/fetch-dxc.sh" "$ARCH" "$ST/lib"
+    case "$ARCH" in x86_64) d3darch=x64 ;; *) d3darch="$ARCH" ;; esac
+    fxc="$(find "/c/Program Files (x86)/Windows Kits/10/Redist" -iname 'd3dcompiler_47.dll' -ipath "*/D3D/${d3darch}/*" 2>/dev/null | head -1)"
+    [ -n "$fxc" ] || { echo "ERROR: d3dcompiler_47.dll (${d3darch}) not found in the Windows SDK redist"; exit 1; }
+    cp "$fxc" "$ST/lib/d3dcompiler_47.dll"; echo "staged FXC redistributable: $fxc"
+  fi
   echo "staged Dawn $(cat "$ST/DAWN_VERSION" 2>/dev/null) into the package"
 }
 
