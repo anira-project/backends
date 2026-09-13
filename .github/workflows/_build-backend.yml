@@ -23,7 +23,7 @@ on:
       matrix:      { description: "JSON build matrix from engine-meta", required: true, type: string }
       package_dirs:          { description: "Dirs to package (libtorch needs share/bin)", required: false, type: string, default: "include lib" }
       macos_universal_kinds: { description: "JSON array of kinds to lipo into a macOS universal archive", required: false, type: string, default: "[]" }
-      android_bundle_kinds:  { description: "JSON array of kinds to combine into a multi-ABI Android archive", required: false, type: string, default: "[]" }
+      android_bundles:       { description: "JSON array of {kind, variant} to combine into multi-ABI Android archives from the per-ABI legs, e.g. [{\"kind\":\"static\",\"variant\":\"\"},{\"kind\":\"shared\",\"variant\":\"gpu\"}]", required: false, type: string, default: "[]" }
       has_ios:     { description: "Run the iOS xcframework job (engines/<engine>/ios.sh)", required: false, type: boolean, default: false }
       ios_variants: { description: "JSON array of iOS variants to build ('' = CPU, 'gpu' = accelerator delegates); each becomes one ios.sh invocation", required: false, type: string, default: "[\"\"]" }
       aggregate:   { description: "Run the aggregation jobs (macOS universal, Android multi-ABI bundle); false under a preset_filter, whose partial matrix cannot feed them", required: false, type: boolean, default: true }
@@ -281,13 +281,13 @@ jobs:
   # --------------------------------------------------------------------------
   android-bundle:
     needs: build
-    if: ${{ !cancelled() && needs.build.result == 'success' && inputs.aggregate && inputs.android_bundle_kinds != '[]' }}
-    name: Android-${{ matrix.kind }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && inputs.aggregate && inputs.android_bundles != '[]' }}
+    name: Android${{ matrix.variant != '' && format('-{0}', matrix.variant) || '' }}-${{ matrix.kind }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        kind: ${{ fromJSON(inputs.android_bundle_kinds) }}
+        include: ${{ fromJSON(inputs.android_bundles) }}
     steps:
       - uses: actions/checkout@v6
       - name: names
@@ -295,12 +295,11 @@ jobs:
         shell: bash
         run: |
           base="${{ inputs.libname }}-${{ inputs.version }}"
-          if [ "${{ matrix.kind }}" = "static" ]; then libf="lib${{ inputs.libname }}.a"; else libf="lib${{ inputs.libname }}.so"; fi
+          v=""; [ -n "${{ matrix.variant }}" ] && v="-${{ matrix.variant }}"
           {
-            echo "arm=${base}-Android-arm64-v8a-${{ matrix.kind }}"
-            echo "x64=${base}-Android-x86_64-${{ matrix.kind }}"
-            echo "bundle=${base}-Android-${{ matrix.kind }}"
-            echo "libf=$libf"
+            echo "arm=${base}-Android-arm64-v8a${v}-${{ matrix.kind }}"
+            echo "x64=${base}-Android-x86_64${v}-${{ matrix.kind }}"
+            echo "bundle=${base}-Android${v}-${{ matrix.kind }}"
           } >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
         with: { name: "${{ steps.n.outputs.arm }}", path: dl/arm }
@@ -316,8 +315,10 @@ jobs:
           stage="staging/${{ steps.n.outputs.bundle }}"
           mkdir -p "$stage/lib/arm64-v8a" "$stage/lib/x86_64"
           cp -R ex/arm/include "$stage/include"
-          cp "ex/arm/lib/${{ steps.n.outputs.libf }}" "$stage/lib/arm64-v8a/"
-          cp "ex/x64/lib/${{ steps.n.outputs.libf }}" "$stage/lib/x86_64/"
+          # the whole per-ABI lib dir: the engine lib plus whatever rides with it (a -gpu
+          # variant's dlopen'd accelerators, ExecuTorch's registrations lib, ...)
+          cp -R ex/arm/lib/. "$stage/lib/arm64-v8a/"
+          cp -R ex/x64/lib/. "$stage/lib/x86_64/"
       - name: package
         uses: ./.github/actions/package
         with:

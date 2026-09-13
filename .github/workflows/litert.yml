@@ -80,6 +80,6 @@ jobs:
       matrix: ${{ needs.meta.outputs.matrix }}
       aggregate: ${{ needs.meta.outputs.aggregate == 'true' }}
       macos_universal_kinds: '["shared", "static"]'
-      android_bundle_kinds: '["shared", "static"]'
+      android_bundles: '[{"kind":"shared","variant":""},{"kind":"static","variant":""},{"kind":"shared","variant":"gpu"}]'
       has_ios: ${{ needs.meta.outputs.run_ios == 'true' }}
     secrets: inherit

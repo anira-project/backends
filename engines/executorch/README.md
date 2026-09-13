@@ -47,7 +47,7 @@ is exactly why GPU delegates live in the separate `-gpu` variant archives:
   to it. Consumers link CoreML, Accelerate, Foundation, sqlite3, Metal,
   MetalPerformanceShaders, MetalPerformanceShadersGraph.
 - iOS `-gpu` xcframework: CoreML + MPS delegates (same frameworks).
-- Linux x64 `-gpu` (`accel=vulkan`, experimental): the cross-vendor **Vulkan** delegate —
+- Linux x64 and **Android** (arm64-v8a / x86_64, multi-ABI `-gpu` bundle) `-gpu` (`accel=vulkan`): the cross-vendor **Vulkan** delegate —
   shaders compile with `glslc` at build time; the loader is dlopen'd via volk, so there is no
   hard runtime dependency. Windows Vulkan is a follow-up (needs the Vulkan SDK toolchain on
   the runner); Android Vulkan is the next mobile wave.
