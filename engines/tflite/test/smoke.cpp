@@ -23,6 +23,12 @@
 #ifdef SMOKE_HAS_METAL
 #  include "tensorflow/lite/delegates/gpu/metal_delegate.h"
 #endif
+#ifdef SMOKE_HAS_GPU_DELEGATE_LINK
+#  include "tensorflow/lite/delegates/gpu/delegate.h"
+// Android -gpu (compile+link smoke, no GPU on the emulator): referencing the OpenCL delegate's
+// entry point proves the package carries it — the link fails for a CPU build under a -gpu name.
+static TfLiteDelegate* (*const s_gpu_delegate_create)(const TfLiteGpuDelegateOptionsV2*) = &TfLiteGpuDelegateV2Create;
+#endif
 
 static int fail(const char* msg) {
     std::fprintf(stderr, "FAIL: %s\n", msg);

@@ -509,6 +509,98 @@
           "source": "build"
         }
       }
+    },
+    {
+      "name": "tflite-android-arm64-v8a-gpu-shared",
+      "inherits": [
+        "android-arm64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_GPU_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-arm64-v8a-gpu",
+          "runner": "ubuntu-24.04",
+          "arch": "arm64-v8a",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-android-arm64-v8a-gpu-static",
+      "inherits": [
+        "android-arm64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_GPU_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-arm64-v8a-gpu",
+          "runner": "ubuntu-24.04",
+          "arch": "arm64-v8a",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-android-x86_64-gpu-shared",
+      "inherits": [
+        "android-x64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_GPU_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-x86_64-gpu",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-android-x86_64-gpu-static",
+      "inherits": [
+        "android-x64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_GPU_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-x86_64-gpu",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
     }
   ]
 }
