@@ -51,6 +51,10 @@ for a in "${_accels[@]}"; do
 done
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
+# macOS deployment floor: 11.0 for the CPU packages; the WebGPU EP needs 13.3 (its
+# string_utils.h uses std::to_chars for floating point, which Apple's libc++ marks
+# "introduced in macOS 13.3"), so the -gpu archives — ORT and their Dawn — floor there.
+MACOS_MIN=11.0; [ "$HAS_WEBGPU" = 1 ] && MACOS_MIN=13.3
 
 # Ancient FetchContent deps still declare cmake_minimum_required(<3.5), which CMake 4.x
 # refuses (psimd, pulled in via FP16 by --use_coreml, killed the -gpu macOS configure).
@@ -127,8 +131,12 @@ if [ "$HAS_WEBGPU" = 1 ]; then
   )
   case "$PLATFORM" in
     linux)   DAWN_FLAGS+=(-DDAWN_ENABLE_VULKAN=ON) ;;
-    windows) DAWN_FLAGS+=(-DDAWN_ENABLE_D3D12=ON -DDAWN_ENABLE_D3D11=OFF -DDAWN_ENABLE_VULKAN=OFF -DDAWN_USE_BUILT_DXC=ON -DTINT_BUILD_HLSL_WRITER=ON) ;;
-    macos)   DAWN_FLAGS+=(-DDAWN_ENABLE_METAL=ON -DCMAKE_OSX_ARCHITECTURES="$ARCH" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0) ;;
+    # Windows: D3D12 backend. DXC is NOT built into Dawn (DAWN_USE_BUILT_DXC=OFF — an hour of
+    # LLVM per leg); Dawn loads dxcompiler.dll + dxil.dll from beside the module at runtime, and
+    # stage.sh ships the pinned Microsoft redistributables (scripts/fetch-dxc.sh), the same pair
+    # the LiteRT WebGpu accelerator runs on. WARP is what the GPU-less runners exercise.
+    windows) DAWN_FLAGS+=(-DDAWN_ENABLE_D3D12=ON -DDAWN_ENABLE_D3D11=OFF -DDAWN_ENABLE_VULKAN=OFF -DDAWN_USE_BUILT_DXC=OFF -DTINT_BUILD_HLSL_WRITER=ON) ;;
+    macos)   DAWN_FLAGS+=(-DDAWN_ENABLE_METAL=ON -DCMAKE_OSX_ARCHITECTURES="$ARCH" -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOS_MIN") ;;
   esac
   if command -v sccache >/dev/null 2>&1 && [ "$PLATFORM" != "windows" ]; then
     DAWN_FLAGS+=(-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache)
@@ -195,7 +203,7 @@ case "$PLATFORM" in
     # CoreML.framework. (The coreml_proto export patch is applied post-clone above,
     # shared with the iOS coreml slices.)
     [ "$HAS_COREML" = 1 ] && ARGS+=(--use_coreml)
-    ARGS+=(--cmake_extra_defines "CMAKE_OSX_ARCHITECTURES=$ARCH" "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" \
+    ARGS+=(--cmake_extra_defines "CMAKE_OSX_ARCHITECTURES=$ARCH" "CMAKE_OSX_DEPLOYMENT_TARGET=$MACOS_MIN" \
            "CMAKE_IGNORE_PATH=$IGNORE" "CMAKE_IGNORE_PREFIX_PATH=$IGNORE")
     ;;
   linux) ;;     # native arch

@@ -25,8 +25,12 @@ the same archive**: `lib/libwebgpu_dawn.{so,dylib}` / `webgpu_dawn.dll`, `includ
 feeds to ORT via `onnxruntime_CUSTOM_DAWN_SRC_PATH`, so ORT, Dawn and the proc-table
 layout are one versioned triple per archive. Backends: Vulkan on Linux, Metal on macOS,
 D3D12 on Windows. `webgpu_provider_factory.h` (upstream's presence marker) is the header a
-consumer keys on. First leg: Linux x86_64 (`onnx-linux-x86_64-gpu-{shared,static}`, flavor
-`webgpu`); macOS (`coreml+webgpu`) and Windows (`dml+webgpu`) follow.
+consumer keys on. Legs: Linux x86_64 (`onnx-linux-x86_64-gpu-{shared,static}`, flavor `webgpu`, Vulkan);
+macOS x86_64/arm64 (`coreml+webgpu`, Metal — the Dawn dylib is Developer-ID signed like the
+engine dylib, in the static package too; **these `-gpu` packages require macOS 13.3+**, the
+WebGPU EP's floor, while the CPU packages stay at 11.0); Windows x86_64/arm64 (`dml+webgpu`, D3D12 — the
+package ships the DXC redistributables `dxcompiler.dll` + `dxil.dll` that Dawn loads next to
+`webgpu_dawn.dll`; smoke on WARP).
 
 ## Files
 
