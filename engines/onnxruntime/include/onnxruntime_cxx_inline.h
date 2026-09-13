@@ -1360,6 +1360,11 @@ inline ModelCompilationOptions& ModelCompilationOptions::SetInputModel(const Ort
   return *this;
 }
 
+inline ModelCompilationOptions& ModelCompilationOptions::SetWeightlessEnabled(bool use_weightless) {
+  Ort::ThrowOnError(GetCompileApi().ModelCompilationOptions_SetWeightlessEnabled(this->p_, use_weightless));
+  return *this;
+}
+
 namespace detail {
 
 template <typename T>
@@ -1398,6 +1403,20 @@ inline std::string ConstSessionOptionsImpl<T>::GetConfigEntryOrDefault(const cha
   }
 
   return this->GetConfigEntry(config_key);
+}
+
+template <typename T>
+inline bool ConstSessionOptionsImpl<T>::GetMemPatternEnabled() const {
+  int out = 0;
+  ThrowOnError(GetApi().GetMemPatternEnabled(this->p_, &out));
+  return out != 0;
+}
+
+template <typename T>
+inline ExecutionMode ConstSessionOptionsImpl<T>::GetExecutionMode() const {
+  ExecutionMode out{};
+  ThrowOnError(GetApi().GetSessionExecutionMode(this->p_, &out));
+  return out;
 }
 
 template <typename T>
@@ -1859,6 +1878,7 @@ inline std::vector<std::string> ConstSessionImpl<T>::GetOverridableInitializerNa
     char* name;
     ThrowOnError(GetApi().SessionGetOverridableInitializerName(this->p_, i, allocator, &name));
     initializer_names.emplace_back(name);
+    allocator.Free(name);
   }
 
   return initializer_names;
@@ -2092,6 +2112,11 @@ inline void SessionImpl<T>::FinalizeModelEditorSession(const Model& model, const
   ThrowOnError(GetModelEditorApi().FinalizeModelEditorSession(this->p_, options, prepacked_weights_container));
 }
 #endif  // #if !defined(ORT_MINIMAL_BUILD)
+
+template <typename T>
+inline void SessionImpl<T>::ReleaseCapturedGraph(int graph_annotation_id) {
+  ThrowOnError(GetApi().SessionReleaseCapturedGraph(this->p_, graph_annotation_id));
+}
 
 }  // namespace detail
 
@@ -2851,9 +2876,21 @@ inline UnownedValue KernelContext::GetOutput(size_t index, const std::vector<int
   return UnownedValue(out);
 }
 
+inline UnownedValue KernelContext::GetPreallocatedOutput(size_t index) const {
+  OrtValue* out = nullptr;
+  Ort::ThrowOnError(GetApi().KernelContext_GetPreallocatedOutput(ctx_, index, &out));
+  return UnownedValue(out);
+}
+
 inline void* KernelContext::GetGPUComputeStream() const {
   void* out = nullptr;
   Ort::ThrowOnError(GetApi().KernelContext_GetGPUComputeStream(ctx_, &out));
+  return out;
+}
+
+inline OrtSyncStream* KernelContext::GetSyncStream() const {
+  OrtSyncStream* out = nullptr;
+  Ort::ThrowOnError(GetApi().KernelContext_GetSyncStream(ctx_, &out));
   return out;
 }
 
@@ -3927,14 +3964,18 @@ inline void GraphImpl<T>::AddInitializer(const std::string& name, Value& initial
 
 template <typename T>
 inline void GraphImpl<T>::AddNode(Node& node) {
-  // Graph takes ownership of `node`
-  ThrowOnError(GetModelEditorApi().AddNodeToGraph(this->p_, node.release()));
+  // Graph takes ownership of `node` only on success. Pass the raw pointer via implicit conversion
+  // (which does not release the wrapper) so that on failure `node` still owns it; release after the
+  // C call returns OK.
+  ThrowOnError(GetModelEditorApi().AddNodeToGraph(this->p_, node));
+  node.release();
 }
 
 template <typename T>
 inline void ModelImpl<T>::AddGraph(Graph& graph) {
-  // Model takes ownership of `graph`
-  ThrowOnError(GetModelEditorApi().AddGraphToModel(this->p_, graph.release()));
+  // Model takes ownership of `graph` only on success. See AddNode for the rationale.
+  ThrowOnError(GetModelEditorApi().AddGraphToModel(this->p_, graph));
+  graph.release();
 }
 #endif  // !defined(ORT_MINIMAL_BUILD)
 

@@ -5,11 +5,12 @@
 // path (session, MLAS kernels, the Add op). The bundled test/add.onnx computes
 // y = x + x, so x = {1,2,3} must yield y = {2,4,6}.
 //
-// GPU variant packages (docs/gpu-support.md) run the forward pass a second time with
-// their EP appended — CoreML (macOS -gpu) / DirectML (Windows -gpu) — proving the EP
-// is linked, registers, and executes (nodes the EP can't take fall back to CPU).
-// The extra pass is keyed on the provider header the package ships (SMOKE_HAS_COREML /
-// SMOKE_HAS_DML from the CMakeLists); CPU-only packages run the CPU pass only.
+// GPU variant packages (docs/gpu-support.md) run the forward pass again with each EP
+// they ship appended — CoreML (macOS -gpu) / DirectML (Windows -gpu) / WebGPU over the
+// package's own Dawn (-gpu, every desktop platform) — proving the EP is linked, registers,
+// and executes (nodes the EP can't take fall back to CPU). The extra passes are keyed on
+// the provider headers the package ships (SMOKE_HAS_COREML / SMOKE_HAS_DML /
+// SMOKE_HAS_WEBGPU from the CMakeLists); CPU-only packages run the CPU pass only.
 //
 // Usage: smoke <model.onnx>   (no arg = link/init check only)
 // exit 0 = pass, non-zero = fail.
@@ -26,6 +27,10 @@
 #ifdef SMOKE_HAS_DML
 #include <dxgi1_4.h>   // IDXGIFactory4::EnumWarpAdapter (WARP fallback on GPU-less runners)
 #include "dml_provider_factory.h"
+#endif
+#ifdef SMOKE_HAS_WEBGPU
+#include <cstdint>
+#include <dawn/native/DawnNative.h>   // dawn::native::GetProcs() — the shipped libwebgpu_dawn's table
 #endif
 
 int main(int argc, char** argv) {
@@ -135,6 +140,22 @@ int main(int argc, char** argv) {
                 Ort::ThrowOnError(dml_api->SessionOptionsAppendExecutionProvider_DML1(warp_opts, dml_dev, queue));
                 if (run(warp_opts, "dml-warp")) return 1;
             }
+        }
+#endif
+
+#ifdef SMOKE_HAS_WEBGPU
+        {
+            // -gpu variant, every desktop platform: the WebGPU EP over the Dawn shipped in
+            // this package (external-Dawn ORT build: ORT holds only dawn_proc thunks and the
+            // consumer hands it the proc table — anira's Machine does exactly this). On a
+            // GPU-less Linux runner the smoke action installs Mesa lavapipe (software
+            // Vulkan) so this is a real forward pass; macOS runs Metal, Windows D3D12/WARP.
+            const DawnProcTable& procs = dawn::native::GetProcs();
+            Ort::SessionOptions wg_opts;
+            wg_opts.AddConfigEntry("ep.webgpuexecutionprovider.dawnProcTable",
+                                   std::to_string(reinterpret_cast<std::uintptr_t>(&procs)).c_str());
+            wg_opts.AppendExecutionProvider("WebGPU", std::unordered_map<std::string, std::string>{});
+            if (run(wg_opts, "webgpu")) return 1;
         }
 #endif
 
