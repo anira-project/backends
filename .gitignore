@@ -24,8 +24,9 @@ engines/litert/litert_cc_sdk.zip
 engines/litert/litert-src.tar.gz
 engines/litert/LiteRT-*/
 
-# local planning/analysis docs — not published
-docs/
+# local planning/analysis docs — not published (docs/gpu-support.md is)
+docs/*
+!docs/gpu-support.md
 
 # onnxruntime -gpu (WebGPU) variant: Dawn source at the ORT deps.txt pin + its build/install trees
 engines/onnxruntime/dawn-src/

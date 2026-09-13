@@ -52,9 +52,7 @@ consuming app re-signs/notarizes on embed.
 
 > ExecuTorch is **static-only, built from source on every leg** (no upstream prebuilt desktop
 > runtime), **CPU-only by default** (XNNPACK + optimized kernels everywhere). GPU delegates
-> live in the separate `-gpu` variants: CoreML (+MLX on arm64) on macOS, Vulkan on Linux x64
-> (experimental). Windows Vulkan and
-> Android/iOS GPU are deliberate follow-ups.
+> live in the separate `-gpu` variants (below).
 
 > `—` = not provided.
 
@@ -62,12 +60,31 @@ Per-backend build details (e.g. LiteRT's `LiteRt*` vs `TfLite*` API split, Windo
 from-source toolchain, Android `static`) live in each engine's README under
 [`engines/<backend>/`](./engines).
 
+## GPU variants
+
 GPU acceleration ships as **separate `-gpu` / `-cuda` variant archives** — the default
-packages above stay CPU-only. Variants: ONNXRuntime CoreML (macOS + iOS), DirectML
-(Windows), CUDA (Linux/Windows x64); LibTorch MPS (macOS arm64), CUDA (Linux/Windows
-x64); ExecuTorch CoreML+MPS (+MLX arm64) (macOS + iOS), Vulkan (Linux x64,
-experimental); TFLite Metal GPU delegate (macOS — experimental, upstream tests it on
-iOS only) and Metal+CoreML delegates (iOS, official prebuilts).
+packages above stay CPU-only (and their smoke asserts the accelerator is absent). `-gpu`
+bundles the cross-vendor **WebGPU** path plus the platform-native one where the engine has it;
+`-cuda` is NVIDIA-only (CUDA 13 + cuDNN 9, user-provided). Full detail, smoke policy and
+consumer notes in [`docs/gpu-support.md`](./docs/gpu-support.md).
+
+| Target             | ONNXRuntime `-gpu`                      | LibTorch              | ExecuTorch `-gpu`              | LiteRT `-gpu`             | TFLite `-gpu`              |
+| ------------------ | --------------------------------------- | --------------------- | ------------------------------ | ------------------------- | -------------------------- |
+| macOS x86_64/arm64 | CoreML + WebGPU (Metal) · shared/static ³ | MPS (arm64) · shared  | CoreML + MPS (+ MLX arm64 ⁴)   | Metal (arm64) · shared    | Metal delegate · shared/static |
+| Windows x86_64     | DirectML + WebGPU (D3D12) · shared      | `-cuda` · shared      | —                              | WebGPU (D3D12) · shared   | —                          |
+| Windows arm64      | DirectML + WebGPU (D3D12) · shared      | —                     | —                              | —                         | —                          |
+| Linux x86_64       | WebGPU (Vulkan) · shared/static         | `-cuda` · shared      | Vulkan delegate                | WebGPU (Vulkan) · shared  | —                          |
+| Linux aarch64      | —                                       | —                     | —                              | WebGPU (Vulkan) · shared  | —                          |
+| Android (bundle)   | —                                       | —                     | Vulkan delegate                | OpenCL/GL + WebGPU · shared | OpenCL delegate · shared/static |
+| iOS (xcframework)  | CoreML                                  | —                     | CoreML + MPS                   | —                         | Metal + CoreML delegates   |
+
+ONNXRuntime and LibTorch also ship `-cuda` (Linux/Windows x86_64, shared): the upstream CUDA
+prebuilt repackaged. The ORT `-gpu` archives carry **their own Dawn** (external-Dawn build; the
+consumer passes the proc table — what anira v3 does), so each archive is one ORT + Dawn pair.
+
+> ³ ORT `-gpu` on macOS requires macOS 13.3+ (the WebGPU EP's floor); CPU packages stay at 11.0.
+
+> ⁴ The ExecuTorch macOS arm64 `-gpu` package requires macOS 14+ (MLX); every other package 12.0.
 
 
 ## Releases
@@ -75,7 +92,7 @@ iOS only) and Metal+CoreML delegates (iOS, official prebuilts).
 Backends are versioned and **released independently, one tag per backend**:
 
 ```
-<engine>-v<upstream version>[-<n>]      e.g. onnxruntime-v1.30.0, libtorch-v2.12.0, litert-v2.2.0
+<engine>-v<upstream version>[-<n>]      e.g. onnxruntime-v1.30.0-2, libtorch-v2.12.0, litert-v2.2.0-2
 ```
 
 A tag builds that one engine at its pinned `engines/<engine>/VERSION` (CI refuses a tag whose

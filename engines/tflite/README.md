@@ -2,7 +2,24 @@
 
 Builds `libtensorflowlite_c` from upstream `tensorflow/lite/c` at the version in
 [`VERSION`](./VERSION), packaged for [anira](https://github.com/anira-project/anira).
-CPU only (XNNPACK; no GPU/NPU).
+CPU only (XNNPACK) by default; GPU delegates ship as separate `-gpu` archives.
+
+## `-gpu` variants
+
+- **macOS** (x86_64 + arm64, shared + static): the **Metal GPU delegate** (`TFLGpuDelegate*`,
+  `TFLITE_BUILD_METAL_DELEGATE`). Experimental — upstream only tests it on iOS. The shared lib
+  force-loads `metal_delegate` and exports `_TFLGpuDelegate*`; the smoke runs `add.bin` through
+  the delegate on the runner's real Metal device.
+- **Android** (arm64-v8a + x86_64, multi-ABI `-gpu` bundles, shared + static): the official
+  **OpenCL GPU delegate** (`TfLiteGpuDelegateV2*`, `TFLITE_BUILD_GPU_DELEGATE`). Upstream's
+  CMake source list omits the Android-only async/EGL/AHardwareBuffer helpers `delegate.cc`
+  needs, so `CMakeLists.txt` adds them and links `EGL` + `GLESv3` (OpenCL and `libandroid` are
+  dlopen'd). The smoke is a link-level proof (it references the entry point).
+- **iOS** `-gpu` xcframework: Google's official `TensorFlowLiteCMetal` +
+  `TensorFlowLiteCCoreML` delegate xcframeworks next to `TensorFlowLiteC` (`ios.sh gpu`).
+
+Linux/Windows have no `-gpu`: the desktop OpenCL delegate is unsupported upstream (use LiteRT's
+WebGPU accelerator for that runtime on desktop).
 
 ## Consuming the Windows `static` lib
 

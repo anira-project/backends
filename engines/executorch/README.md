@@ -49,8 +49,8 @@ is exactly why GPU delegates live in the separate `-gpu` variant archives:
 - iOS `-gpu` xcframework: CoreML + MPS delegates (same frameworks).
 - Linux x64 and **Android** (arm64-v8a / x86_64, multi-ABI `-gpu` bundle) `-gpu` (`accel=vulkan`): the cross-vendor **Vulkan** delegate —
   shaders compile with `glslc` at build time; the loader is dlopen'd via volk, so there is no
-  hard runtime dependency. Windows Vulkan is a follow-up (needs the Vulkan SDK toolchain on
-  the runner); Android Vulkan is the next mobile wave.
+  hard runtime dependency. `glslc` comes from the LunarG shaderc release (`ensure_glslc`).
+  Windows Vulkan is a follow-up (needs the Vulkan SDK toolchain on the runner).
 
 `merge-static.sh` takes the delegate set through `MERGE_DELEGATES` (`coremldelegate
 mpsdelegate mlxdelegate vulkan_backend`): each delegate's `register_backend()` TU joins the
