@@ -7,17 +7,29 @@
 # -merge recipe as the desktop/Android static legs in stage.sh, run once per Apple slice.
 # Headers + source both from the pinned PREBUILT_SHA (see stage.sh). Produces dist/<archive>.zip.
 #
+# -gpu variant (`ios.sh <archive> gpu`): the same recipe as the desktop -gpu packages — upstream's
+# PREBUILT libLiteRt (here the iOS *dynamic* library, device + simulator slices) plus its prebuilt
+# Metal GPU accelerator next to it, each as a dynamic xcframework: LiteRt.xcframework +
+# LiteRtMetalAccelerator.xcframework. The runtime dlopens the accelerator from the directory named
+# by kLiteRtEnvOptionTagRuntimeLibraryDir (the app's Frameworks dir) when a model is compiled for
+# kLiteRtHwAcceleratorGpu; the accelerator dylib is self-contained (Metal/Foundation only, no
+# libLiteRt import). Dynamic because upstream ships the accelerator as a plugin dylib and pairs it
+# with its own dynamic libLiteRt — the app embeds and re-signs both, as with TFLite's iOS -gpu.
+#
 # NOTE: the exact Bazel iOS flags below are best-effort and may need CI iteration on a macOS
 # runner (Apple platform transition + static-xcframework platform metadata are the fiddly bits).
 #
-# Usage: ios.sh <archive-name>
+# Usage: ios.sh <archive-name> [variant: "" | gpu]
 set -euo pipefail
 ARCHIVE="${1:?archive name}"
+VARIANT="${2:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
-# Pinned LiteRT main commit — MUST match stage.sh's PREBUILT_SHA so the iOS static slice ships the
-# same model-load ABI (env-leading LiteRtCreateModelFrom*) as every other leg. Keep in sync.
-PREBUILT_SHA="89c838788bba9c2ec6bbefd52971daf39d8e2856"
+# Pinned LiteRT main commit — read from stage.sh so the iOS slices can never skew from the other
+# legs' model-load ABI (env-leading LiteRtCreateModelFrom*): one pin, one source of truth.
+PREBUILT_SHA="$(sed -n 's/^PREBUILT_SHA="\([0-9a-f]*\)".*/\1/p' "$HERE/stage.sh" | head -1)"
+[ -n "$PREBUILT_SHA" ] || { echo "ERROR: could not read PREBUILT_SHA from $HERE/stage.sh"; exit 1; }
+case "$VARIANT" in ""|gpu) ;; *) echo "ERROR: unknown iOS variant '$VARIANT' (\"\" or gpu)"; exit 1 ;; esac
 
 # ---- Headers: litert/c/*.h from $PREBUILT_SHA + synthesized CPU-only build_config.h (same ref as
 # the from-source build below, so headers and lib never skew — see stage.sh for the why) ---------
@@ -28,10 +40,11 @@ if [ ! -d "$sdk/litert/c" ]; then
 fi
 hdr="$HERE/ios_include"; rm -rf "$hdr"; mkdir -p "$hdr/litert/build_common"
 ( cd "$sdk" && find litert/c -name '*.h' | while IFS= read -r h; do mkdir -p "$hdr/$(dirname "$h")"; cp "$h" "$hdr/$h"; done )
-cat > "$hdr/litert/build_common/build_config.h" <<'EOF'
+gpu_disabled=1; [ "$VARIANT" = "gpu" ] && gpu_disabled=0
+cat > "$hdr/litert/build_common/build_config.h" <<EOF
 #ifndef LITERT_BUILD_COMMON_BUILD_CONFIG_H_
 #define LITERT_BUILD_COMMON_BUILD_CONFIG_H_
-#define LITERT_BUILD_CONFIG_DISABLE_GPU 1
+#define LITERT_BUILD_CONFIG_DISABLE_GPU ${gpu_disabled}
 #define LITERT_BUILD_CONFIG_DISABLE_NPU 1
 #if LITERT_BUILD_CONFIG_DISABLE_GPU
 #define LITERT_DISABLE_GPU
@@ -41,6 +54,47 @@ cat > "$hdr/litert/build_common/build_config.h" <<'EOF'
 #endif
 #endif  // LITERT_BUILD_COMMON_BUILD_CONFIG_H_
 EOF
+
+# ---- -gpu: upstream's prebuilt dynamic libLiteRt + Metal accelerator, device + simulator ---------
+if [ "$VARIANT" = "gpu" ]; then
+  fetch_prebuilt() {  # <slice dir> <name> <dest>  (Git-LFS via the media endpoint, as stage.sh)
+    local base="https://media.githubusercontent.com/media/google-ai-edge/LiteRT/${PREBUILT_SHA}/litert/prebuilt/$1"
+    curl -fsSL "$base/$2" -o "$3" 2>/dev/null || curl -fsSL "$base/$2.lfs" -o "$3" || \
+      { echo "ERROR: no prebuilt $1/$2 at LiteRT @ ${PREBUILT_SHA:0:7}"; return 1; }
+    [ "$(wc -c < "$3")" -gt 4096 ] || { echo "ERROR: $1/$2 downloaded as an LFS pointer, not the binary"; return 1; }
+  }
+  for slice in ios_arm64 ios_sim_arm64; do
+    d="$HERE/ios-gpu-$slice"; rm -rf "$d"; mkdir -p "$d"
+    for lib in libLiteRt.dylib libLiteRtMetalAccelerator.dylib; do
+      fetch_prebuilt "$slice" "$lib" "$d/$lib"
+      install_name_tool -id "@rpath/$lib" "$d/$lib"
+      vtool -show "$d/$lib" | grep -E 'platform|minos' | tr '\n' ' '; echo " <- $slice/$lib"
+    done
+  done
+  # Sanity: the device libLiteRt must export the C API entry point, the accelerator its plugin
+  # entry, and the accelerator must not import libLiteRt (it is a self-contained plugin).
+  nm -gjU "$HERE/ios-gpu-ios_arm64/libLiteRt.dylib" | grep -q 'LiteRtCreateEnvironment' \
+    || { echo "::error::prebuilt iOS libLiteRt.dylib exports no LiteRtCreateEnvironment"; exit 1; }
+  nm -gjU "$HERE/ios-gpu-ios_arm64/libLiteRtMetalAccelerator.dylib" | grep -q 'LiteRtAcceleratorImpl' \
+    || { echo "::error::prebuilt libLiteRtMetalAccelerator.dylib exports no LiteRtAcceleratorImpl"; exit 1; }
+  if otool -L "$HERE/ios-gpu-ios_arm64/libLiteRtMetalAccelerator.dylib" | grep -q 'libLiteRt\.dylib'; then
+    echo "::error::the Metal accelerator now links libLiteRt.dylib — packaging assumes a self-contained plugin"; exit 1
+  fi
+  rm -rf LiteRt.xcframework LiteRtMetalAccelerator.xcframework
+  xcodebuild -create-xcframework \
+    -library "$HERE/ios-gpu-ios_arm64/libLiteRt.dylib"     -headers "$hdr" \
+    -library "$HERE/ios-gpu-ios_sim_arm64/libLiteRt.dylib" -headers "$hdr" \
+    -output LiteRt.xcframework
+  xcodebuild -create-xcframework \
+    -library "$HERE/ios-gpu-ios_arm64/libLiteRtMetalAccelerator.dylib" \
+    -library "$HERE/ios-gpu-ios_sim_arm64/libLiteRtMetalAccelerator.dylib" \
+    -output LiteRtMetalAccelerator.xcframework
+  mkdir -p dist "staging/$ARCHIVE"
+  cp -R LiteRt.xcframework LiteRtMetalAccelerator.xcframework "staging/$ARCHIVE/"
+  ( cd "staging/$ARCHIVE" && cmake -E tar cf "$OLDPWD/dist/$ARCHIVE.zip" --format=zip LiteRt.xcframework LiteRtMetalAccelerator.xcframework )
+  echo "packaged dist/$ARCHIVE.zip (iOS -gpu: prebuilt dynamic libLiteRt + Metal accelerator @ ${PREBUILT_SHA:0:7})"
+  exit 0
+fi
 
 # ---- Source + host CC toolchain (configure.py), same setup as stage.sh -------------------------
 SRC="$HERE/litert-src"
