@@ -17,6 +17,14 @@ Builds LiteRT's **native C API** — `libLiteRt` (`LiteRt*` symbols) — from
 - **static** (one merged `libLiteRt.a` / `LiteRt.lib`): macOS (x86_64/arm64/universal), Linux
   (x86_64/aarch64), Windows (x86_64 **and arm64**), Android (arm64-v8a/x86_64, multi-ABI bundle),
   **iOS (xcframework, device + simulator)** — built from source (no static prebuilt upstream).
+- **`-gpu` variant** (shared, prebuilt): the same `libLiteRt` plus upstream's prebuilt **GPU
+  accelerator** next to it — `libLiteRtWebGpuAccelerator.{so,dll}` on Linux (x86_64/aarch64) and
+  Windows x86_64, `libLiteRtMetalAccelerator.dylib` on macOS arm64. The runtime dlopens it from
+  the directory named by `kLiteRtEnvOptionTagRuntimeLibraryDir` (or the loader's default search)
+  when a model is compiled for `kLiteRtHwAcceleratorGpu`; `build_config.h` leaves GPU enabled
+  there and disables it in the CPU packages. The `-gpu` smoke runs a forward pass on the
+  accelerator and asserts `LiteRtCompiledModelIsFullyAccelerated` (software Vulkan on the Linux
+  runners). Android (ClGl + WebGpu accelerators) and iOS (Metal) follow with the mobile wave.
 
 ## Build
 
