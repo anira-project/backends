@@ -331,6 +331,8 @@ jobs:
           # variant's dlopen'd accelerators, ExecuTorch's registrations lib, ...)
           cp -R ex/arm/lib/. "$stage/lib/arm64-v8a/"
           cp -R ex/x64/lib/. "$stage/lib/x86_64/"
+          # top-level marker files (onnxruntime -gpu: DAWN_VERSION) — same on every ABI
+          find ex/arm -maxdepth 1 -type f -exec cp {} "$stage/" \;
       - name: package
         uses: ./.github/actions/package
         with:

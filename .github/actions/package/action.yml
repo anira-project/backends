@@ -37,6 +37,11 @@ runs:
             echo "::error::required $staging/$d missing"; exit 1
           fi
         done
+        # Top-level marker files ride along (DAWN_VERSION in the onnxruntime -gpu archives: the
+        # consumer's Dawn revision assertion reads it from the archive root).
+        for f in "$staging"/*; do
+          [ -f "$f" ] && pack="$pack $(basename "$f")"
+        done
         ( cd "$staging" && cmake -E tar cf "$out_abs" --format=zip $pack )
         echo "zip=$out/${{ inputs.name }}.zip" >> "$GITHUB_OUTPUT"
         echo "packaged $out_abs"

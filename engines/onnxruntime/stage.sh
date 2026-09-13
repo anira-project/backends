@@ -74,6 +74,14 @@ stage_dawn() {
   local libs; libs="$(find "$inst" -type f \( -name 'libwebgpu_dawn.so*' -o -name 'libwebgpu_dawn.dylib' -o -name 'webgpu_dawn.dll' -o -name 'webgpu_dawn.lib' \) )"
   [ -n "$libs" ] || { echo "ERROR: no webgpu_dawn library under $inst"; exit 1; }
   echo "$libs" | while IFS= read -r f; do cp -P "$f" "$ST/lib/"; done
+  # Android: the NDK toolchain compiles with -g and nothing strips a plain CMake install (Gradle
+  # would at APK packaging) — an unstripped libwebgpu_dawn.so is ~340 MB vs ~17 MB stripped.
+  if [ "$PLATFORM" = "android" ]; then
+    strip_bin="$(find "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" -maxdepth 3 -type f -name llvm-strip | head -1)"
+    [ -n "$strip_bin" ] || { echo "ERROR: llvm-strip not found under $ANDROID_NDK_HOME"; exit 1; }
+    "$strip_bin" --strip-unneeded "$ST/lib/libwebgpu_dawn.so"
+    echo "stripped libwebgpu_dawn.so -> $(wc -c < "$ST/lib/libwebgpu_dawn.so") bytes"
+  fi
   # Dawn's public C/C++ headers: the source tree's include/ plus the generated ones
   # (webgpu.h / webgpu_cpp.h are generated from dawn.json), generated + installed winning.
   cp -R "$src/include/." "$ST/include/"
