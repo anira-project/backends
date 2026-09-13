@@ -2,7 +2,8 @@
 
 Builds LiteRT's **native C API** — `libLiteRt` (`LiteRt*` symbols) — from
 [google-ai-edge/LiteRT](https://github.com/google-ai-edge/LiteRT) at the version in
-[`VERSION`](./VERSION), packaged for [anira](https://github.com/anira-project/anira). CPU-only.
+[`VERSION`](./VERSION), packaged for [anira](https://github.com/anira-project/anira). CPU-only by
+default; the `-gpu` archives add upstream's prebuilt GPU accelerator (below).
 
 > **Distinct from the `tflite` engine.** `tflite` builds the legacy TensorFlow Lite C API
 > (`tensorflowlite_c`, `TfLite*` symbols) from `tensorflow/lite/c`. This engine builds LiteRT's
@@ -24,7 +25,9 @@ Builds LiteRT's **native C API** — `libLiteRt` (`LiteRt*` symbols) — from
   when a model is compiled for `kLiteRtHwAcceleratorGpu`; `build_config.h` leaves GPU enabled
   there and disables it in the CPU packages. The `-gpu` smoke runs a forward pass on the
   accelerator and asserts `LiteRtCompiledModelIsFullyAccelerated` (software Vulkan on the Linux
-  runners). Android ships both upstream accelerators (`libLiteRtClGlAccelerator.so` + `libLiteRtWebGpuAccelerator.so`, per ABI in the multi-ABI `-gpu` bundle); iOS (Metal) follows.
+  runners, WARP on Windows, Metal on macOS). Android ships both upstream accelerators
+  (`libLiteRtClGlAccelerator.so` + `libLiteRtWebGpuAccelerator.so`, per ABI in the multi-ABI
+  `-gpu` bundle). No iOS `-gpu` yet (upstream ships no prebuilt Metal accelerator for iOS).
 
 ## Build
 
