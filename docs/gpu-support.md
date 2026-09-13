@@ -33,7 +33,7 @@ Everything below is published; `shared`/`static` as listed.
 
 | Backend | macOS | Windows | Linux | Android | iOS |
 |---|---|---|---|---|---|
-| **ONNX Runtime** | `-gpu` (x86_64 + arm64, shared + static): **CoreML EP + WebGPU EP** (Metal) · from source. Requires macOS 13.3+ | `-gpu` (x86_64 + arm64, shared): **DirectML EP + WebGPU EP** (D3D12) · from source · `-cuda` (x86_64, shared): **CUDA EP**, repackaged upstream `gpu_cuda13` | `-gpu` (x86_64, shared + static): **WebGPU EP** (Vulkan) · from source · `-cuda` (x86_64, shared): **CUDA EP**, repackaged upstream `gpu_cuda13` | `-gpu` (arm64-v8a + x86_64, multi-ABI shared bundle): **WebGPU EP** (Vulkan) over an NDK cross-built Dawn, stripped · from source | `-gpu` xcframework: **CoreML EP** |
+| **ONNX Runtime** | `-gpu` (x86_64 + arm64, shared + static): **CoreML EP + WebGPU EP** (Metal) · from source. Requires macOS 13.3+ | `-gpu` (x86_64 + arm64, shared): **DirectML EP + WebGPU EP** (D3D12) · from source · `-cuda` (x86_64, shared): **CUDA EP**, repackaged upstream `gpu_cuda13` | `-gpu` (x86_64 + aarch64, shared + static): **WebGPU EP** (Vulkan) · from source · `-cuda` (x86_64, shared): **CUDA EP**, repackaged upstream `gpu_cuda13` | `-gpu` (arm64-v8a + x86_64, multi-ABI shared bundle): **WebGPU EP** (Vulkan) over an NDK cross-built Dawn, stripped · from source | `-gpu` xcframework: **CoreML EP** |
 | **LibTorch** | `-gpu` (arm64, shared): **MPS** · from source | `-cuda` (x86_64, shared): repackaged upstream `cu130`, NVIDIA redist libs stripped | `-cuda` (x86_64, shared): repackaged upstream `cu130`, NVIDIA redist libs stripped | — | — |
 | **ExecuTorch** | `-gpu` (x86_64 + arm64, static): **CoreML + MPS** delegates, **+ MLX** on arm64 (that package needs macOS 14+) | — (Vulkan delegate needs the Vulkan SDK toolchain on the Windows runners) | `-gpu` (x86_64, static): **Vulkan** delegate | `-gpu` (arm64-v8a + x86_64, multi-ABI static bundle): **Vulkan** delegate | `-gpu` xcframework: **CoreML + MPS** delegates |
 | **LiteRT** | `-gpu` (arm64, shared): upstream's prebuilt **Metal accelerator** | `-gpu` (x86_64, shared): prebuilt **WebGPU accelerator** (D3D12) | `-gpu` (x86_64 + aarch64, shared): prebuilt **WebGPU accelerator** (Vulkan) | `-gpu` (arm64-v8a + x86_64, multi-ABI shared bundle): prebuilt **OpenCL/OpenGL + WebGPU accelerators** | `-gpu` (dynamic): upstream's prebuilt `libLiteRt.dylib` + **Metal accelerator** plugin, device + simulator, as two xcframeworks |
@@ -137,7 +137,7 @@ delegate registered, GPU compile refused).
   the native CoreML/MPS/Metal paths are faster and better supported.
 - **TFLite desktop OpenCL delegate** (Linux/Windows): unsupported upstream; LiteRT's
   WebGPU accelerator is the desktop path for that runtime.
-- **Linux aarch64 GPU** beyond LiteRT WebGPU: effectively means NVIDIA Jetson/Grace; niche.
+- **Linux aarch64 CUDA**: the upstream CUDA prebuilts are x86_64-only; Jetson/Grace users get the WebGPU (Vulkan) archives.
 
 ## Open items
 

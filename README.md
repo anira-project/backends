@@ -74,7 +74,7 @@ consumer notes in [`docs/gpu-support.md`](./docs/gpu-support.md).
 | Windows x86_64     | DirectML + WebGPU (D3D12) · shared      | `-cuda` · shared      | —                              | WebGPU (D3D12) · shared   | —                          |
 | Windows arm64      | DirectML + WebGPU (D3D12) · shared      | —                     | —                              | —                         | —                          |
 | Linux x86_64       | WebGPU (Vulkan) · shared/static         | `-cuda` · shared      | Vulkan delegate                | WebGPU (Vulkan) · shared  | —                          |
-| Linux aarch64      | —                                       | —                     | —                              | WebGPU (Vulkan) · shared  | —                          |
+| Linux aarch64      | WebGPU (Vulkan) · shared/static         | —                     | —                              | WebGPU (Vulkan) · shared  | —                          |
 | Android (bundle)   | WebGPU (Vulkan) · shared                | —                     | Vulkan delegate                | OpenCL/GL + WebGPU · shared | OpenCL delegate · shared/static |
 | iOS (xcframework)  | CoreML                                  | —                     | CoreML + MPS                   | Metal accelerator ⁵       | Metal + CoreML delegates   |
 
