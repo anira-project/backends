@@ -77,7 +77,7 @@ stage_dawn() {
   # Android: the NDK toolchain compiles with -g and nothing strips a plain CMake install (Gradle
   # would at APK packaging) — an unstripped libwebgpu_dawn.so is ~340 MB vs ~17 MB stripped.
   if [ "$PLATFORM" = "android" ]; then
-    strip_bin="$(find "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" -maxdepth 3 -type f -name llvm-strip | head -1)"
+    strip_bin="$(find "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" -maxdepth 3 -name llvm-strip | head -1)"   # a symlink to llvm-objcopy in r27 — no -type f
     [ -n "$strip_bin" ] || { echo "ERROR: llvm-strip not found under $ANDROID_NDK_HOME"; exit 1; }
     "$strip_bin" --strip-unneeded "$ST/lib/libwebgpu_dawn.so"
     echo "stripped libwebgpu_dawn.so -> $(wc -c < "$ST/lib/libwebgpu_dawn.so") bytes"
