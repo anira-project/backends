@@ -14,25 +14,38 @@
 # kernel library (optimized_native_cpu_ops_lib) + XNNPACK, NOT a per-model selective
 # build. One package loads any .pte.
 #
-# CPU only: XNNPACK (optimized CPU) + the portable/optimized/quantized ATen kernels on every
-# platform. No hardware delegate is built: with the registrations pre-linked into the
-# archive a delegate is either registered for every consumer or absent (there is no
-# "present but inert" state), and anira pins ExecuTorch to CPU execution. Adding one
-# (CoreML/MLX on Apple, Vulkan on Linux/Windows) is a follow-up that touches the build
-# flags AND merge-static.sh's registration set.
+# CPU by default: XNNPACK (optimized CPU) + the portable/optimized/quantized ATen kernels on
+# every platform, and nothing else in the default package. With the registrations pre-linked
+# into the archive a delegate is either registered for every consumer or absent (there is no
+# "present but inert" state) — which is exactly why GPU delegates ship ONLY in the separate
+# -gpu variant archives (accel= below): the delegate's register_backend() TU joins the
+# pre-linked blob through merge-static.sh's MERGE_DELEGATES.
 #
-# Usage: build-executorch.sh <platform> <arch> <staging-dir>
+# Usage: build-executorch.sh <platform> <arch> <staging-dir> [accel]
 #   <platform>  macos | linux | windows | android
 #   <arch>      x86_64 | aarch64 | arm64 (android: the ABI, arm64-v8a | x86_64)
 #   <staging>   output prefix; gets include/ lib/libexecutorch.a (windows: lib/executorch.lib
 #               + lib/executorch_registrations.lib)
+#   <accel>     none (default) | coreml | vulkan. GPU delegates ship ONLY in the separate
+#               -gpu variant archives — the default package is CPU-only.
+#               coreml = macOS -gpu: CoreML + MPS delegates (+ MLX on arm64, which floors
+#                        the deployment target at 14.0 — the CPU default stays at 12.0).
+#               vulkan = Linux x86_64 -gpu (experimental): cross-vendor GPU delegate;
+#                        needs glslc at build time only (loader is dlopen'd via volk).
 #
 # NOTE: like the libtorch/onnx/litert from-source recipes, this is expected to need a few
 # CI rounds to converge per platform. Flags below follow ExecuTorch's own platform presets
 # (tools/cmake/preset/{apple_common,linux,windows}.cmake at the pinned tag).
 set -euo pipefail
 
-PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; ST="${3:?staging dir}"
+PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; ST="${3:?staging dir}"; ACCEL="${4:-none}"
+case "$ACCEL" in
+  none) ;;
+  coreml) [ "$PLATFORM" = "macos" ] || { echo "ERROR: accel=coreml is macOS-only"; exit 1; } ;;
+  vulkan) { [ "$PLATFORM" = "linux" ] && [ "$ARCH" = "x86_64" ]; } || \
+          { echo "ERROR: accel=vulkan is Linux-x86_64-only (first cut)"; exit 1; } ;;
+  *) echo "ERROR: unknown accel '$ACCEL'"; exit 1 ;;
+esac
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
 
@@ -164,25 +177,68 @@ ET_FLAGS=(
 
 case "$PLATFORM" in
   macos)
-    # CPU-only (XNNPACK + optimized ATen kernels), like every other platform. The CoreML and
-    # MLX delegates are NOT built: the package ships ONE merged libexecutorch.a whose kernel /
-    # backend registrations are pre-linked in (see merge-static.sh), so a delegate is either
-    # registered for every consumer or absent — there is no "present but inert, switch on
-    # later" state anymore. anira pins ExecuTorch to portable CPU execution; wiring a hardware
-    # delegate means adding it to the registration set in merge-static.sh (and, for MLX,
-    # bundling libmlx.a + mlx.metallib) — a deliberate follow-up, like Vulkan on Linux/Windows.
-    # Deployment target 12.0 on both arches (MLX was what forced 14.0 on arm64).
-    export MACOSX_DEPLOYMENT_TARGET=12.0
+    # Default package is CPU-only at deployment target 12.0. The -gpu variant (accel=coreml)
+    # adds the CoreML delegate, and on arm64 also MLX — whose backends/mlx/CMakeLists.txt
+    # hard-requires >=14.0, so ONLY the arm64 -gpu package floors at macOS 14+; every other
+    # macOS package stays 12.0. The delegates' register_backend() TUs join the pre-linked
+    # blob at the merge step below (MERGE_DELEGATES).
+    MACVER=12.0
+    if [ "$ACCEL" = "coreml" ]; then
+      ET_FLAGS+=(
+        -DEXECUTORCH_BUILD_COREML=ON   # ANE/GPU; embeds the CoreML model in the .pte
+        # MPS delegate too: CoreML and MPS serve different models (ANE-compiled vs
+        # direct Metal kernels) and the .pte's export-time partitioning picks — both
+        # being present means any Apple-exported .pte works with this one -gpu
+        # archive, matching the iOS -gpu xcframework which ships both as well.
+        -DEXECUTORCH_BUILD_MPS=ON
+      )
+      if [ "$ARCH" = "arm64" ]; then
+        MACVER=14.0
+        # MLX (Apple-Silicon GPU) is arm64-only; there is no Intel-mac MLX. Bundles an
+        # mlx.metallib that must ship alongside the lib (staging step below keys on
+        # this shell var).
+        EXECUTORCH_BUILD_MLX=ON
+        ET_FLAGS+=(-DEXECUTORCH_BUILD_MLX=ON)
+      fi
+    fi
+    export MACOSX_DEPLOYMENT_TARGET="$MACVER"
     ET_FLAGS+=(
       -DCMAKE_OSX_ARCHITECTURES="$ARCH"
-      -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACVER"
     )
     ;;
   linux)
-    # CPU-only (XNNPACK + optimized ATen kernels). No CoreML/MLX off Apple.
-    # TODO(hw-accel): add -DEXECUTORCH_BUILD_VULKAN=ON here as the cross-platform GPU
-    # delegate once we move past CPU. Vulkan needs the Vulkan SDK + glslc on the runner.
-    : ;;
+    # Default: CPU-only (XNNPACK + optimized ATen kernels). The -gpu variant (accel=vulkan)
+    # adds the cross-vendor Vulkan delegate (experimental): shaders are compiled at build
+    # time with glslc; at runtime the delegate loads libvulkan via volk (dlopen), so the
+    # package adds NO hard runtime dependency — without a Vulkan driver or a
+    # vulkan-partitioned .pte it behaves exactly like the CPU package.
+    if [ "$ACCEL" = "vulkan" ]; then
+      # ExecuTorch 1.3.1's int8 shaders need a glslang that knows
+      # GL_EXT_integer_dot_product (dotPacked4x8AccSatEXT). Ubuntu 24.04's apt glslc
+      # (shaderc 2023.8) rejects it — "'#extension' : extension not supported" — so
+      # probe the ACTUAL requirement and install LunarG's current shaderc if the
+      # ambient glslc can't do it. (The Android NDK's glslc is also incompatible,
+      # per upstream's own cmake/ShaderLibrary.cmake warning.)
+      glslc_ok() {
+        command -v glslc >/dev/null 2>&1 || return 1
+        local probe; probe="$(mktemp /tmp/et-glslc-probe-XXXXXX.comp)"
+        printf '#version 450\n#extension GL_EXT_integer_dot_product : require\nvoid main(){}\n' > "$probe"
+        glslc -fshader-stage=compute --target-env=vulkan1.1 "$probe" -o /dev/null 2>/dev/null
+        local rc=$?; rm -f "$probe"; return $rc
+      }
+      if ! glslc_ok; then
+        if command -v sudo >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+          curl -fsSL https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          echo "deb https://packages.lunarg.com/vulkan noble main" \
+            | sudo tee /etc/apt/sources.list.d/lunarg-vulkan-noble.list >/dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq shaderc
+        fi
+        glslc_ok || { echo "ERROR: accel=vulkan needs a glslc with GL_EXT_integer_dot_product support on PATH"; exit 1; }
+      fi
+      ET_FLAGS+=(-DEXECUTORCH_BUILD_VULKAN=ON)
+    fi ;;
   windows)
     # MSVC (cl) via the workflow's msvc-dev-cmd env + Ninja. We disable the LLM/custom
     # kernels (ExecuTorch warns those need -T ClangCL on MSVC); core + XNNPACK + optimized
@@ -273,7 +329,7 @@ fi
 BUILD_JOBS=$(( memgb / 3 )); [ "$BUILD_JOBS" -lt 2 ] && BUILD_JOBS=2
 [ "$BUILD_JOBS" -gt "$ncores" ] && BUILD_JOBS=$ncores
 
-echo "== building ExecuTorch ${VER} for ${PLATFORM}/${ARCH} (static, CPU + XNNPACK); -j ${BUILD_JOBS} (cores=${ncores} mem=${memgb}GB) =="
+echo "== building ExecuTorch ${VER} for ${PLATFORM}/${ARCH} (static, CPU + XNNPACK, accel=${ACCEL}${EXECUTORCH_BUILD_MLX:+ +MLX}); -j ${BUILD_JOBS} (cores=${ncores} mem=${memgb}GB) =="
 cmake -S "$SRC" -B "$BUILD" "${ET_FLAGS[@]}"
 cmake --build "$BUILD" -j "$BUILD_JOBS" --target install
 
@@ -289,7 +345,32 @@ cmake --build "$BUILD" -j "$BUILD_JOBS" --target install
 rm -rf "$ST/include" "$ST/lib"; mkdir -p "$ST"
 cp -R "$INSTALL/include" "$ST/include"
 out="$ST/lib/libexecutorch.a"; [ "$PLATFORM" = "windows" ] && out="$ST/lib/executorch.lib"
-bash "$HERE/merge-static.sh" "$PLATFORM" "$INSTALL" "$out"
+# -gpu variants: the delegates' registration TUs join the pre-linked blob (they are
+# EXCLUDE_LIBS in a default build — GPU is always a separate archive).
+MERGE_DELEGATES=""; MERGE_EXTRA_ARCHIVES=""
+case "$ACCEL" in
+  coreml)
+    MERGE_DELEGATES="coremldelegate mpsdelegate"
+    if [ "${EXECUTORCH_BUILD_MLX:-}" = "ON" ]; then
+      MERGE_DELEGATES="$MERGE_DELEGATES mlxdelegate"
+      # libmlxdelegate.a references mlx::core::* from libmlx.a, which MLX's CMake builds as a
+      # sub-dependency and installs WITHOUT an export (executorch-config.cmake find_library()s
+      # it) — so ExecuTorchTargets.cmake never lists it. Hand it to the merge explicitly.
+      MERGE_EXTRA_ARCHIVES="$(find "$INSTALL" "$BUILD" -name 'libmlx.a' -type f 2>/dev/null | head -1)"
+      [ -n "$MERGE_EXTRA_ARCHIVES" ] || { echo "ERROR: MLX enabled but libmlx.a not found under $INSTALL / $BUILD"; exit 1; }
+    fi ;;
+  vulkan) MERGE_DELEGATES="vulkan_backend" ;;
+esac
+MERGE_DELEGATES="$MERGE_DELEGATES" MERGE_EXTRA_ARCHIVES="$MERGE_EXTRA_ARCHIVES" \
+  bash "$HERE/merge-static.sh" "$PLATFORM" "$INSTALL" "$out"
+
+# MLX sidecar: mlx.metallib holds the compiled Metal kernels the delegate loads at execute()
+# time; it must ship next to the lib (executorch-config.cmake looks for it under lib/).
+if [ "${EXECUTORCH_BUILD_MLX:-}" = "ON" ]; then
+  metallib="$(find "$INSTALL" "$BUILD" -name 'mlx.metallib' -type f 2>/dev/null | head -1)"
+  [ -n "$metallib" ] || { echo "ERROR: MLX enabled but no mlx.metallib found to bundle"; exit 1; }
+  cp -f "$metallib" "$ST/lib/"; echo "bundled MLX kernels: $metallib -> $ST/lib/"
+fi
 
 echo "built + staged -> $ST"
 ( cd "$ST" && find . -maxdepth 2 | sort | sed 's/^/  /' )

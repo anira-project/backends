@@ -163,6 +163,88 @@
           "source": "build"
         }
       }
+    },
+    {
+      "name": "libtorch-macos-arm64-gpu-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "libtorch",
+        "BACKENDS_PLATFORM": "macos",
+        "BACKENDS_ARCH": "arm64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "mps"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64-gpu",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "libtorch-linux-x86_64-cuda-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "libtorch",
+        "BACKENDS_PLATFORM": "linux",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt",
+        "BACKENDS_FLAVOR": "cuda"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Linux-x86_64-cuda",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "none",
+          "source": "prebuilt",
+          "asset": "libtorch-shared-with-deps",
+          "cpuSuffix": "%2Bcu130",
+          "channel": "cu130"
+        }
+      }
+    },
+    {
+      "name": "libtorch-windows-x86_64-cuda-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "libtorch",
+        "BACKENDS_PLATFORM": "windows",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "prebuilt",
+        "BACKENDS_FLAVOR": "cuda"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Windows-x86_64-cuda",
+          "runner": "windows-2025",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "none",
+          "msvcArch": "x64",
+          "source": "prebuilt",
+          "asset": "libtorch-win-shared-with-deps",
+          "cpuSuffix": "%2Bcu130",
+          "channel": "cu130"
+        }
+      }
     }
   ]
 }

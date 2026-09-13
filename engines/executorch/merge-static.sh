@@ -36,9 +36,9 @@
 # reference microkernels from data sections that on-demand resolution cannot satisfy on ld64.
 # Deliberately EXCLUDED from the archive: portable_ops_lib / optimized_ops_lib /
 # optimized_portable_ops_lib re-register the same aten ops (the registry aborts on the
-# duplicate at static-init), and the hardware delegates (CoreML/MPS/MLX/Metal/Vulkan) which
-# this package does not build — adding one means adding it to REG_LIBS (and its deps to the
-# merge), not just to the build flags.
+# duplicate at static-init), and the hardware delegates (CoreML/MPS/MLX/Metal/Vulkan) unless
+# a -gpu variant asks for them through MERGE_DELEGATES (below) — GPU is always a separate
+# archive, so the default package never carries a delegate registration.
 #
 # The exported ExecuTorchTargets.cmake is cross-checked: every library upstream marks for
 # force-load must be either in REG_LIBS or in EXCLUDE_LIBS, so an upstream bump that adds a
@@ -58,6 +58,15 @@
 # Env:
 #   MERGE_LD   linker for the partial link (default: `ld` — ld64 on Apple, GNU ld / ld.lld
 #              on Linux; Android resolves the NDK's ld.lld from ANDROID_NDK_HOME).
+#   MERGE_DELEGATES        -gpu variants: space-separated delegate registration libs to
+#                          INCLUDE (coremldelegate mpsdelegate mlxdelegate vulkan_backend).
+#                          Each is a static-initializer register_backend() TU that upstream
+#                          force-loads, so it joins the pre-linked blob; its dependency libs
+#                          leave EXCLUDE_LIBS (force-loaded ones join the blob, the rest
+#                          become ordinary on-demand members).
+#   MERGE_EXTRA_ARCHIVES   extra on-demand archives that are installed but NOT exported
+#                          (libmlx.a: MLX's CMake installs it without an EXPORT, and
+#                          executorch-config.cmake find_library()s it at consume time).
 #
 # bash 3.2 compatible (macOS /bin/bash).
 set -euo pipefail
@@ -76,6 +85,11 @@ CORE_LIBS="executorch_core"
 EXCLUDE_LIBS="portable_ops_lib optimized_ops_lib optimized_portable_ops_lib \
   coremldelegate coreml_util coreml_inmemoryfs mpsdelegate mlxdelegate mlx metal_backend \
   vulkan_backend vulkan_schema protobuf-lite libprotobuf-lite"
+# Hardware delegates (-gpu variants only, see MERGE_DELEGATES above): the registering libs
+# and the dependency libs that ride with them. Names as exported by ExecuTorch 1.3.1
+# (backends/apple/{coreml,mps}, backends/mlx, backends/vulkan).
+DELEGATE_REG_LIBS="coremldelegate mpsdelegate mlxdelegate vulkan_backend"
+DELEGATE_DEP_LIBS="coreml_util coreml_inmemoryfs protobuf-lite libprotobuf-lite mlx metal_backend vulkan_schema"
 
 PREFIX="$(cd "$PREFIX" && pwd)"
 TARGETS="$PREFIX/lib/cmake/ExecuTorch/ExecuTorchTargets.cmake"
@@ -94,6 +108,24 @@ in_list() { case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 forced="$( (grep -oE '(force_load,|whole-archive[^$]*|WHOLEARCHIVE:)\\?\$<TARGET_FILE:[A-Za-z0-9_+-]+>' "$TARGETS" || true) \
            | sed -E 's#.*TARGET_FILE:([A-Za-z0-9_+-]+)>#\1#' | sort -u | tr '\n' ' ' )"
 [ -n "$forced" ] || { echo "ERROR: no force-load entries found in $TARGETS — upstream changed its registration linkage; review REG_LIBS"; exit 1; }
+
+# --- -gpu variants: move the requested delegates from EXCLUDE into the registration set ----
+drop_word() { local out="" w; for w in $2; do [ "$w" = "$1" ] || out="$out $w"; done; echo "$out"; }
+for d in ${MERGE_DELEGATES:-}; do
+  in_list "$d" "$DELEGATE_REG_LIBS" || { echo "ERROR: MERGE_DELEGATES names '$d' — known delegates: $DELEGATE_REG_LIBS"; exit 1; }
+  in_list "$d" "$forced" || { echo "ERROR: delegate $d requested but upstream does not force-load it in $TARGETS — was it built (EXECUTORCH_BUILD_*=ON)?"; exit 1; }
+  REG_LIBS="$REG_LIBS $d"
+  EXCLUDE_LIBS="$(drop_word "$d" "$EXCLUDE_LIBS")"
+done
+if [ -n "${MERGE_DELEGATES:-}" ]; then
+  for dep in $DELEGATE_DEP_LIBS; do
+    EXCLUDE_LIBS="$(drop_word "$dep" "$EXCLUDE_LIBS")"
+    # A dependency upstream force-loads (e.g. libprotobuf-lite under the CoreML delegate) has
+    # static initializers of its own and joins the blob; any other becomes on-demand.
+    in_list "$dep" "$forced" && REG_LIBS="$REG_LIBS $dep"
+  done
+  echo "delegates requested: ${MERGE_DELEGATES} -> registration set: $REG_LIBS"
+fi
 bad=""
 for f in $forced; do in_list "$f" "$REG_LIBS $EXCLUDE_LIBS" || bad="$bad $f"; done
 if [ -n "$bad" ]; then
@@ -127,6 +159,10 @@ while read -r name path; do
 done < "$WORK/members.txt"
 [ "${#REG_PATHS[@]}" -eq "$(echo $REG_LIBS $WHOLE_LIBS $CORE_LIBS | wc -w | tr -d ' ')" ] || { echo "ERROR: not every REG_LIBS archive was exported: found ${REG_PATHS[*]:-none}"; exit 1; }
 [ "${#REST[@]}" -gt 0 ] || { echo "ERROR: no on-demand archives exported"; exit 1; }
+for a in ${MERGE_EXTRA_ARCHIVES:-}; do
+  [ -f "$a" ] || { echo "ERROR: MERGE_EXTRA_ARCHIVES: $a does not exist"; exit 1; }
+  REST+=("$a")
+done
 
 echo "blob archives — registrations + core + whole (partial-linked into one member):"; printf '  %s\n' "${REG_PATHS[@]}"
 echo "on-demand archives (${#REST[@]}):"; printf '  %s\n' "${REST[@]}"

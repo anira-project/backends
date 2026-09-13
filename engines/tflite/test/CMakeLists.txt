@@ -7,6 +7,7 @@ project(tflite_smoke LANGUAGES CXX)
 # forward pass (add.bin: {1,3} -> {3,9}). Driven by the .github/actions/smoke verb.
 
 set(SMOKE_KIND "static" CACHE STRING "static | shared")
+set(SMOKE_VARIANT "" CACHE STRING "expected package variant: '' (cpu) | gpu")
 
 find_path(TFLITE_INC NAMES tensorflow/lite/c_api.h REQUIRED)
 find_library(TFLITE_LIB NAMES tensorflowlite_c REQUIRED)   # static .a/.lib, or shared .dylib/.so/import-.lib
@@ -16,6 +17,24 @@ add_executable(smoke smoke.cpp)
 target_include_directories(smoke PRIVATE "${TFLITE_INC}")
 target_link_libraries(smoke PRIVATE "${TFLITE_LIB}")
 target_compile_features(smoke PRIVATE cxx_std_17)
+
+# Apple -gpu variant: the package ships the Metal GPU delegate — detected (like the ORT
+# EPs) by the header it ships. The smoke then runs the forward pass through the delegate
+# too. False-green guard: a -gpu package without the header means the delegate got lost.
+if(SMOKE_VARIANT STREQUAL "gpu" AND NOT EXISTS "${TFLITE_INC}/tensorflow/lite/delegates/gpu/metal_delegate.h")
+  message(FATAL_ERROR "-gpu package ships no Metal delegate header — built CPU-only?")
+endif()
+if(EXISTS "${TFLITE_INC}/tensorflow/lite/delegates/gpu/metal_delegate.h")
+  target_compile_definitions(smoke PRIVATE SMOKE_HAS_METAL)
+  # metal_delegate.h #imports <Metal/Metal.h> (Objective-C) unconditionally, so any TU
+  # that includes it — a consumer's too — must be Objective-C++.
+  enable_language(OBJCXX)
+  set_source_files_properties(smoke.cpp PROPERTIES LANGUAGE OBJCXX)
+  # Both kinds carry the delegate inside the one library (static: merged by the bundle
+  # step; shared: force-loaded into the dylib with _TFLGpuDelegate* exported) — nothing
+  # extra to link beyond the Apple frameworks.
+  target_link_libraries(smoke PRIVATE "-framework Metal" "-framework Foundation" "-framework CoreFoundation")
+endif()
 
 if(SMOKE_KIND STREQUAL "static")
   # The C header drops __declspec(dllimport) under this define (Windows; no-op elsewhere).

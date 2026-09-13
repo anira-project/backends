@@ -1,28 +1,64 @@
 #!/usr/bin/env bash
-# Build static onnxruntime (FULL op set, CPU provider) from source for one target,
+# Build static onnxruntime (FULL op set, CPU provider; GPU EPs only in -gpu variants) from source for one target,
 # leaving the component .a/.lib for scripts/bundle-static.sh to merge into one lib.
 #
 # Ports olilarkin/ort-builder's recipe MINUS the op-reduction (no --minimal_build /
 # --include_ops_by_config / --enable_reduced_operator_type_support / --disable_ml_ops),
 # so every operator ships and any model works.
 #
-# Usage: build-ort.sh <platform> <arch> <config> <build-dir> [kind]
+# Usage: build-ort.sh <platform> <arch> <config> <build-dir> [kind] [accel]
 #   <platform>  macos | linux | windows | android | ios | ios-sim
 #   <arch>      x86_64 | arm64 | aarch64 | arm64-v8a (android ABI)
 #   <config>    Release | Debug      (Windows ships both; others Release)
 #   <kind>      static (default) | shared. shared builds libonnxruntime.dylib/.so directly
-#               (one self-contained lib — no re2 force-build, no bundling). We only build
-#               SHARED for macOS; Linux/Windows/Android shared come from upstream prebuilts.
+#               (one self-contained lib — no re2 force-build, no bundling). We build SHARED
+#               for macOS and for the Windows DML gpu variant; other Linux/Windows/Android
+#               shared come from upstream prebuilts.
+#   <accel>     none (default) | coreml | dml. GPU EPs ship ONLY in the separate -gpu
+#               variant archives — CPU-only consumers get CPU-only
+#               packages, so default builds carry no EP beyond CPU.
+#               coreml = macOS CoreML EP (--use_coreml), static + shared.
+#               dml    = Windows DirectML EP (--use_dml), shared-only: Microsoft stopped
+#               publishing the DirectML NuGet after 1.24.4, so the 1.26+ gpu variant is
+#               built from source (dml.cmake nuget-restores the pinned Microsoft.AI.DirectML
+#               redist itself).
 set -euo pipefail
 
-PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:-Release}"; OUT="${4:-build}"; KIND="${5:-static}"
+PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:-Release}"; OUT="${4:-build}"; KIND="${5:-static}"; ACCEL="${6:-none}"
+if [ "$ACCEL" = "dml" ] && [ "$PLATFORM" != "windows" ]; then
+  echo "ERROR: accel=dml is Windows-only (DirectML is a D3D12 API)"; exit 1
+fi
+case "$ACCEL:$PLATFORM" in
+  coreml:macos|coreml:ios|coreml:ios-sim) ;;
+  coreml:*) echo "ERROR: accel=coreml is Apple-only (macos/ios/ios-sim)"; exit 1 ;;
+esac
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER="$(tr -d '[:space:]' < "$HERE/VERSION")"
+
+# Ancient FetchContent deps still declare cmake_minimum_required(<3.5), which CMake 4.x
+# refuses (psimd, pulled in via FP16 by --use_coreml, killed the -gpu macOS configure).
+# Same policy floor the libtorch/tflite builders already set; no-op on modern deps.
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
 
 # onnxruntime source at the pinned version; build.py FetchContents the rest.
 SRC="$HERE/onnxruntime-src"
 if [ ! -d "$SRC/.git" ]; then
   git clone --depth 1 --branch "v${VER}" https://github.com/microsoft/onnxruntime "$SRC"
+fi
+
+# Upstream CMake bugs hit by any STATIC --use_coreml build (macOS and iOS):
+# 1) coreml_proto is installed but never added to the ${PROJECT_NAME}Targets export
+#    set -> generate aborts ("requires target 'coreml_proto' that is not in any export
+#    set"; providers_coreml + onnxruntime export-depend on it).
+# 2) once exported, its PUBLIC include of ${CMAKE_CURRENT_BINARY_DIR} is a raw
+#    build-dir path, illegal in an installed export -> wrap in $<BUILD_INTERFACE:>
+#    (build behavior identical; our packaging bundles flat .a's, nothing ships the
+#    export). Both idempotent (patterns don't rematch their replacements); perl for
+#    BSD/GNU-sed neutrality.
+if [ "$ACCEL" = "coreml" ]; then
+  perl -pi -e 's/install\(TARGETS coreml_proto\s*$/install(TARGETS coreml_proto EXPORT \$\{PROJECT_NAME\}Targets\n/;
+               s/^(\s+)"\$\{CMAKE_CURRENT_BINARY_DIR\}"\)\s*$/$1\$<BUILD_INTERFACE:\$\{CMAKE_CURRENT_BINARY_DIR\}>)\n/' \
+    "$SRC/cmake/onnxruntime_providers_coreml.cmake"
 fi
 
 ARGS=(
@@ -62,6 +98,11 @@ case "$PLATFORM" in
     # IGNORE_PATH covers find_library/find_path (abseil/protobuf); IGNORE_PREFIX_PATH
     # covers find_package CONFIG mode (flatbuffers_DIR) — both needed.
     IGNORE="/opt/homebrew;/usr/local${ORT_IGNORE_PATHS:+;$ORT_IGNORE_PATHS}"
+    # CoreML EP (GPU/ANE) — gpu variant only (GPU is always a separate archive; the
+    # default macOS packages stay CPU-only). Static gpu consumers must link
+    # CoreML.framework. (The coreml_proto export patch is applied post-clone above,
+    # shared with the iOS coreml slices.)
+    [ "$ACCEL" = "coreml" ] && ARGS+=(--use_coreml)
     ARGS+=(--cmake_extra_defines "CMAKE_OSX_ARCHITECTURES=$ARCH" "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" \
            "CMAKE_IGNORE_PATH=$IGNORE" "CMAKE_IGNORE_PREFIX_PATH=$IGNORE")
     ;;
@@ -77,6 +118,13 @@ case "$PLATFORM" in
     # ARM CPU-matmul accelerators; disable on win-arm64 for a working CPU build. The other
     # arm64 targets (linux/macOS/android) assemble these with clang and keep them.
     [ "$ARCH" = "arm64" ] && ARGS+=(--cmake_extra_defines onnxruntime_USE_KLEIDIAI=OFF onnxruntime_USE_SVE=OFF)
+    # DirectML EP (gpu variant, shared-only): vendor-agnostic Windows GPU via D3D12.
+    # dml.cmake (Public mode) nuget-restores the pinned Microsoft.AI.DirectML redist into
+    # <build>/packages/ — stage.sh ships its DirectML.dll next to onnxruntime.dll.
+    if [ "$ACCEL" = "dml" ]; then
+      [ "$KIND" = "shared" ] || { echo "ERROR: accel=dml is shared-only (DML EP + DirectML.dll redist)"; exit 1; }
+      ARGS+=(--use_dml)
+    fi
     # build.py forces CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase (/Zi)
     # GLOBALLY — even for Release, which embeds CodeView in every .obj and bloats the
     # shipped static .lib ~5x (854 MB!). The Release lib we ship needs no debug info,
@@ -91,9 +139,11 @@ case "$PLATFORM" in
     ;;
   ios)
     ARGS+=(--ios --use_xcode --apple_sysroot iphoneos --osx_arch "$ARCH" --apple_deploy_target 13.0 --build_apple_framework)
+    [ "$ACCEL" = "coreml" ] && ARGS+=(--use_coreml)   # iOS -gpu xcframework (GPU/ANE)
     ;;
   ios-sim)
     ARGS+=(--ios --use_xcode --apple_sysroot iphonesimulator --osx_arch "$ARCH" --apple_deploy_target 13.0 --build_apple_framework)
+    [ "$ACCEL" = "coreml" ] && ARGS+=(--use_coreml)
     ;;
   wasm)
     # --build_wasm_static_lib bundles EVERY transitive dep (onnx/protobuf/re2/mlas/xnnpack)

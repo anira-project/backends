@@ -331,6 +331,98 @@
       }
     },
     {
+      "name": "tflite-macos-x86_64-gpu-shared",
+      "inherits": [
+        "macos-x64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_METAL_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64-gpu",
+          "runner": "macos-15",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-macos-x86_64-gpu-static",
+      "inherits": [
+        "macos-x64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_METAL_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-x86_64-gpu",
+          "runner": "macos-15",
+          "arch": "x86_64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-macos-arm64-gpu-shared",
+      "inherits": [
+        "macos-arm64",
+        "shared"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_METAL_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64-gpu",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "tflite-macos-arm64-gpu-static",
+      "inherits": [
+        "macos-arm64",
+        "static"
+      ],
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "tflite",
+        "TFLITE_BUILD_METAL_DELEGATE": "ON"
+      },
+      "vendor": {
+        "anira": {
+          "name": "macOS-arm64-gpu",
+          "runner": "macos-15",
+          "arch": "arm64",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "none",
+          "source": "build"
+        }
+      }
+    },
+    {
       "name": "tflite-android-arm64-v8a-shared",
       "inherits": [
         "android-arm64",

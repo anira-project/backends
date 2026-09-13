@@ -18,12 +18,48 @@
 // Exit 0 = pass, non-zero = fail.
 
 #include <cstdio>
+#include <cstring>
+#include <string>
 
+#include <executorch/runtime/backend/interface.h>
 #include <executorch/runtime/platform/runtime.h>
 
 static int fail(const char* msg) {
     std::fprintf(stderr, "FAIL: %s\n", msg);
     return 1;
+}
+
+// Variant guard, asked of the runtime's backend registry after runtime_init(): a -gpu package
+// must register every delegate it claims (SMOKE_GPU_BACKENDS, comma-separated, set by the test
+// CMakeLists) and a default package must register NONE of the GPU delegates — GPU is always a
+// separate archive, and a CPU build under a -gpu name must fail here, not at a user's.
+static int check_variant() {
+    using executorch::runtime::get_backend_class;
+    static const char* const kGpuBackends[] = {"CoreMLBackend", "MPSBackend", "MLXBackend", "VulkanBackend"};
+#ifdef SMOKE_GPU_BACKENDS
+    std::string list = SMOKE_GPU_BACKENDS;
+    for (size_t pos = 0; pos <= list.size();) {
+        size_t end = list.find(',', pos); if (end == std::string::npos) end = list.size();
+        std::string name = list.substr(pos, end - pos);
+        if (!name.empty()) {
+            if (get_backend_class(name.c_str()) == nullptr) {
+                std::fprintf(stderr, "FAIL: -gpu package does not register %s — built CPU-only?\n", name.c_str());
+                return 1;
+            }
+            std::printf("delegate registered: %s\n", name.c_str());
+        }
+        pos = end + 1;
+    }
+#else
+    for (const char* name : kGpuBackends) {
+        if (get_backend_class(name) != nullptr) {
+            std::fprintf(stderr, "FAIL: default (CPU) package registers %s — GPU must be a separate -gpu archive\n", name);
+            return 1;
+        }
+    }
+    std::printf("no GPU delegate registered (CPU package)\n");
+#endif
+    return 0;
 }
 
 #ifdef SMOKE_PTE
@@ -45,6 +81,7 @@ int main() {
     CK("start");
     executorch::runtime::runtime_init();
     CK("runtime_init ok");
+    if (check_variant() != 0) return 1;
 
     Module module(SMOKE_PTE);
     CK("module constructed");
@@ -81,6 +118,7 @@ using executorch::extension::Module;
 
 int main() {
     executorch::runtime::runtime_init();
+    if (check_variant() != 0) return 1;
 
     // Loading a path that does not exist must fail cleanly (not crash): this exercises the
     // Module -> data-loader -> program-verification call chain, proving those archives link.

@@ -51,15 +51,24 @@ consuming app re-signs/notarizes on embed.
 > [`engines/onnxruntime`](./engines/onnxruntime).
 
 > ExecuTorch is **static-only, built from source on every leg** (no upstream prebuilt desktop
-> runtime), **CPU-first** (XNNPACK + optimized kernels everywhere; CoreML/MLX wired in on Apple
-> but off — see [`engines/executorch`](./engines/executorch)). Android/iOS and the cross-platform
-> Vulkan GPU delegate are deliberate follow-ups.
+> runtime), **CPU-only by default** (XNNPACK + optimized kernels everywhere). GPU delegates
+> live in the separate `-gpu` variants: CoreML (+MLX on arm64) on macOS, Vulkan on Linux x64
+> (experimental). Windows Vulkan and
+> Android/iOS GPU are deliberate follow-ups.
 
 > `—` = not provided.
 
 Per-backend build details (e.g. LiteRT's `LiteRt*` vs `TfLite*` API split, Windows-arm64
 from-source toolchain, Android `static`) live in each engine's README under
 [`engines/<backend>/`](./engines).
+
+GPU acceleration ships as **separate `-gpu` / `-cuda` variant archives** — the default
+packages above stay CPU-only. Variants: ONNXRuntime CoreML (macOS + iOS), DirectML
+(Windows), CUDA (Linux/Windows x64); LibTorch MPS (macOS arm64), CUDA (Linux/Windows
+x64); ExecuTorch CoreML+MPS (+MLX arm64) (macOS + iOS), Vulkan (Linux x64,
+experimental); TFLite Metal GPU delegate (macOS — experimental, upstream tests it on
+iOS only) and Metal+CoreML delegates (iOS, official prebuilts).
+
 
 ## Releases
 

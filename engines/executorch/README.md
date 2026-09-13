@@ -33,14 +33,29 @@ force-loads must be classified (registered once, or excluded — `portable_ops_l
 co. re-register the same aten ops and would abort at startup), so a version bump that adds
 a registering library fails the build instead of silently shipping unregistered kernels.
 
-## CPU only
+## CPU by default; GPU delegates ship as separate -gpu variants
 
-Every platform builds the optimized/portable/quantized CPU kernels + **XNNPACK**. No hardware
-delegate (CoreML/MPS/MLX on Apple, Vulkan elsewhere) is built: with the registrations
-pre-linked, a delegate is either registered for every consumer or absent — there is no
-"present but inert, switch on later" state — and anira pins ExecuTorch to CPU execution.
-Adding one means enabling it in the build flags **and** adding it to the registration set in
-`merge-static.sh` (for MLX also bundling `libmlx.a` + `mlx.metallib`).
+Every platform builds the optimized/portable/quantized CPU kernels + **XNNPACK** (the CPU path
+anira uses now); the default packages contain nothing else, and their smoke asserts that no
+GPU delegate is registered. With the registrations pre-linked, a delegate is either registered
+for every consumer or absent — there is no "present but inert, switch on later" state — which
+is exactly why GPU delegates live in the separate `-gpu` variant archives:
+
+- macOS `-gpu` (`accel=coreml`): the **CoreML** delegate (ANE/GPU) + the **MPS** delegate,
+  and on arm64 the **MLX** delegate (which floors that one package at macOS 14+; the CPU
+  default stays at 12.0). `libmlx.a` joins the merged archive and `mlx.metallib` ships next
+  to it. Consumers link CoreML, Accelerate, Foundation, sqlite3, Metal,
+  MetalPerformanceShaders, MetalPerformanceShadersGraph.
+- iOS `-gpu` xcframework: CoreML + MPS delegates (same frameworks).
+- Linux x64 `-gpu` (`accel=vulkan`, experimental): the cross-vendor **Vulkan** delegate —
+  shaders compile with `glslc` at build time; the loader is dlopen'd via volk, so there is no
+  hard runtime dependency. Windows Vulkan is a follow-up (needs the Vulkan SDK toolchain on
+  the runner); Android Vulkan is the next mobile wave.
+
+`merge-static.sh` takes the delegate set through `MERGE_DELEGATES` (`coremldelegate
+mpsdelegate mlxdelegate vulkan_backend`): each delegate's `register_backend()` TU joins the
+pre-linked blob and its dependency libs leave the exclusion list. The variant smoke asks the
+runtime's backend registry (`get_backend_class`) for exactly those names.
 
 > Streaming caveat (from the neural_tilde external, worth knowing before enabling GPU):
 > XNNPACK and CoreML persist `cached_conv` streaming state across `execute()`; **MLX does
@@ -57,8 +72,8 @@ to repackage. So every desktop leg builds from source; there is no `prebuilt` mo
 | File                  | Purpose                                                                 |
 | --------------------- | ----------------------------------------------------------------------- |
 | `VERSION`             | Pinned ExecuTorch version (single source of truth)                      |
-| `build-executorch.sh` | Build the static CPU+XNNPACK runtime from source, stage include/ + merged lib |
-| `merge-static.sh`     | Merge the built libs into one archive with the registrations pre-linked |
+| `build-executorch.sh` | Build the static CPU+XNNPACK runtime from source (`accel=` adds the CoreML/MPS/MLX or Vulkan delegates for -gpu variants), stage include/ + merged lib |
+| `merge-static.sh`     | Merge the built libs into one archive with the registrations pre-linked (`MERGE_DELEGATES` adds a -gpu variant's delegates) |
 | `stage.sh`            | Dispatch to the from-source build, staged into the install prefix       |
 | `ios.sh`              | Build both iOS slices via ExecuTorch's presets, merge, `.xcframework`   |
 | `test/CMakeLists.txt` | Links the merged archive like anira does (run via the smoke action/ctest)|

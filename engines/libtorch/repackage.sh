@@ -9,12 +9,17 @@
 # Windows x86_64. The gaps (macOS x86_64, Linux aarch64, Windows arm64 @ 2.12.0)
 # are built from source — see build-libtorch.sh.
 #
-# Usage: repackage.sh <src> <staging-dir>
+# Usage: repackage.sh <src> <staging-dir> [flavor]
 #   <src>          http(s) URL to the upstream .zip, or a local file path (testing)
 #   <staging-dir>  output prefix; gets include/ lib/ share/ [bin/]
+#   [flavor]       "cuda": strip the bundled NVIDIA redist libs (cuDNN/cuBLAS/...) —
+#                  they push the Windows archive past GitHub's 2 GB release-asset
+#                  limit, and the GPU variant scheme makes CUDA + cuDNN user-provided
+#                  prerequisites. The package then needs them on the library path at
+#                  runtime (canRun=0: GPU-less CI can't load it either).
 set -euo pipefail
 
-SRC="${1:?src url/path}"; ST="${2:?staging dir}"
+SRC="${1:?src url/path}"; ST="${2:?staging dir}"; FLAVOR="${3:-}"
 mkdir -p "$ST"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 
@@ -36,6 +41,23 @@ root="$(find "$tmp" -maxdepth 1 -type d -name 'libtorch' | head -1)"
 for d in include lib share bin; do
   [ -d "$root/$d" ] && cp -R "$root/$d" "$ST/"
 done
+
+# -cuda variant: drop the NVIDIA redistributables (user-provided per the GPU variant scheme).
+# Everything NVIDIA ships alongside libtorch matches these stems on both OSes
+# (libcudnn*.so* / cudnn64_9.dll, libcublas* / cublas64_*.dll, ...). torch's own CUDA
+# glue (torch_cuda, c10_cuda) stays — that's the point of the package.
+if [ "$FLAVOR" = "cuda" ]; then
+  for d in "$ST/lib" "$ST/bin"; do
+    [ -d "$d" ] || continue
+    for stem in cudnn cublas cublasLt cufft curand cusolver cusparse cupti nvrtc \
+                nvJitLink nvToolsExt cudart nccl nvperf nvfatbin zlibwapi; do
+      find "$d" -maxdepth 1 \( -name "lib${stem}*" -o -name "${stem}*.dll" -o -name "${stem}*.lib" \) \
+        -exec rm -f {} +
+    done
+  done
+  echo "stripped NVIDIA redist libs (cuda flavor); remaining lib/:"
+  ls -lh "$ST/lib" | sed 's/^/  /'
+fi
 
 [ -d "$ST/include" ] || { echo "ERROR: repackaged tree missing include/"; exit 1; }
 [ -d "$ST/lib" ]     || { echo "ERROR: repackaged tree missing lib/"; exit 1; }

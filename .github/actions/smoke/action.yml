@@ -27,10 +27,18 @@ runs:
         # (runs under Rosetta). Other platforms build natively on their own runner.
         [ "${{ runner.os }}" = "macOS" ] && extra+=(-DCMAKE_OSX_ARCHITECTURES=${{ inputs.arch }})
 
+        # GPU variant legs (preset *-gpu-* / *-cuda-*) tell the smoke what to expect
+        # (e.g. libtorch's -gpu package must prove MPS; default packages must be CPU-only).
+        variant=""
+        case "${{ inputs.preset }}" in
+          *-gpu-*)  variant=gpu ;;
+          *-cuda-*) variant=cuda ;;
+        esac
+
         cmake -S "engines/${{ inputs.engine }}/test" -B "$bdir" -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ inputs.config }} \
           -DCMAKE_PREFIX_PATH="$st" \
-          -DSMOKE_KIND=${{ inputs.kind }} "${extra[@]}"
+          -DSMOKE_KIND=${{ inputs.kind }} -DSMOKE_VARIANT="$variant" "${extra[@]}"
         cmake --build "$bdir"
 
         # Runtime libs. Unix: the test bakes an rpath to the staging lib dir. Windows loads DLLs
@@ -45,6 +53,17 @@ runs:
             u="$(find "${WindowsSdkDir:-/c/none}/bin" -name ucrtbased.dll 2>/dev/null | grep "/$a/" | head -1)"
             [ -n "$u" ] && cp "$u" "$bdir"/ || true
           fi
+        fi
+
+        # GPU variants on GPU-less Linux runners: a software Vulkan ICD (Mesa lavapipe) so the
+        # WebGPU paths (ORT's WebGPU EP over Dawn, LiteRT's WebGpu accelerator) run a REAL
+        # forward pass instead of an enumeration-only check — the false-green class of bug
+        # (a CPU build under a -gpu name) is only caught by executing the EP.
+        if [ "$variant" = "gpu" ] && [ "${{ runner.os }}" = "Linux" ]; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq mesa-vulkan-drivers libvulkan1 vulkan-tools
+          export VK_ICD_FILENAMES="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | paste -sd: -)"
+          echo "software Vulkan ICD: $VK_ICD_FILENAMES"
+          vulkaninfo --summary 2>/dev/null | grep -E 'deviceName|apiVersion|driverName' | head -6 || true
         fi
 
         ctest --test-dir "$bdir" --output-on-failure

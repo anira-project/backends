@@ -4,17 +4,23 @@
 # they build the host flatc/flatcc tools correctly during the cross-compile (a hand-rolled
 # ios-cmake toolchain leaks the iOS SDK/deployment target into the host-tool builds and breaks
 # them). The presets already enable the full CPU set we want: optimized + quantized kernels and
-# XNNPACK (their CoreML/MPS delegates are switched off — CPU only, like every other leg). Each
-# slice is installed and merged into ONE libexecutorch.a with the kernel/backend registrations
-# pre-linked (merge-static.sh — a plain archive merge would drop them), then device (OS64) +
-# simulator (arm64) combine into a STATIC .xcframework. No buck2 (that's only ExecuTorch's
-# header-export path); headers come from `cmake --install`. Produces dist/<archive>.zip.
+# XNNPACK; their CoreML/MPS delegates are switched off in the CPU default and kept in the
+# -gpu variant (GPU is always a separate archive). Each slice is installed and merged into
+# ONE libexecutorch.a with the kernel/backend registrations pre-linked (merge-static.sh — a
+# plain archive merge would drop them; the -gpu variant adds the delegates' registrations to
+# that blob), then device (OS64) + simulator (arm64) combine into a STATIC .xcframework. No
+# buck2 (that's only ExecuTorch's header-export path); headers come from `cmake --install`.
+# Produces dist/<archive>.zip.
 #
 # NOTE: first-cut Apple cross-compile — expect CI iteration (SDK/codesign/xcframework metadata).
 #
-# Usage: ios.sh <archive-name>
+# Usage: ios.sh <archive-name> [variant]
+#   [variant]  "" (CPU default: XNNPACK + kernels, delegates OFF) | gpu (CoreML + MPS
+#              delegates — the upstream apple presets' default). Consumers of the -gpu
+#              xcframework link CoreML, Accelerate, Metal, MetalPerformanceShaders,
+#              MetalPerformanceShadersGraph, Foundation and libsqlite3.
 set -euo pipefail
-ARCHIVE="${1:?archive name}"
+ARCHIVE="${1:?archive name}"; VARIANT="${2:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SRC="$HERE/src/executorch"
@@ -45,29 +51,39 @@ ncores=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 memgb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 8589934592) / 1073741824 ))
 JOBS=$(( memgb / 3 )); [ "$JOBS" -lt 2 ] && JOBS=2; [ "$JOBS" -gt "$ncores" ] && JOBS=$ncores
 
+# Variant flags: the upstream apple presets default the CoreML + MPS delegates ON — that's
+# exactly the -gpu variant, whose registrations join the merge blob below. The CPU default
+# archive turns them OFF (GPU is always a separate archive; matches the desktop packages).
+VFLAGS=(); TAG=""; DELEGATES=""
+if [ "$VARIANT" = "gpu" ]; then
+  TAG="-gpu"; DELEGATES="coremldelegate mpsdelegate"
+else
+  VFLAGS+=(-DEXECUTORCH_BUILD_COREML=OFF -DEXECUTORCH_BUILD_MPS=OFF)
+fi
+
 build_slice() {  # <preset> <build-dir>
   local preset="$1" out="$2"
   rm -rf "$out"
-  echo "== iOS build: preset=$preset -j$JOBS =="
+  echo "== iOS build: preset=$preset variant=${VARIANT:-cpu} -j$JOBS =="
   # The apple presets use the Xcode (multi-config) generator -> every build/install needs an
   # explicit --config. Trim the preset's LLM/torchao extras (irrelevant to a CPU audio backend)
-  # and its CoreML/MPS delegates (CPU only — see build-executorch.sh for why a delegate is a
-  # deliberate follow-up now that registrations are pre-linked) to match the desktop/Android
-  # op set + speed up the build; keep XNNPACK + optimized/quantized kernels.
+  # to match the desktop/Android op set + speed up the build; keep XNNPACK + optimized/quantized
+  # kernels; the CoreML + MPS delegates only in the -gpu variant.
   cmake -S "$SRC" -B "$out" --preset "$preset" \
     -DPYTHON_EXECUTABLE="$(command -v python)" \
-    -DEXECUTORCH_BUILD_COREML=OFF \
-    -DEXECUTORCH_BUILD_MPS=OFF \
     -DEXECUTORCH_BUILD_EXTENSION_LLM=OFF \
     -DEXECUTORCH_BUILD_EXTENSION_LLM_RUNNER=OFF \
     -DEXECUTORCH_BUILD_EXTENSION_LLM_APPLE=OFF \
     -DEXECUTORCH_BUILD_KERNELS_LLM=OFF \
-    -DEXECUTORCH_BUILD_KERNELS_TORCHAO=OFF
+    -DEXECUTORCH_BUILD_KERNELS_TORCHAO=OFF \
+    ${VFLAGS[@]+"${VFLAGS[@]}"}   # bash 3.2: an empty array is "unbound" under set -u
   cmake --build "$out" --config Release -j "$JOBS"
 }
 
-build_slice ios           "$SRC/cmake-out-ios"
-build_slice ios-simulator "$SRC/cmake-out-ios-sim"
+# Per-variant build dirs: the cpu and gpu xcframeworks are separate CI jobs off one cached
+# source tree, and a reconfigure across variants must not inherit the other's cache.
+build_slice ios           "$SRC/cmake-out-ios$TAG"
+build_slice ios-simulator "$SRC/cmake-out-ios-sim$TAG"
 
 # Install each slice (the CMake package it writes is what merge-static.sh reads the member
 # list and the force-load set off; the flatc/flatcc HOST tools are not exported targets, so
@@ -89,12 +105,12 @@ alias_xcode_config() {  # <build-dir>
   done
 }
 rm -rf "$HERE/ios-inst" "$HERE/ios-sim-inst" dev sim && mkdir -p dev sim
-alias_xcode_config "$SRC/cmake-out-ios"
-alias_xcode_config "$SRC/cmake-out-ios-sim"
-cmake --install "$SRC/cmake-out-ios"     --config Release --prefix "$HERE/ios-inst"
-cmake --install "$SRC/cmake-out-ios-sim" --config Release --prefix "$HERE/ios-sim-inst"
-bash "$HERE/merge-static.sh" ios "$HERE/ios-inst"     "$PWD/dev/libexecutorch.a"
-bash "$HERE/merge-static.sh" ios "$HERE/ios-sim-inst" "$PWD/sim/libexecutorch.a"
+alias_xcode_config "$SRC/cmake-out-ios$TAG"
+alias_xcode_config "$SRC/cmake-out-ios-sim$TAG"
+cmake --install "$SRC/cmake-out-ios$TAG"     --config Release --prefix "$HERE/ios-inst"
+cmake --install "$SRC/cmake-out-ios-sim$TAG" --config Release --prefix "$HERE/ios-sim-inst"
+MERGE_DELEGATES="$DELEGATES" bash "$HERE/merge-static.sh" ios "$HERE/ios-inst"     "$PWD/dev/libexecutorch.a"
+MERGE_DELEGATES="$DELEGATES" bash "$HERE/merge-static.sh" ios "$HERE/ios-sim-inst" "$PWD/sim/libexecutorch.a"
 
 # Public headers from the device slice's install (the xcframework just needs include/ + the lib).
 hdrs="$HERE/ios-inst/include"

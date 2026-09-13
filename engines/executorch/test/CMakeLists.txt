@@ -21,7 +21,29 @@ if(NOT EXISTS "${_et_lib}")
   message(FATAL_ERROR "merged ExecuTorch archive not found: ${_et_lib}")
 endif()
 
+# Variant guard (the shared smoke action derives it from the preset name): a -gpu package
+# must actually REGISTER its delegates and the default package must NOT — the smoke asks the
+# runtime's backend registry (get_backend_class) after runtime_init, which is the only honest
+# check now that the delegates live inside the one merged archive (there is no per-delegate
+# target to look for). Names as registered by ExecuTorch 1.3.1's register_backend() calls.
+set(SMOKE_VARIANT "" CACHE STRING "expected package variant: '' (cpu) | gpu")
+if(SMOKE_VARIANT STREQUAL "gpu")
+  if(APPLE)
+    set(_gpu_backends "CoreMLBackend,MPSBackend")
+    if(CMAKE_OSX_ARCHITECTURES MATCHES "arm64" AND NOT IOS)   # the smoke action sets it per leg (x86_64 legs cross-build on arm64 runners)
+      string(APPEND _gpu_backends ",MLXBackend")   # macOS arm64 -gpu only (no Intel-mac MLX)
+    endif()
+  else()
+    set(_gpu_backends "VulkanBackend")
+  endif()
+elseif(NOT SMOKE_VARIANT STREQUAL "")
+  message(FATAL_ERROR "unknown SMOKE_VARIANT '${SMOKE_VARIANT}'")
+endif()
+
 add_executable(smoke smoke.cpp)
+if(SMOKE_VARIANT STREQUAL "gpu")
+  target_compile_definitions(smoke PRIVATE SMOKE_GPU_BACKENDS="${_gpu_backends}")
+endif()
 target_include_directories(smoke SYSTEM PRIVATE
   "${_et_root}/include"
   # The ExecuTorch headers include their vendored c10 as <c10/...>.
@@ -42,6 +64,16 @@ else()
   target_link_libraries(smoke PRIVATE "${_et_lib}" Threads::Threads ${CMAKE_DL_LIBS})
   if(NOT APPLE)
     target_link_libraries(smoke PRIVATE m)
+  endif()
+  # -gpu on Apple: the delegates' registration TUs are pre-linked into the archive, so the
+  # frameworks they call must be on every consumer's link line (anira does the same):
+  # CoreML delegate -> CoreML, Accelerate, Foundation, sqlite3; MPS -> Metal, MPS, MPSGraph;
+  # MLX (macOS arm64) -> Metal, Foundation, Accelerate. Vulkan on Linux dlopens the loader
+  # via volk, so the Linux -gpu package needs nothing beyond CMAKE_DL_LIBS.
+  if(SMOKE_VARIANT STREQUAL "gpu" AND APPLE)
+    target_link_libraries(smoke PRIVATE
+      "-framework CoreML" "-framework Accelerate" "-framework Foundation" sqlite3
+      "-framework Metal" "-framework MetalPerformanceShaders" "-framework MetalPerformanceShadersGraph")
   endif()
 endif()
 

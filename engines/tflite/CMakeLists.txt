@@ -41,7 +41,21 @@ if(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
 else()
     set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "" FORCE)
 endif()
-set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
+# GPU: OFF by default (CPU-only packages). The Apple -gpu variant builds TFLite's
+# Metal GPU delegate (TFLGpuDelegateCreate) — upstream gates it on TFLITE_ENABLE_GPU
+# too (the metal sources live inside that block). NOTE: upstream only *tests* the
+# Metal delegate on iOS; the macOS build is the same code compiled for Darwin —
+# experimental tier, we own any macOS-specific breakage.
+option(TFLITE_BUILD_METAL_DELEGATE "Build the Metal GPU delegate (-gpu variant, Apple only)" OFF)
+if(TFLITE_BUILD_METAL_DELEGATE)
+    if(NOT APPLE)
+        message(FATAL_ERROR "TFLITE_BUILD_METAL_DELEGATE is Apple-only (Metal)")
+    endif()
+    set(TFLITE_ENABLE_GPU ON CACHE BOOL "" FORCE)
+    set(TFLITE_ENABLE_METAL ON CACHE BOOL "" FORCE)
+else()
+    set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
+endif()
 
 # Lib type uses upstream's own TFLITE_C_BUILD_SHARED_LIBS, not BUILD_SHARED_LIBS.
 if(TFLITE_BUILD_STATIC)
@@ -130,3 +144,36 @@ install(DIRECTORY "${TFLITE_SOURCE_DIR}/core/c/"
     DESTINATION "include/tensorflow/lite/core/c" FILES_MATCHING PATTERN "*.h")
 install(DIRECTORY "${TFLITE_SOURCE_DIR}/core/async/c/"
     DESTINATION "include/tensorflow/lite/core/async/c" FILES_MATCHING PATTERN "*.h")
+
+# -gpu variant: the Metal delegate + its C API header. STATIC kind: the delegate archive is
+# merged into the single libtensorflowlite_c.a by the bundle step (it sweeps every .a in the
+# build tree). SHARED kind: the delegate goes INSIDE libtensorflowlite_c.dylib — a standalone
+# libmetal_delegate.a cannot be linked by a consumer, because it references absl, the
+# tflite::gpu common code and the tflite logger, which the dylib carries hidden (upstream
+# exports only _TfLite* via exported_symbols.lds). Force-load it into the dylib and export its
+# _TFLGpuDelegate* C API next to _TfLite*. The header's presence is how the smoke (and anira)
+# detect the variant. Consumers link Metal.framework + Foundation.
+if(TFLITE_BUILD_METAL_DELEGATE)
+    if(NOT TARGET metal_delegate)
+        message(FATAL_ERROR "TFLITE_BUILD_METAL_DELEGATE set but upstream produced no metal_delegate target")
+    endif()
+    # tflite/c adds the parent lite dir EXCLUDE_FROM_ALL, so metal_delegate exists but
+    # is never built by the default target (round 1: install failed on the missing .a).
+    # A dependency from tensorflowlite_c (which IS in all) pulls it into every build.
+    add_dependencies(tensorflowlite_c metal_delegate)
+    if(TFLITE_BUILD_STATIC)
+        install(TARGETS metal_delegate ARCHIVE DESTINATION lib)
+    else()
+        file(WRITE "${CMAKE_BINARY_DIR}/metal_delegate_exports.lds" "_TFLGpuDelegate*\n")
+        # plain signature: upstream's tflite/c/CMakeLists.txt links tensorflowlite_c that
+        # way, and CMake refuses to mix the two forms on one target.
+        target_link_libraries(tensorflowlite_c
+            "-Wl,-force_load,$<TARGET_FILE:metal_delegate>" metal_delegate
+            "-framework Metal" "-framework Foundation")
+        # ld64 unions multiple -exported_symbols_list files: upstream's _TfLite* plus ours.
+        target_link_options(tensorflowlite_c PRIVATE
+            "-Wl,-exported_symbols_list,${CMAKE_BINARY_DIR}/metal_delegate_exports.lds")
+    endif()
+    install(FILES "${TFLITE_SOURCE_DIR}/delegates/gpu/metal_delegate.h"
+        DESTINATION "include/tensorflow/lite/delegates/gpu")
+endif()

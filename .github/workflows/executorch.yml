@@ -84,4 +84,5 @@ jobs:
       # static .xcframework (device + simulator arm64) via engines/executorch/ios.sh.
       android_bundle_kinds: '["static"]'
       has_ios: ${{ needs.meta.outputs.run_ios == 'true' }}
+      ios_variants: '["", "gpu"]'
     secrets: inherit

@@ -6,7 +6,15 @@ project(libtorch_smoke LANGUAGES CXX)
 # share/cmake/Torch/ survived (re)packaging and the libs link + load.
 find_package(Torch REQUIRED)
 
+# GPU variant expectation, passed by the smoke action from the preset name ("gpu" for
+# *-gpu-* legs). The macOS arm64 -gpu package must prove MPS works; default packages
+# must prove they are CPU-only.
+set(SMOKE_VARIANT "" CACHE STRING "expected package variant: '' (cpu) | gpu")
+
 add_executable(smoke smoke.cpp)
+if(SMOKE_VARIANT STREQUAL "gpu" AND APPLE)
+  target_compile_definitions(smoke PRIVATE SMOKE_EXPECT_MPS)
+endif()
 target_link_libraries(smoke PRIVATE "${TORCH_LIBRARIES}")
 target_compile_features(smoke PRIVATE cxx_std_17)
 set_target_properties(smoke PROPERTIES

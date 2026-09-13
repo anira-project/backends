@@ -20,19 +20,32 @@
 #else
 #  include "tensorflow/lite/c_api.h"
 #endif
+#ifdef SMOKE_HAS_METAL
+#  include "tensorflow/lite/delegates/gpu/metal_delegate.h"
+#endif
 
 static int fail(const char* msg) {
     std::fprintf(stderr, "FAIL: %s\n", msg);
     return 1;
 }
 
-int main(int argc, char** argv) {
-    if (argc < 2) return fail("usage: smoke <add.bin>");
-
-    TfLiteModel* model = TfLiteModelCreateFromFile(argv[1]);
+// One forward pass; with_metal adds the Metal GPU delegate (-gpu variant) so the
+// pass actually executes on the GPU (add.bin's ADD op is delegate-supported).
+static int run_pass(const char* model_path, bool with_metal, const char* label) {
+    TfLiteModel* model = TfLiteModelCreateFromFile(model_path);
     if (!model) return fail("could not load model");
 
     TfLiteInterpreterOptions* opts = TfLiteInterpreterOptionsCreate();
+    TfLiteDelegate* metal = nullptr;
+#ifdef SMOKE_HAS_METAL
+    if (with_metal) {
+        metal = TFLGpuDelegateCreate(nullptr);
+        if (!metal) return fail("TFLGpuDelegateCreate");
+        TfLiteInterpreterOptionsAddDelegate(opts, metal);
+    }
+#else
+    (void)with_metal;
+#endif
     TfLiteInterpreter* interp = TfLiteInterpreterCreate(model, opts);
     if (!interp) return fail("could not create interpreter");
 
@@ -51,16 +64,30 @@ int main(int argc, char** argv) {
     const TfLiteTensor* out = TfLiteInterpreterGetOutputTensor(interp, 0);
     if (TfLiteTensorCopyToBuffer(out, output, sizeof(output)) != kTfLiteOk) return fail("copy output");
 
-    std::printf("input={%.1f,%.1f} output={%.4f,%.4f} expected={3.0,9.0}\n",
-                input[0], input[1], output[0], output[1]);
+    std::printf("[%s] input={%.1f,%.1f} output={%.4f,%.4f} expected={3.0,9.0}\n",
+                label, input[0], input[1], output[0], output[1]);
 
     TfLiteInterpreterDelete(interp);
     TfLiteInterpreterOptionsDelete(opts);
     TfLiteModelDelete(model);
+#ifdef SMOKE_HAS_METAL
+    if (metal) TFLGpuDelegateDelete(metal);
+#endif
 
     const float expected[2] = {3.f, 9.f};
     for (int i = 0; i < 2; ++i)
         if (std::fabs(output[i] - expected[i]) > 1e-4f) return fail("output mismatch");
+    return 0;
+}
+
+int main(int argc, char** argv) {
+    if (argc < 2) return fail("usage: smoke <add.bin>");
+
+    if (run_pass(argv[1], false, "cpu")) return 1;
+#ifdef SMOKE_HAS_METAL
+    // -gpu variant: prove the Metal delegate creates, takes the graph, and executes.
+    if (run_pass(argv[1], true, "metal")) return 1;
+#endif
 
     std::printf("PASS\n");
     return 0;

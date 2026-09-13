@@ -12,10 +12,17 @@ endforeach()
 # Set at configure time for prebuilt (repackage) legs: -DBACKENDS_URL=<download url>.
 set(BACKENDS_URL  "" CACHE STRING "Prebuilt download URL (when BACKENDS_SOURCE=prebuilt)")
 set(BACKENDS_ABIS "" CACHE STRING "Android ABIs for a prebuilt multi-ABI AAR (onnx)")
+# Variant selector for GPU legs — set by the preset, e.g. "dml"
+# (onnx Windows DirectML from-source) or "linux-cuda"/"windows-cuda" (repackage flavor).
+set(BACKENDS_FLAVOR "" CACHE STRING "Engine variant flavor (onnx GPU legs)")
 
 set(_stage  "${CMAKE_BINARY_DIR}/stage")
 set(_script "${CMAKE_SOURCE_DIR}/engines/${BACKENDS_ENGINE}/stage.sh")
 
+# NOTE: the flavor is passed via ENVIRONMENT, not as a positional arg — CMake drops
+# empty elements from ${_args}, so on legs where BACKENDS_URL/BACKENDS_ABIS are empty
+# a trailing positional would silently shift into the URL slot (the first CI round
+# shipped CPU builds under -gpu names exactly this way; the smoke guards caught it).
 if(BACKENDS_ENGINE STREQUAL "onnxruntime")
   set(_args ${BACKENDS_PLATFORM} ${BACKENDS_ARCH} ${BACKENDS_CONFIG}
             ${BACKENDS_KIND} ${BACKENDS_SOURCE} "${_stage}" "${BACKENDS_URL}" "${BACKENDS_ABIS}")
@@ -26,7 +33,7 @@ endif()
 
 add_custom_target(stage ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory "${_stage}"
-  COMMAND bash "${_script}" ${_args}
+  COMMAND ${CMAKE_COMMAND} -E env "BACKENDS_FLAVOR=${BACKENDS_FLAVOR}" bash "${_script}" ${_args}
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
   VERBATIM
   USES_TERMINAL  # console pool: stream the (long) engine build live instead of Ninja buffering it
