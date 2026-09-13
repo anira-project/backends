@@ -26,3 +26,8 @@ engines/litert/LiteRT-*/
 
 # local planning/analysis docs — not published
 docs/
+
+# onnxruntime -gpu (WebGPU) variant: Dawn source at the ORT deps.txt pin + its build/install trees
+engines/onnxruntime/dawn-src/
+engines/onnxruntime/dawn-build-*/
+engines/onnxruntime/dawn-install-*/
