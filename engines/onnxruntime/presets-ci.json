@@ -489,6 +489,56 @@
       }
     },
     {
+      "name": "onnx-android-arm64-v8a-gpu-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "android",
+        "BACKENDS_ARCH": "arm64-v8a",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "webgpu"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-arm64-v8a-gpu",
+          "runner": "ubuntu-24.04",
+          "arch": "arm64-v8a",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-android-x86_64-gpu-shared",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "android",
+        "BACKENDS_ARCH": "x86_64",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "shared",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_FLAVOR": "webgpu"
+      },
+      "vendor": {
+        "anira": {
+          "name": "Android-x86_64-gpu",
+          "runner": "ubuntu-24.04",
+          "arch": "x86_64",
+          "kind": "shared",
+          "config": "Release",
+          "canRun": "0",
+          "toolchain": "android",
+          "source": "build"
+        }
+      }
+    },
+    {
       "name": "onnx-macos-x86_64-gpu-static",
       "inherits": "orch-base",
       "cacheVariables": {

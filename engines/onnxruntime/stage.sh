@@ -131,8 +131,9 @@ if [ "$KIND" = "shared" ] && has_accel dml; then
 fi
 
 if [ "$KIND" = "shared" ]; then
-  # From-source shared: macOS (every kind), Android (per ABI, bundled multi-ABI by CI) and the
-  # Linux -gpu WebGPU variant (the CPU Linux/Windows shared come from prebuilt). Builds
+  # From-source shared: macOS (every kind), Android (per ABI, bundled multi-ABI by CI; the -gpu
+  # variant adds the WebGPU EP + an NDK-built Dawn per ABI) and the Linux -gpu WebGPU variant
+  # (the CPU Linux/Windows shared come from prebuilt). Builds
   # libonnxruntime.{dylib,so} directly — one self-contained lib, no re2 force-build / no bundling.
   bash "$HERE/build-ort.sh" "$PLATFORM" "$ARCH" "$CONFIG" "$HERE/build" shared "$ACCEL"
   if [ "$PLATFORM" = "macos" ]; then

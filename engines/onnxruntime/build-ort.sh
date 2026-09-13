@@ -31,7 +31,7 @@
 #               Dawn of the process). The Dawn source is the revision ORT's cmake/deps.txt
 #               pins; we build it here as the monolithic shared libwebgpu_dawn from that
 #               same tree, so ORT, Dawn and the proc-table layout are one versioned triple.
-#               Desktop only (macos/linux/windows).
+#               Desktop (macos/linux/windows) and Android (NDK cross-built Dawn, Vulkan).
 set -euo pipefail
 
 PLATFORM="${1:?platform}"; ARCH="${2:?arch}"; CONFIG="${3:-Release}"; OUT="${4:-build}"; KIND="${5:-static}"; ACCEL="${6:-none}"
@@ -45,7 +45,7 @@ for a in "${_accels[@]}"; do
     dml)    HAS_DML=1
       [ "$PLATFORM" = "windows" ] || { echo "ERROR: accel=dml is Windows-only (DirectML is a D3D12 API)"; exit 1; } ;;
     webgpu) HAS_WEBGPU=1
-      case "$PLATFORM" in macos|linux|windows) ;; *) echo "ERROR: accel=webgpu is desktop-only for now (macos/linux/windows)"; exit 1 ;; esac ;;
+      case "$PLATFORM" in macos|linux|windows|android) ;; *) echo "ERROR: accel=webgpu is macos/linux/windows/android only"; exit 1 ;; esac ;;
     *) echo "ERROR: unknown accel '$a' in '$ACCEL'"; exit 1 ;;
   esac
 done
@@ -131,6 +131,13 @@ if [ "$HAS_WEBGPU" = 1 ]; then
   )
   case "$PLATFORM" in
     linux)   DAWN_FLAGS+=(-DDAWN_ENABLE_VULKAN=ON) ;;
+    # Android: Vulkan backend, cross-built with the NDK's CMake toolchain at the same ABI/API
+    # level as the ORT build below (build.py's --android_abi/--android_api). Dawn dlopens
+    # libvulkan.so at runtime (no link-time dependency), so the .so loads on any device.
+    android) : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME not set}"
+             DAWN_FLAGS+=(-DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake"
+                          -DANDROID_ABI="$ARCH" -DANDROID_PLATFORM=android-27 -DANDROID_STL=c++_static
+                          -DDAWN_ENABLE_VULKAN=ON) ;;
     # Windows: D3D12 backend. DXC is NOT built into Dawn (DAWN_USE_BUILT_DXC=OFF — an hour of
     # LLVM per leg); Dawn loads dxcompiler.dll + dxil.dll from beside the module at runtime, and
     # stage.sh ships the pinned Microsoft redistributables (scripts/fetch-dxc.sh), the same pair
