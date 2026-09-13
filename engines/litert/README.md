@@ -27,7 +27,10 @@ default; the `-gpu` archives add upstream's prebuilt GPU accelerator (below).
   accelerator and asserts `LiteRtCompiledModelIsFullyAccelerated` (software Vulkan on the Linux
   runners, WARP on Windows, Metal on macOS). Android ships both upstream accelerators
   (`libLiteRtClGlAccelerator.so` + `libLiteRtWebGpuAccelerator.so`, per ABI in the multi-ABI
-  `-gpu` bundle). No iOS `-gpu` yet (upstream ships no prebuilt Metal accelerator for iOS).
+  `-gpu` bundle). **iOS `-gpu`** is upstream's prebuilt *dynamic* `libLiteRt.dylib` + `libLiteRtMetalAccelerator.dylib`
+  (device + simulator) as `LiteRt.xcframework` + `LiteRtMetalAccelerator.xcframework` (`ios.sh <archive> gpu`);
+  the app embeds both and points `kLiteRtEnvOptionTagRuntimeLibraryDir` at its Frameworks dir. The CPU iOS
+  package stays the static from-source xcframework.
 
 ## Build
 

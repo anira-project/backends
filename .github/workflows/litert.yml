@@ -82,4 +82,5 @@ jobs:
       macos_universal_kinds: '["shared", "static"]'
       android_bundles: '[{"kind":"shared","variant":""},{"kind":"static","variant":""},{"kind":"shared","variant":"gpu"}]'
       has_ios: ${{ needs.meta.outputs.run_ios == 'true' }}
+      ios_variants: '["", "gpu"]'
     secrets: inherit

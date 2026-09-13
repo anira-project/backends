@@ -76,7 +76,7 @@ consumer notes in [`docs/gpu-support.md`](./docs/gpu-support.md).
 | Linux x86_64       | WebGPU (Vulkan) · shared/static         | `-cuda` · shared      | Vulkan delegate                | WebGPU (Vulkan) · shared  | —                          |
 | Linux aarch64      | —                                       | —                     | —                              | WebGPU (Vulkan) · shared  | —                          |
 | Android (bundle)   | —                                       | —                     | Vulkan delegate                | OpenCL/GL + WebGPU · shared | OpenCL delegate · shared/static |
-| iOS (xcframework)  | CoreML                                  | —                     | CoreML + MPS                   | —                         | Metal + CoreML delegates   |
+| iOS (xcframework)  | CoreML                                  | —                     | CoreML + MPS                   | Metal accelerator ⁵       | Metal + CoreML delegates   |
 
 ONNXRuntime and LibTorch also ship `-cuda` (Linux/Windows x86_64, shared): the upstream CUDA
 prebuilt repackaged. The ORT `-gpu` archives carry **their own Dawn** (external-Dawn build; the
@@ -85,6 +85,8 @@ consumer passes the proc table — what anira v3 does), so each archive is one O
 > ³ ORT `-gpu` on macOS requires macOS 13.3+ (the WebGPU EP's floor); CPU packages stay at 11.0.
 
 > ⁴ The ExecuTorch macOS arm64 `-gpu` package requires macOS 14+ (MLX); every other package 12.0.
+
+> ⁵ LiteRT iOS `-gpu` is dynamic (upstream's prebuilt `libLiteRt.dylib` + the Metal accelerator plugin, two xcframeworks); the CPU iOS package stays static.
 
 
 ## Releases
