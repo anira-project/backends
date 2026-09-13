@@ -75,7 +75,7 @@ consumer notes in [`docs/gpu-support.md`](./docs/gpu-support.md).
 | Windows arm64      | DirectML + WebGPU (D3D12) · shared      | —                     | —                              | —                         | —                          |
 | Linux x86_64       | WebGPU (Vulkan) · shared/static         | `-cuda` · shared      | Vulkan delegate                | WebGPU (Vulkan) · shared  | —                          |
 | Linux aarch64      | —                                       | —                     | —                              | WebGPU (Vulkan) · shared  | —                          |
-| Android (bundle)   | —                                       | —                     | Vulkan delegate                | OpenCL/GL + WebGPU · shared | OpenCL delegate · shared/static |
+| Android (bundle)   | WebGPU (Vulkan) · shared                | —                     | Vulkan delegate                | OpenCL/GL + WebGPU · shared | OpenCL delegate · shared/static |
 | iOS (xcframework)  | CoreML                                  | —                     | CoreML + MPS                   | Metal accelerator ⁵       | Metal + CoreML delegates   |
 
 ONNXRuntime and LibTorch also ship `-cuda` (Linux/Windows x86_64, shared): the upstream CUDA

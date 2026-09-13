@@ -30,9 +30,12 @@ macOS x86_64/arm64 (`coreml+webgpu`, Metal — the Dawn dylib is Developer-ID si
 engine dylib, in the static package too; **these `-gpu` packages require macOS 13.3+**, the
 WebGPU EP's floor, while the CPU packages stay at 11.0); Windows x86_64/arm64 (`dml+webgpu`, D3D12 — the
 package ships the DXC redistributables `dxcompiler.dll` + `dxil.dll` and the Windows SDK's
-`d3dcompiler_47.dll` that Dawn loads next to `webgpu_dawn.dll`; smoke on WARP). Android `shared`
-is built from source per ABI (1.30.0 has no Maven AAR) but CPU-only for now — the WebGPU EP over
-an NDK-built Dawn is the open item; iOS `-gpu` = CoreML EP.
+`d3dcompiler_47.dll` that Dawn loads next to `webgpu_dawn.dll`; smoke on WARP); Android
+(`onnx-android-{arm64-v8a,x86_64}-gpu-shared` → the multi-ABI `Android-gpu-shared` bundle, flavor
+`webgpu`, Vulkan — Dawn cross-built per ABI with the NDK's CMake toolchain at android-27 /
+`c++_static` like ORT itself, `llvm-strip`ped at staging since the NDK builds with `-g`; build-only
+gate like the CPU Android legs). Android `shared` is built from source per ABI (1.30.0 has no Maven
+AAR). iOS `-gpu` = CoreML EP.
 
 ## Files
 
