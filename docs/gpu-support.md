@@ -36,7 +36,7 @@ Everything below is published; `shared`/`static` as listed.
 | **ONNX Runtime** | `-gpu` (x86_64 + arm64, shared + static): **CoreML EP + WebGPU EP** (Metal) · from source. Requires macOS 13.3+ | `-gpu` (x86_64 + arm64, shared): **DirectML EP + WebGPU EP** (D3D12) · from source · `-cuda` (x86_64, shared): **CUDA EP**, repackaged upstream `gpu_cuda13` | `-gpu` (x86_64, shared + static): **WebGPU EP** (Vulkan) · from source · `-cuda` (x86_64, shared): **CUDA EP**, repackaged upstream `gpu_cuda13` | — (WebGPU EP over an NDK-built Dawn is the open item) | `-gpu` xcframework: **CoreML EP** |
 | **LibTorch** | `-gpu` (arm64, shared): **MPS** · from source | `-cuda` (x86_64, shared): repackaged upstream `cu130`, NVIDIA redist libs stripped | `-cuda` (x86_64, shared): repackaged upstream `cu130`, NVIDIA redist libs stripped | — | — |
 | **ExecuTorch** | `-gpu` (x86_64 + arm64, static): **CoreML + MPS** delegates, **+ MLX** on arm64 (that package needs macOS 14+) | — (Vulkan delegate needs the Vulkan SDK toolchain on the Windows runners) | `-gpu` (x86_64, static): **Vulkan** delegate | `-gpu` (arm64-v8a + x86_64, multi-ABI static bundle): **Vulkan** delegate | `-gpu` xcframework: **CoreML + MPS** delegates |
-| **LiteRT** | `-gpu` (arm64, shared): upstream's prebuilt **Metal accelerator** | `-gpu` (x86_64, shared): prebuilt **WebGPU accelerator** (D3D12) | `-gpu` (x86_64 + aarch64, shared): prebuilt **WebGPU accelerator** (Vulkan) | `-gpu` (arm64-v8a + x86_64, multi-ABI shared bundle): prebuilt **OpenCL/OpenGL + WebGPU accelerators** | — (no prebuilt Metal accelerator for iOS yet) |
+| **LiteRT** | `-gpu` (arm64, shared): upstream's prebuilt **Metal accelerator** | `-gpu` (x86_64, shared): prebuilt **WebGPU accelerator** (D3D12) | `-gpu` (x86_64 + aarch64, shared): prebuilt **WebGPU accelerator** (Vulkan) | `-gpu` (arm64-v8a + x86_64, multi-ABI shared bundle): prebuilt **OpenCL/OpenGL + WebGPU accelerators** | `-gpu` (dynamic): upstream's prebuilt `libLiteRt.dylib` + **Metal accelerator** plugin, device + simulator, as two xcframeworks |
 | **TFLite** | `-gpu` (x86_64 + arm64, shared + static): **Metal GPU delegate** (experimental: upstream tests it on iOS only) | — | — (desktop OpenCL delegate unsupported upstream) | `-gpu` (arm64-v8a + x86_64, multi-ABI shared + static bundles): official **OpenCL GPU delegate** (`TfLiteGpuDelegateV2*`) | `-gpu` xcframework: Google's official **Metal + CoreML** delegate xcframeworks |
 
 Notes:
@@ -140,6 +140,5 @@ delegate registered, GPU compile refused).
 ## Open items
 
 - **ONNX Runtime Android `-gpu`** (WebGPU EP over an NDK cross-built Dawn).
-- **LiteRT iOS `-gpu`** (Metal accelerator xcframework; upstream ships none prebuilt).
 - **ExecuTorch Windows `-gpu`** (Vulkan delegate; needs the Vulkan SDK on the runner).
 - macOS **universal** `-gpu` archives.
