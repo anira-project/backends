@@ -30,5 +30,13 @@ runs:
         tag="${{ inputs.tag }}"
         notes="${{ inputs.notes }}"
         gh release view "$tag" >/dev/null 2>&1 || \
-          gh release create "$tag" --title "$tag" --notes "anira backends: ${notes:-$tag}"
-        gh release upload "$tag" "${{ inputs.file }}" --clobber
+          gh release create "$tag" --title "$tag" --notes "anira backends: ${notes:-$tag}" || \
+          gh release view "$tag" >/dev/null   # lost the create race to a sibling job: fine
+        # uploads.github.com answers HTTP 5xx now and then (a whole release run then loses a
+        # leg to a transient); retry with backoff before failing the job.
+        for attempt in 1 2 3 4; do
+          gh release upload "$tag" "${{ inputs.file }}" --clobber && exit 0
+          echo "upload attempt $attempt failed; retrying in $((attempt * 30))s"
+          sleep $((attempt * 30))
+        done
+        echo "::error::upload of ${{ inputs.file }} to $tag failed after 4 attempts"; exit 1
