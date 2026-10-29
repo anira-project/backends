@@ -130,6 +130,16 @@ case "$PLATFORM" in
       printf '// __win_uint_fix__\ntypedef unsigned int uint;\ntypedef unsigned short ushort;\ntypedef unsigned long ulong;\ntypedef unsigned char uchar;\n' \
         | cat - "$h" > "$h.__t" && mv "$h.__t" "$h"
     done < <(grep -rlwE 'uint|ushort|ulong|uchar' "$SRC/aten/src/ATen/cpu/vec" 2>/dev/null || true)
+    # VS 2026 (MSVC 14.51, the windows-11-vs2026-arm64 image) ships arm_sve.h, so SLEEF's SVE
+    # check now passes, but no MSVC flag defines __ARM_FEATURE_SVE and its SVE files fail
+    # ("helpersve.h: Please specify SVE flags"). ATen builds no SVE kernels with MSVC, so
+    # turn SLEEF SVE off on Windows — backport of upstream main's aten/src/ATen/CMakeLists.txt
+    # fix (2.12.0 predates it; SLEEF_* isn't env-forwarded, hence the patch). Idempotent.
+    aten_cml="$SRC/aten/src/ATen/CMakeLists.txt"
+    if ! grep -q 'SLEEF_DISABLE_SVE' "$aten_cml"; then
+      perl -0pi -e 's/(\n(\s+)set\(SLEEF_BUILD_WITH_LIBM OFF CACHE BOOL "Don\x27t build sleef with libm for Windows\." FORCE\)\n)/$1$2set(SLEEF_DISABLE_SVE ON CACHE BOOL "Disable SLEEF SVE on Windows" FORCE)\n/' "$aten_cml"
+      grep -q 'SLEEF_DISABLE_SVE' "$aten_cml" || { echo "ERROR: SLEEF_DISABLE_SVE patch did not apply to $aten_cml"; exit 1; }
+    fi
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac
