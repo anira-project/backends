@@ -134,10 +134,11 @@ case "$PLATFORM" in
     # check now passes, but no MSVC flag defines __ARM_FEATURE_SVE and its SVE files fail
     # ("helpersve.h: Please specify SVE flags"). ATen builds no SVE kernels with MSVC, so
     # turn SLEEF SVE off on Windows — backport of upstream main's aten/src/ATen/CMakeLists.txt
-    # fix (2.12.0 predates it; SLEEF_* isn't env-forwarded, hence the patch). Idempotent.
+    # fix (2.12.0 predates it; SLEEF_* isn't env-forwarded, hence the patch). Idempotent; the
+    # runner's checkout has CRLF line endings, so the inserted line reuses the matched EOL.
     aten_cml="$SRC/aten/src/ATen/CMakeLists.txt"
     if ! grep -q 'SLEEF_DISABLE_SVE' "$aten_cml"; then
-      perl -0pi -e 's/(\n(\s+)set\(SLEEF_BUILD_WITH_LIBM OFF CACHE BOOL "Don\x27t build sleef with libm for Windows\." FORCE\)\n)/$1$2set(SLEEF_DISABLE_SVE ON CACHE BOOL "Disable SLEEF SVE on Windows" FORCE)\n/' "$aten_cml"
+      perl -0pi -e 's/^([ \t]+)(set\(SLEEF_BUILD_WITH_LIBM OFF CACHE BOOL "Don\x27t build sleef with libm for Windows\." FORCE\))(\r?\n)/$1$2$3$1set(SLEEF_DISABLE_SVE ON CACHE BOOL "Disable SLEEF SVE on Windows" FORCE)$3/m' "$aten_cml"
       grep -q 'SLEEF_DISABLE_SVE' "$aten_cml" || { echo "ERROR: SLEEF_DISABLE_SVE patch did not apply to $aten_cml"; exit 1; }
     fi
     ;;
