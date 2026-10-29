@@ -47,8 +47,9 @@ consuming app re-signs/notarizes on embed.
 
 > ¹ Windows `static` also ships a `Debug` variant.
 
-> ² Emscripten static archive — build flags and consumer requirements in
-> [`engines/onnxruntime`](./engines/onnxruntime).
+> ² Emscripten static archive (LTO bitcode), one per emsdk (`WASM-emsdk4.0.23`,
+> `WASM-emsdk6.0.13`): link the one matching your `em++`. Build flags and consumer
+> requirements in [`engines/onnxruntime`](./engines/onnxruntime).
 
 > ExecuTorch is **static-only, built from source on every leg** (no upstream prebuilt desktop
 > runtime), **CPU-only by default** (XNNPACK + optimized kernels everywhere). GPU delegates

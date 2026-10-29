@@ -259,7 +259,7 @@
       }
     },
     {
-      "name": "onnx-wasm-static",
+      "name": "onnx-wasm-emsdk4-static",
       "inherits": "orch-base",
       "cacheVariables": {
         "BACKENDS_ENGINE": "onnxruntime",
@@ -267,11 +267,37 @@
         "BACKENDS_ARCH": "wasm32",
         "BACKENDS_CONFIG": "Release",
         "BACKENDS_KIND": "static",
-        "BACKENDS_SOURCE": "build"
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_EMSDK": "4.0.23"
       },
       "vendor": {
         "anira": {
-          "name": "WASM",
+          "name": "WASM-emsdk4.0.23",
+          "runner": "ubuntu-24.04",
+          "arch": "wasm32",
+          "kind": "static",
+          "config": "Release",
+          "canRun": "1",
+          "toolchain": "emscripten",
+          "source": "build"
+        }
+      }
+    },
+    {
+      "name": "onnx-wasm-emsdk6-static",
+      "inherits": "orch-base",
+      "cacheVariables": {
+        "BACKENDS_ENGINE": "onnxruntime",
+        "BACKENDS_PLATFORM": "wasm",
+        "BACKENDS_ARCH": "wasm32",
+        "BACKENDS_CONFIG": "Release",
+        "BACKENDS_KIND": "static",
+        "BACKENDS_SOURCE": "build",
+        "BACKENDS_EMSDK": "6.0.13"
+      },
+      "vendor": {
+        "anira": {
+          "name": "WASM-emsdk6.0.13",
           "runner": "ubuntu-24.04",
           "arch": "wasm32",
           "kind": "static",

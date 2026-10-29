@@ -256,12 +256,27 @@ case "$PLATFORM" in
     # --build_wasm_static_lib bundles EVERY transitive dep (onnx/protobuf/re2/mlas/xnnpack)
     # into one self-contained libonnxruntime_webassembly.a via emar (onnxruntime_webassembly.cmake
     # bundle_static_library) — so the wasm leg needs neither the re2 force-build nor
-    # scripts/bundle-static.sh below. build.py installs+activates its OWN pinned emsdk (4.0.23)
-    # from the cmake/external/emsdk submodule (hardcoded toolchain path), so init it first —
-    # the shallow clone above fetches no submodules. simd + threads (the ort-builder recipe);
-    # threads => the consumer must link -pthread on a cross-origin-isolated (COOP/COEP) page.
-    git -C "$SRC" submodule update --init --depth 1 cmake/external/emsdk
-    ARGS+=(--build_wasm_static_lib --enable_wasm_simd --enable_wasm_threads --disable_rtti)
+    # scripts/bundle-static.sh below. build.py installs+activates emsdk from the
+    # cmake/external/emsdk submodule (hardcoded toolchain path), so init it first — the shallow
+    # clone above fetches no submodules. simd + threads (the ort-builder recipe); threads =>
+    # the consumer must link -pthread on a cross-origin-isolated (COOP/COEP) page.
+    #
+    # emsdk version = BACKENDS_EMSDK (set per preset), NOT build.py's default: the archive is
+    # LTO bitcode compiled against that emsdk's libc++ headers, and the consumer links the
+    # libc++ of its own emsdk (anira saw OpSchema names read back empty with a 4.0.23 archive
+    # under 6.0.13, issue #24), so each wasm leg names its emsdk and the asset carries it.
+    # The submodule pin only knows the releases up to ORT's own default, so check out the
+    # emsdk tag of the same name — every emsdk tag can install its release.
+    # build.py's own submodule sync would reset emsdk to the pin, so run that sync here first
+    # (the same two commands as its update_submodules) and pass --skip_submodule_sync.
+    : "${BACKENDS_EMSDK:?BACKENDS_EMSDK not set (wasm legs name their emsdk version, e.g. 6.0.13)}"
+    EMSDK_DIR="$SRC/cmake/external/emsdk"
+    git -C "$SRC" submodule sync --recursive
+    git -C "$SRC" submodule update --init --recursive
+    git -C "$EMSDK_DIR" fetch -q --depth 1 origin "refs/tags/$BACKENDS_EMSDK:refs/tags/$BACKENDS_EMSDK"
+    git -C "$EMSDK_DIR" checkout -q "$BACKENDS_EMSDK"
+    ARGS+=(--build_wasm_static_lib --enable_wasm_simd --enable_wasm_threads --disable_rtti
+           --emsdk_version "$BACKENDS_EMSDK" --skip_submodule_sync)
     ;;
   *) echo "ERROR: unknown platform '$PLATFORM'"; exit 1 ;;
 esac

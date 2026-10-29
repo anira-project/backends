@@ -78,8 +78,15 @@ AAR). iOS `-gpu` = CoreML EP.
   `libonnxruntime_webassembly.a` (all deps bundled by `bundle_static_library` via `emar`) —
   so the wasm leg skips the re2 force-build *and* `bundle-static.sh`; `stage.sh` just renames
   it to `libonnxruntime.a`. Built with `--enable_wasm_simd --enable_wasm_threads --disable_rtti`
-  (the ort-builder recipe). `build.py` installs+activates its own pinned **emsdk 4.0.23** from
-  the `cmake/external/emsdk` submodule (init'd in `build-ort.sh`) — no external emsdk needed.
+  (the ort-builder recipe). `build.py` installs+activates emsdk from the `cmake/external/emsdk`
+  submodule (init'd in `build-ort.sh`) — no external emsdk needed. The version is the preset's
+  **`BACKENDS_EMSDK`**, not ORT's default: the archive is LTO bitcode compiled against that
+  emsdk's libc++ headers, while the consumer links its own emsdk's libc++ (anira hit
+  `OpSchema` names reading back empty with a 4.0.23 archive under 6.0.13, #24). `build-ort.sh`
+  checks the submodule out at the emsdk tag of that version (the ORT pin only knows releases
+  up to ORT's default). One leg per supported emsdk, with the version in the asset name:
+  `onnxruntime-<ver>-WASM-emsdk<emsdk>-static` (currently **4.0.23** and **6.0.13**) —
+  consumers pick the one matching their `em++`.
   **Threads** ⇒ the consuming wasm app must link `-pthread` and be served cross-origin-isolated
   (COOP/COEP). The CI smoke **links** the test against the `.a` with `em++` (proving the archive
   is symbol-complete — the Android arm64 compile+link gate). A forward-pass *run* belongs in a
@@ -92,6 +99,6 @@ AAR). iOS `-gpu` = CoreML EP.
 # from this directory
 bash build-ort.sh macos arm64 Release build           # <platform> <arch> <config> <build-dir> [kind]
 bash build-ort.sh macos arm64 Release build shared    # shared variant (libonnxruntime.dylib)
-bash build-ort.sh wasm wasm32 Release build           # WASM static lib (needs emsdk submodule)
+BACKENDS_EMSDK=6.0.13 bash build-ort.sh wasm wasm32 Release build   # WASM static lib (emsdk from the submodule)
 bash ../../scripts/bundle-static.sh build/Release /tmp/out/lib/libonnxruntime.a   # static only (not wasm)
 ```

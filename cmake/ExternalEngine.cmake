@@ -15,6 +15,9 @@ set(BACKENDS_ABIS "" CACHE STRING "Android ABIs for a prebuilt multi-ABI AAR (on
 # Variant selector for GPU legs — set by the preset, e.g. "dml"
 # (onnx Windows DirectML from-source) or "linux-cuda"/"windows-cuda" (repackage flavor).
 set(BACKENDS_FLAVOR "" CACHE STRING "Engine variant flavor (onnx GPU legs)")
+# emsdk version for the wasm legs (onnx): the archive is that emsdk's LTO bitcode, so each
+# wasm preset names it and its asset carries it (e.g. WASM-emsdk6.0.13).
+set(BACKENDS_EMSDK "" CACHE STRING "emsdk version for wasm legs (onnx)")
 
 set(_stage  "${CMAKE_BINARY_DIR}/stage")
 set(_script "${CMAKE_SOURCE_DIR}/engines/${BACKENDS_ENGINE}/stage.sh")
@@ -33,7 +36,7 @@ endif()
 
 add_custom_target(stage ALL
   COMMAND ${CMAKE_COMMAND} -E make_directory "${_stage}"
-  COMMAND ${CMAKE_COMMAND} -E env "BACKENDS_FLAVOR=${BACKENDS_FLAVOR}" bash "${_script}" ${_args}
+  COMMAND ${CMAKE_COMMAND} -E env "BACKENDS_FLAVOR=${BACKENDS_FLAVOR}" "BACKENDS_EMSDK=${BACKENDS_EMSDK}" bash "${_script}" ${_args}
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
   VERBATIM
   USES_TERMINAL  # console pool: stream the (long) engine build live instead of Ninja buffering it

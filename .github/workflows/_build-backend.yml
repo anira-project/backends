@@ -168,7 +168,8 @@ jobs:
       # uses: compile+link only). We don't execute it: the runtime target is a cross-origin-isolated
       # browser AudioWorklet, and the threads-enabled module's pthread workers don't run reliably
       # headless under Node (Env init aborts inside the proxy worker before any output). A real
-      # forward-pass run belongs in a browser. Uses the emsdk build.py installed (4.0.23).
+      # forward-pass run belongs in a browser. Uses the emsdk build.py installed for this leg
+      # (the preset's BACKENDS_EMSDK), so the link also checks the archive against that libc++.
       - name: smoke (wasm, link)
         if: ${{ matrix.toolchain == 'emscripten' }}
         shell: bash
